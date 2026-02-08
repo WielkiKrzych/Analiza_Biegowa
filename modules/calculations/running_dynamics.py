@@ -141,3 +141,127 @@ def calculate_running_effectiveness(pace_sec_per_km: float, running_power: float
     power_per_kg = running_power / weight_kg
     
     return speed / power_per_kg
+
+
+def calculate_vo_stats(vo_cm: np.ndarray) -> Dict:
+    """Calculate Vertical Oscillation statistics.
+    
+    Args:
+        vo_cm: Vertical oscillation in centimeters
+        
+    Returns:
+        Dict with VO statistics
+    """
+    valid_vo = vo_cm[~np.isnan(vo_cm)]
+    if len(valid_vo) == 0:
+        return {}
+    
+    mean_vo = float(np.mean(valid_vo))
+    
+    return {
+        "mean_vo": round(mean_vo, 1),
+        "min_vo": round(float(np.min(valid_vo)), 1),
+        "max_vo": round(float(np.max(valid_vo)), 1),
+        "std_vo": round(float(np.std(valid_vo)), 1),
+        "cv_vo": round(float(np.std(valid_vo)) / mean_vo * 100, 1) if mean_vo > 0 else 0,
+    }
+
+
+def analyze_vo_efficiency(vo_cm: np.ndarray, cadence_spm: np.ndarray) -> Dict:
+    """
+    Analyze running efficiency based on VO and cadence.
+    
+    Lower VO at same cadence = better efficiency (less bouncing).
+    
+    Args:
+        vo_cm: Vertical oscillation in centimeters
+        cadence_spm: Cadence in steps per minute
+        
+    Returns:
+        Dict with efficiency analysis
+    """
+    # Filter valid data
+    mask = (~np.isnan(vo_cm)) & (~np.isnan(cadence_spm)) & (cadence_spm > 0)
+    if mask.sum() < 10:
+        return {}
+    
+    vo_valid = vo_cm[mask]
+    cad_valid = cadence_spm[mask]
+    
+    # Calculate VO per cadence bin
+    cad_bins = np.arange(140, 200, 10)  # 140-200 SPM
+    vo_by_cadence = {}
+    
+    for i, cad_start in enumerate(cad_bins[:-1]):
+        cad_end = cad_bins[i+1]
+        mask_bin = (cad_valid >= cad_start) & (cad_valid < cad_end)
+        if mask_bin.sum() > 5:
+            vo_by_cadence[f"{cad_start}-{cad_end}"] = round(float(np.mean(vo_valid[mask_bin])), 1)
+    
+    return {
+        "vo_by_cadence": vo_by_cadence,
+        "optimal_cadence": _find_optimal_cadence(vo_by_cadence),
+    }
+
+
+def _find_optimal_cadence(vo_by_cadence: Dict) -> Optional[str]:
+    """Find cadence range with lowest VO."""
+    if not vo_by_cadence:
+        return None
+    return min(vo_by_cadence.items(), key=lambda x: x[1])[0]
+
+
+def calculate_running_effectiveness_from_vo(
+    pace_sec_per_km: float,
+    vo_cm: float,
+    runner_height_cm: float
+) -> Dict:
+    """
+    Calculate running effectiveness using Vertical Oscillation.
+    
+    Lower VO relative to height = better efficiency.
+    
+    Args:
+        pace_sec_per_km: Pace in seconds per km
+        vo_cm: Vertical oscillation in cm
+        runner_height_cm: Runner height in cm
+        
+    Returns:
+        Dict with effectiveness metrics
+    """
+    if pace_sec_per_km <= 0 or vo_cm <= 0 or runner_height_cm <= 0:
+        return {}
+    
+    # VO as percentage of height
+    vo_percent_height = (vo_cm / runner_height_cm) * 100
+    
+    # Calculate effectiveness score (0-100)
+    # Elite runners: VO < 5% of height
+    # Average: VO 7-8% of height
+    # Poor: VO > 10% of height
+    if vo_percent_height < 5:
+        score = 100
+    elif vo_percent_height < 10:
+        score = 100 - (vo_percent_height - 5) * 10
+    else:
+        score = max(0, 50 - (vo_percent_height - 10) * 5)
+    
+    return {
+        "vo_percent_height": round(vo_percent_height, 2),
+        "effectiveness_score": round(score, 1),
+        "classification": _classify_vo_efficiency(vo_percent_height),
+    }
+
+
+def _classify_vo_efficiency(vo_percent_height: float) -> str:
+    """Classify VO efficiency."""
+    if vo_percent_height < 5:
+        return "🟢 Elite - wyjątkowa efektywność"
+    elif vo_percent_height < 6.5:
+        return "🟢 Bardzo dobra efektywność"
+    elif vo_percent_height < 8:
+        return "🟡 Dobra efektywność"
+    elif vo_percent_height < 10:
+        return "🟠 Średnia efektywność"
+    else:
+        return "🔴 Wymaga poprawy - za dużo bouncing"

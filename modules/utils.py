@@ -283,3 +283,110 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
         gc.collect()
 
     return pd.concat(chunks, ignore_index=True)
+
+
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class DataQualityReport:
+    """Report on data quality and completeness."""
+
+    available_metrics: List[str]
+    missing_metrics: List[str]
+    recommendations: List[str]
+    quality_score: float
+    sport_type: str
+
+    def to_dict(self):
+        return {
+            "available": self.available_metrics,
+            "missing": self.missing_metrics,
+            "recommendations": self.recommendations,
+            "quality_score": self.quality_score,
+            "sport_type": self.sport_type,
+        }
+
+
+def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
+    """Validate data completeness and provide recommendations."""
+    available = []
+    missing = []
+    recommendations = []
+
+    metric_definitions = {
+        "core": {
+            "watts": ["watts", "power"],
+            "heartrate": ["heartrate", "hr", "heart_rate"],
+        },
+        "advanced": {
+            "cadence": ["cadence", "cad"],
+            "smo2": ["smo2"],
+            "thb": ["thb", "total_hemoglobin"],
+        },
+        "ventilation": {
+            "ve": ["tymeventilation", "ve", "ventilation"],
+            "br": ["tymebreathrate", "br", "breath_rate"],
+        },
+        "thermal": {
+            "core_temp": ["core_temperature", "core_temp"],
+            "skin_temp": ["skin_temperature", "skin_temp"],
+        },
+        "biomechanics": {
+            "vo": ["verticaloscillation", "VerticalOscillation", "vo"],
+        },
+        "running": {
+            "pace": ["pace", "speed"],
+            "gct": ["ground_contact", "gct"],
+        },
+    }
+
+    columns_lower = [c.lower() for c in df.columns]
+
+    for group, metrics in metric_definitions.items():
+        for metric_name, aliases in metrics.items():
+            found = any(a.lower() in columns_lower for a in aliases)
+            if found:
+                available.append(f"{group}.{metric_name}")
+            else:
+                missing.append(f"{group}.{metric_name}")
+
+    if "core.watts" not in available and "running.pace" not in available:
+        recommendations.append("⚠️ Brak danych mocy lub tempa - analiza ograniczona")
+
+    if "ventilation.ve" not in available:
+        recommendations.append("ℹ️ Brak wentylacji - zakładka Ventilation nieaktywna")
+
+    if "biomechanics.vo" not in available:
+        recommendations.append("ℹ️ Brak Vertical Oscillation - analiza biomechaniczna ograniczona")
+
+    if "advanced.smo2" in available and "ventilation.ve" in available:
+        recommendations.append("✅ Pełna analiza fizjologiczna dostępna (SmO2 + VE)")
+
+    sport_type = detect_sport_type(df)
+    total_metrics = len(available) + len(missing)
+    quality_score = (len(available) / total_metrics * 100) if total_metrics > 0 else 0
+
+    return DataQualityReport(
+        available_metrics=available,
+        missing_metrics=missing,
+        recommendations=recommendations,
+        quality_score=quality_score,
+        sport_type=sport_type,
+    )
+
+
+def detect_sport_type(df: pd.DataFrame) -> str:
+    """Detect sport type based on available columns."""
+    has_power = any(c in df.columns for c in ["watts", "power", "Watts"])
+    has_pace = any(c in df.columns for c in ["pace", "speed", "gap"])
+
+    if has_power and not has_pace:
+        return "cycling"
+    elif has_pace and not has_power:
+        return "running"
+    elif has_power and has_pace:
+        return "mixed"
+    else:
+        return "unknown"

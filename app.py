@@ -136,6 +136,13 @@ if uploaded_file is not None:
                 session_type = st.session_state.get("session_type")
                 ramp_classification = st.session_state.get("ramp_classification")
 
+            # --- DATA QUALITY VALIDATION ---
+            from modules.utils import validate_data_completeness
+
+            quality_report = validate_data_completeness(df_raw)
+            st.session_state["data_quality_report"] = quality_report
+            st.session_state["sport_type"] = quality_report.sport_type
+
             # --- PROCESSING PIPELINE (SRP/DIP) ---
             from services.session_orchestrator import process_uploaded_session
 
@@ -244,6 +251,54 @@ if uploaded_file is not None:
         """,
             unsafe_allow_html=True,
         )
+
+    # Sport Type Indicator
+    sport_type = st.session_state.get("sport_type", "unknown")
+    if sport_type == "cycling":
+        st.markdown(
+            """
+            <div style="background: linear-gradient(90deg, rgba(52, 152, 219, 0.2), transparent); 
+                        padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
+                <span style="font-size: 1em;">🚴 Wykryto dane kolarskie</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif sport_type == "running":
+        st.markdown(
+            """
+            <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent); 
+                        padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
+                <span style="font-size: 1em;">🏃 Wykryto dane biegowe</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Data Quality Report
+    quality_report = st.session_state.get("data_quality_report")
+    if quality_report:
+        with st.expander("📋 Raport jakości danych", expanded=False):
+            st.write(f"**Typ sportu:** {quality_report.sport_type}")
+            st.write(f"**Jakość danych:** {quality_report.quality_score:.0f}%")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Dostępne metryki:**")
+                for m in quality_report.available_metrics[:8]:
+                    st.write(f"  ✅ {m}")
+                if len(quality_report.available_metrics) > 8:
+                    st.write(f"  ... i {len(quality_report.available_metrics) - 8} więcej")
+
+            with col2:
+                st.write("**Brakujące metryki:**")
+                for m in quality_report.missing_metrics[:5]:
+                    st.write(f"  ❌ {m}")
+
+            if quality_report.recommendations:
+                st.write("**Rekomendacje:**")
+                for rec in quality_report.recommendations:
+                    st.write(rec)
 
     # Layout Tabs
     tab_overview, tab_performance, tab_intelligence, tab_physiology = st.tabs(

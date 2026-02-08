@@ -1,6 +1,30 @@
 # Analiza_Biegowa
 
-Aplikacja do analizy danych treningowych biegowych. Rozwinięcie koncepcji Analiza_Kolarska, dostosowane do specyfiki biegania.
+Aplikacja do analizy danych treningowych biegowych i kolarskich. Rozwinięcie koncepcji Analiza_Kolarska, z pełnym wsparciem dla biegania, kolarstwa i treningów hybrydowych.
+
+## Nowości (Luty 2026) 🎉
+
+### ✅ Ulepszona obsługa danych
+- **Raport Jakości Danych** - automatyczna walidacja kompletności danych przy imporcie
+- **Auto-detekcja typu sportu** - automatyczne rozpoznawanie czy to rower, bieg czy trening hybrydowy
+- **Lepsze komunikaty** - szczegółowe wyjaśnienia gdy brakuje danych (wentylacja, SmO2, itp.)
+
+### 📊 Vertical Oscillation (VO)
+- Analiza oscylacji pionowej z czujników biegowych (Garmin HRM-Run, Stryd)
+- Wykres VO w czasie z linią trendu
+- Analiza VO vs kadencja
+- Wskaźnik optymalnej kadencji (najniższa oscylacja)
+- Nowy wskaźnik **Running Effectiveness z VO** - efektywność biegu na podstawie oscylacji
+
+### 🫁 Ulepszona analiza wentylacji
+- Szczegółowe komunikaty gdy brakuje danych wentylacyjnych
+- Wskazówki jakie czujniki są potrzebne (VO2 Master, Cosmed)
+- Sugestie alternatywnych analiz (np. przejście do zakładki SmO2)
+
+### 📈 Ulepszone TDI (Threshold Discordance Index)
+- Szczegółowe wyjaśnienie dlaczego nie można obliczyć TDI
+- Instrukcje jak uzupełnić brakujące dane
+- Sugestie rozwiązań (ręczne wprowadzenie progów)
 
 ## Funkcjonalności
 
@@ -12,7 +36,7 @@ Aplikacja oferuje analizę podstawowych parametrów treningowych poprzez cztery 
 
 ### ⚡ Performance
 - **🏃 Running** - analiza tempa (pace), stref tempa, RSS (Running Stress Score)
-- **🦶 Biomechanika** - analiza biomechaniczna (kadencja SPM, GCT, długość kroku, Running Effectiveness)
+- **🦶 Biomechanika** - analiza biomechaniczna (kadencja SPM, GCT, długość kroku, Running Effectiveness, **Vertical Oscillation**)
 - **📐 Model** - model wydolnościowy (Critical Speed, D')
 - **❤️ HR** - analiza tętna i strefy treningowe
 - **🧬 Hematology** - parametry hematologiczne
@@ -40,6 +64,8 @@ Aplikacja oferuje analizę podstawowych parametrów treningowych poprzez cztery 
 | **Cadence SPM** | Kadencja w krokach na minutę |
 | **GCT** | Ground Contact Time (czas kontaktu z podłożem) |
 | **Running Effectiveness** | Efektywność biegu (speed/power) |
+| **Vertical Oscillation** | Oscylacja pionowa (cm) - efektywność biegu |
+| **VO Efficiency** | Efektywność na podstawie oscylacji vs wzrost |
 
 ## Parametry w Sidebar
 
@@ -102,7 +128,16 @@ Analiza_Biegowa/
 pytest tests/ -v
 ```
 
-Wszystkie testy przechodzą: 26/26 ✅
+Wszystkie testy przechodzą: 163/164 ✅
+
+Testy obejmują:
+- Obliczenia biegowe (pace, GAP, strefy)
+- Obliczenia kolarskie (power, NP, TSS)
+- Dynamikę biegu (cadence, GCT, VO)
+- Progi VT1/VT2
+- Model wydolnościowy (D', W')
+- Integrację systemów
+- Walidację danych
 
 ## Transformacja z Kolarskiej
 
@@ -123,13 +158,30 @@ Aplikacja została przekształcona z analizy kolarskiej (power-based) na analiz�
 Aplikacja obsługuje pliki CSV z danymi z:
 - Garmin Connect
 - Stryd
+- VO2 Master / Cosmed
 - Innych aplikacji GPS
 
 Wymagane kolumny (minimum):
-- `pace` lub `speed` - tempo biegu
+- `pace` lub `speed` - tempo biegu (dla biegania)
+- `watts` lub `power` - moc (dla kolarstwa)
 - `heartrate` lub `hr` - tętno (opcjonalnie)
 - `cadence` - kadencja (opcjonalnie)
-- `power` - moc biegowa (opcjonalnie, dla użytkowników Stryd)
+
+### Opcjonalne kolumny zaawansowane:
+- `tymeventilation` - wentylacja (L/min) - dla analizy wentylacyjnej
+- `tymebreathrate` - częstość oddechów - dla analizy wentylacyjnej
+- `smo2` - saturacja mięśniowa (%) - dla analizy NIRS
+- `thb` - hemoglobina całkowita - dla analizy NIRS
+- `VerticalOscillation` - oscylacja pionowa (cm) - dla analizy biomechanicznej
+- `core_temperature` - temperatura ciała - dla analizy termicznej
+- `skin_temperature` - temperatura skóry - dla analizy termicznej
+
+### Raport Jakości Danych
+Po zaimportowaniu pliku CSV aplikacja automatycznie generuje **Raport Jakości Danych** który pokazuje:
+- ✅ Dostępne metryki w Twoim pliku
+- ❌ Brakujące metryki i ich wpływ na analizę
+- 💡 Rekomendacje (np. "Brak wentylacji - zakładka Ventilation nieaktywna")
+- 📊 Procent kompletności danych
 
 ## Autor
 

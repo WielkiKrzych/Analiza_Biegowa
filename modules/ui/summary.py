@@ -598,13 +598,34 @@ def _render_tdi_analysis(vt1_watts: int, lt1_watts: int):
     - >10% = konflikt centralno-obwodowy / okluzja / perfuzja
     """
 
-    # Walidacja danych
+    # Walidacja danych z bardziej szczegółowymi komunikatami
     if not vt1_watts or vt1_watts <= 0:
-        st.warning("⚠️ **Brak danych VT1 (wentylacyjny)** — nie można obliczyć TDI.")
+        st.warning("""
+        ⚠️ **Brak danych VT1 (wentylacyjny)**
+        
+        Aby obliczyć TDI (Threshold Discordance Index), potrzebujesz:
+        1. **VT1** - Próg wentylacyjny (z czujnika wentylacji lub testu progowego)
+        2. **LT1** - Próg metaboliczny (z czujnika SmO2)
+        
+        **Brakuje:** Dane wentylacyjne (VE)
+        
+        💡 **Rozwiązanie:** Upewnij się, że:
+        - Twój plik CSV zawiera kolumnę `tymeventilation`
+        - Lub wprowadź wartość VT1 ręcznie w ustawieniach (zakładka VT1/VT2)
+        """)
         return
 
     if not lt1_watts or lt1_watts <= 0:
-        st.warning("⚠️ **Brak danych LT1 (SmO2)** — nie można obliczyć TDI.")
+        st.warning("""
+        ⚠️ **Brak danych LT1 (SmO2)**
+        
+        Aby obliczyć TDI, potrzebujesz progu metabolicznego z czujnika SmO2 (NIRS).
+        
+        **Brakuje:** Dane oksymetrii mięśniowej
+        
+        💡 TDI porównuje zgodność progu wentylacyjnego (centralny) 
+        z progiem metabolicznym (obwodowy).
+        """)
         return
 
     # Obliczenie TDI

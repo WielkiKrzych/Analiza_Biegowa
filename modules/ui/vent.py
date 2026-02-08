@@ -22,7 +22,22 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
         return
 
     if "tymeventilation" not in target_df.columns:
-        st.info("ℹ️ Brak danych wentylacji (tymeventilation) w tym pliku.")
+        st.info("""
+        ℹ️ **Brak danych wentylacji (VE)**
+        
+        Aby uzyskać analizę wentylacyjną, potrzebujesz czujnika wentylacji 
+        (np. VO2 Master, Cosmed, lub inny metabolimeter).
+        
+        **Brakujące kolumny:**
+        - `tymeventilation` (VE - wentylacja w L/min)
+        - `tymebreathrate` (BR - częstość oddechów w oddechach/min)
+        
+        **Twoje dane zawierają:**
+        """ + ", ".join([f"`{col}`" for col in target_df.columns if col in 
+            ["watts", "heartrate", "smo2", "cadence", "core_temperature"]]) + """
+        
+        💡 **Analiza fizjologii mięśniowej jest dostępna w zakładce 🩸 SmO2**
+        """)
         return
 
     # Wygładzanie

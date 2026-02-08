@@ -396,4 +396,171 @@ def render_biomech_tab(df_plot, df_plot_resampled):
     else:
         st.error("Do obliczenia GE potrzebujesz danych Mocy (Watts) oraz Tętna (HR).")
 
+    # =========================================================================
+    # SEKCJA: VERTICAL OSCILLATION
+    # =========================================================================
+    _render_vertical_oscillation_section(df_plot, df_plot_resampled)
 
+
+def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
+    """Render Vertical Oscillation analysis section."""
+    st.divider()
+    st.subheader("📊 Vertical Oscillation (Oscylacja Pionowa)")
+    
+    # Sprawdź czy mamy dane VO
+    vo_col = None
+    for col in ["verticaloscillation", "VerticalOscillation", "vo", "oscillation"]:
+        if col in df_plot.columns:
+            vo_col = col
+            break
+    
+    if vo_col is None:
+        st.info("""
+        ℹ️ **Brak danych Vertical Oscillation**
+        
+        Aby uzyskać analizę oscylacji pionowej, potrzebujesz czujnika biegowego 
+        (np. Garmin HRM-Run, Stryd, lub inny czujnik z pomiarem VO).
+        
+        **Brakująca kolumna:** `VerticalOscillation` (oscylacja pionowa w cm)
+        """)
+        return
+    
+    # Oblicz statystyki
+    from modules.calculations.running_dynamics import (
+        calculate_vo_stats, 
+        analyze_vo_efficiency,
+        calculate_running_effectiveness_from_vo
+    )
+    
+    vo_data = df_plot[vo_col].values
+    vo_stats = calculate_vo_stats(vo_data)
+    
+    if not vo_stats:
+        st.warning("Brak wystarczających danych VO do analizy.")
+        return
+    
+    # Wyświetl metryki
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Średnie VO", f"{vo_stats.get('mean_vo', 0):.1f} cm")
+    col2.metric("Min VO", f"{vo_stats.get('min_vo', 0):.1f} cm")
+    col3.metric("Max VO", f"{vo_stats.get('max_vo', 0):.1f} cm")
+    col4.metric("CV", f"{vo_stats.get('cv_vo', 0):.1f}%")
+    
+    # Wykres VO w czasie
+    fig_vo = go.Figure()
+    
+    time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
+    if time_col in df_plot.columns:
+        vo_smooth = df_plot[vo_col].rolling(5, center=True).mean()
+        fig_vo.add_trace(go.Scatter(
+            x=df_plot[time_col],
+            y=vo_smooth,
+            name='VO',
+            line=dict(color='#ff6b6b', width=2),
+            hovertemplate="VO: %{y:.1f} cm<extra></extra>"
+        ))
+        
+        # Dodaj linię trendu
+        valid_mask = ~np.isnan(df_plot[vo_col])
+        if valid_mask.sum() > 100:
+            from scipy import stats
+            try:
+                slope, intercept, _, _, _ = stats.linregress(
+                    df_plot.loc[valid_mask, time_col], 
+                    df_plot.loc[valid_mask, vo_col]
+                )
+                trend = intercept + slope * df_plot[time_col]
+                fig_vo.add_trace(go.Scatter(
+                    x=df_plot[time_col],
+                    y=trend,
+                    name='Trend',
+                    line=dict(color='white', dash='dash'),
+                    hoverinfo='skip'
+                ))
+            except:
+                pass
+    
+    fig_vo.update_layout(
+        template="plotly_dark",
+        title="Vertical Oscillation w czasie",
+        yaxis_title="VO [cm]",
+        xaxis_title="Czas [min]",
+        height=400,
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h", y=1.1, x=0)
+    )
+    st.plotly_chart(fig_vo, use_container_width=True)
+    
+    # Analiza efektywności z kadencją
+    cad_col = None
+    for col in ['cadence_smooth', 'cadence', 'spm']:
+        if col in df_plot.columns:
+            cad_col = col
+            break
+    
+    if cad_col:
+        efficiency = analyze_vo_efficiency(vo_data, df_plot[cad_col].values)
+        
+        if efficiency.get('optimal_cadence'):
+            st.success(f"🎯 **Optymalna kadencja:** {efficiency['optimal_cadence']} SPM "
+                      f"(najniższa oscylacja)")
+        
+        # Wykres VO vs Cadence
+        fig_scatter = go.Figure()
+        fig_scatter.add_trace(go.Scatter(
+            x=df_plot[cad_col],
+            y=df_plot[vo_col],
+            mode='markers',
+            marker=dict(size=4, opacity=0.5, color='#ff6b6b'),
+            name='VO vs Cadence',
+            hovertemplate="Cadence: %{x:.0f} SPM<br>VO: %{y:.1f} cm<extra></extra>"
+        ))
+        fig_scatter.update_layout(
+            template="plotly_dark",
+            title="VO vs Kadencja",
+            xaxis_title="Cadence [SPM/RPM]",
+            yaxis_title="VO [cm]",
+            height=400,
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        st.plotly_chart(fig_scatter, use_container_width=True)
+    
+    # Analiza efektywności biegowej (jeśli mamy pace i wzrost)
+    if 'pace' in df_plot.columns and 'pace' in df_plot.columns:
+        st.subheader("🏃 Efektywność Biegu z VO")
+        
+        runner_height = st.session_state.get('runner_height', 180)
+        avg_pace = df_plot['pace'].mean()
+        avg_vo = vo_stats['mean_vo']
+        
+        effectiveness = calculate_running_effectiveness_from_vo(
+            avg_pace, avg_vo, runner_height
+        )
+        
+        if effectiveness:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("VO % wzrostu", f"{effectiveness['vo_percent_height']:.1f}%")
+            col2.metric("Efektywność", f"{effectiveness['effectiveness_score']:.0f}/100")
+            col3.metric("Klasyfikacja", effectiveness['classification'])
+    
+    # Interpretacja
+    st.info("""
+    **💡 Interpretacja Vertical Oscillation:**
+    
+    **Co to jest?**
+    VO to odległość o jaką centrum masy podnosi się i opuszcza podczas biegu.
+    
+    **Normy (dla biegaczy):**
+    - **< 6 cm:** Bardzo efektywny bieg (elite)
+    - **6-8 cm:** Dobra efektywność
+    - **8-10 cm:** Średnia efektywność
+    - **> 10 cm:** Wysoka oscylacja - "bouncing"
+    
+    **Dla rowerzystów:**
+    VO jest naturalnie niższa (siedzenie). Wartości > 3 cm przy pedałowaniu 
+    mogą wskazywać na "podskakiwanie" na siodełku.
+    
+    **Korelacja z kadencją:**
+    Wyższa kadencja zazwyczaj = niższa VO (mniej "bouncing").
+    Szukaj optymalnego punktu gdzie VO jest minimalna przy komfortowej kadencji.
+    """)
