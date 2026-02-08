@@ -1,0 +1,17 @@
+{
+    "version": "1.0.0",
+    "release_date": "2026-01-02",
+    "name": "Ramp Test Methodology v1",
+    "description": "Comprehensive Ramp Test analysis with range-based thresholds, confidence scoring, and local SmO2 modulation.",
+    "features": [
+        "Range-based VT detection (TransitionZones)",
+        "Confidence scoring (slope + stability + consistency)",
+        "SmO2 defined as LOCAL signal (modulator)",
+        "Conflict detection and reporting system",
+        "Canonical JSON report structure"
+    ],
+    "compatibility": {
+        "min_protocol_version": "1.0",
+        "report_schema": "ramp_test_result_v1.json"
+    }
+}

@@ -1,0 +1,537 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Rajdhani:wght@500;600;700&display=swap');
+
+/* ========================================
+   GLOBALNE STYLE
+   ======================================== */
+.stApp {
+    background: radial-gradient(circle at 10% 20%, #1a1f25 0%, #0e1117 90%);
+    color: #e6e6e6;
+    /* Zwiększony kontrast */
+    font-family: 'Inter', sans-serif;
+}
+
+/* ========================================
+   TYPOGRAFIA - Zwiększony kontrast
+   ======================================== */
+h1,
+h2,
+h3,
+h4,
+h5 {
+    font-family: 'Rajdhani', sans-serif !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+    font-weight: 700;
+    color: #00cc96 !important;
+}
+
+h2 {
+    border-bottom: 2px solid #00cc96;
+    padding-bottom: 8px;
+    margin-top: 30px;
+}
+
+h3 {
+    color: #58a6ff !important;
+    margin-top: 20px;
+}
+
+/* Zwiększony kontrast dla paragrafów */
+p,
+span,
+label,
+.stMarkdown {
+    color: #e6e6e6 !important;
+}
+
+/* ========================================
+   SIDEBAR
+   ======================================== */
+[data-testid="stSidebar"] {
+    background-color: #050505;
+    border-right: 1px solid #30363d;
+}
+
+[data-testid="stSidebar"] label {
+    color: #c9d1d9 !important;
+    font-weight: 500;
+}
+
+/* ========================================
+   METRYKI
+   ======================================== */
+[data-testid="stMetric"] {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 15px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+[data-testid="stMetric"]:hover {
+    transform: translateY(-3px);
+    border-color: #00cc96;
+    box-shadow: 0 8px 15px rgba(0, 204, 150, 0.2);
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.9rem !important;
+    color: #b0b8c1 !important;
+    /* Zwiększony kontrast */
+    font-family: 'Rajdhani', sans-serif;
+}
+
+[data-testid="stMetricValue"] {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    color: #ffffff !important;
+    /* Pełna biel */
+}
+
+/* ========================================
+   ZAKŁADKI GŁÓWNE
+   ======================================== */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: transparent;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.stTabs [data-baseweb="tab"] {
+    height: 44px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #d0d7de;
+    border: 1px solid transparent;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    padding: 0 20px;
+    transition: all 0.2s ease;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(0, 204, 150, 0.3);
+}
+
+/* Aktywna zakładka - WYRAŹNE WYRÓŻNIENIE */
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, #00cc96 0%, #00a67d 100%) !important;
+    color: #000000 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(0, 204, 150, 0.4);
+    border: none !important;
+}
+
+/* Główne zakładki - większe */
+.stTabs>[data-baseweb="tab-list"]>[data-baseweb="tab"] {
+    font-size: 1.1rem;
+    padding: 12px 24px;
+    font-weight: 700;
+}
+
+/* ========================================
+   ZAGNIEŻDŻONE ZAKŁADKI (Sub-tabs)
+   ======================================== */
+.stTabs .stTabs [data-baseweb="tab-list"] {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 15px;
+    border-bottom: none;
+}
+
+.stTabs .stTabs [data-baseweb="tab"] {
+    font-size: 0.9rem;
+    padding: 8px 16px;
+    font-weight: 500;
+    background-color: transparent;
+    height: 36px;
+}
+
+.stTabs .stTabs [aria-selected="true"] {
+    background-color: rgba(0, 204, 150, 0.25) !important;
+    color: #00cc96 !important;
+    border-radius: 6px;
+    box-shadow: none;
+}
+
+/* Separatory między panelami zakładek */
+.stTabs>[data-baseweb="tab-panel"] {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 20px;
+}
+
+/* ========================================
+   BREADCRUMBS (Ścieżka nawigacji)
+   ======================================== */
+.breadcrumb-nav {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    color: #8b949e;
+    border-left: 3px solid #00cc96;
+}
+
+.breadcrumb-nav .current {
+    color: #00cc96;
+    font-weight: 600;
+}
+
+.breadcrumb-nav .separator {
+    margin: 0 8px;
+    color: #484f58;
+}
+
+/* ========================================
+   TABELE - Zwiększona czytelność
+   ======================================== */
+.stDataFrame,
+[data-testid="stDataFrame"] {
+    background: rgba(22, 27, 34, 0.8) !important;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #30363d;
+}
+
+/* Nagłówki tabel */
+.stDataFrame thead th,
+[data-testid="stDataFrame"] thead th {
+    background: linear-gradient(180deg, #21262d 0%, #161b22 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    padding: 12px 16px !important;
+    border-bottom: 2px solid #00cc96 !important;
+}
+
+/* Wiersze tabel */
+.stDataFrame tbody tr,
+[data-testid="stDataFrame"] tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+}
+
+.stDataFrame tbody tr:nth-child(even),
+[data-testid="stDataFrame"] tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.stDataFrame tbody tr:hover,
+[data-testid="stDataFrame"] tbody tr:hover {
+    background: rgba(0, 204, 150, 0.1) !important;
+}
+
+/* Komórki tabel */
+.stDataFrame td,
+[data-testid="stDataFrame"] td {
+    color: #e6e6e6 !important;
+    padding: 10px 16px !important;
+    font-size: 0.9rem;
+}
+
+/* ========================================
+   SEPARATORY MIĘDZY SEKCJAMI
+   ======================================== */
+hr,
+.stDivider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, #30363d 50%, transparent 100%);
+    margin: 30px 0;
+}
+
+/* Sekcja z ramką */
+.section-box {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+/* ========================================
+   INFO BOXY / ALERTY
+   ======================================== */
+.stAlert {
+    background-color: rgba(22, 27, 34, 0.9);
+    border: 1px solid #30363d;
+    border-left: 5px solid #58a6ff;
+    border-radius: 8px;
+    color: #d0d7de;
+}
+
+/* Różne typy alertów */
+.stAlert[data-baseweb*="info"] {
+    border-left-color: #58a6ff;
+}
+
+.stAlert[data-baseweb*="success"] {
+    border-left-color: #00cc96;
+}
+
+.stAlert[data-baseweb*="warning"] {
+    border-left-color: #d29922;
+}
+
+.stAlert[data-baseweb*="error"] {
+    border-left-color: #f85149;
+}
+
+/* ========================================
+   PRZYCISKI
+   ======================================== */
+.stButton>button {
+    background: linear-gradient(135deg, #238636 0%, #1a7f37 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.stButton>button:hover {
+    background: linear-gradient(135deg, #2ea043 0%, #238636 100%);
+    box-shadow: 0 4px 12px rgba(46, 160, 67, 0.3);
+    transform: translateY(-2px);
+}
+
+/* ========================================
+   INPUTS / FORMULARZE
+   ======================================== */
+.stTextInput input,
+.stNumberInput input,
+.stSelectbox select {
+    background: rgba(22, 27, 34, 0.8) !important;
+    border: 1px solid #30363d !important;
+    color: #e6e6e6 !important;
+    border-radius: 6px;
+}
+
+.stTextInput input:focus,
+.stNumberInput input:focus {
+    border-color: #00cc96 !important;
+    box-shadow: 0 0 0 3px rgba(0, 204, 150, 0.2) !important;
+}
+
+/* ========================================
+   RESPONSYWNOŚĆ - Mniejsze ekrany
+   ======================================== */
+@media screen and (max-width: 1200px) {
+
+    /* Zakładki - mniejszy padding */
+    .stTabs [data-baseweb="tab"] {
+        padding: 0 12px;
+        font-size: 0.9rem;
+    }
+
+    .stTabs>[data-baseweb="tab-list"]>[data-baseweb="tab"] {
+        font-size: 1rem;
+        padding: 10px 16px;
+    }
+}
+
+@media screen and (max-width: 768px) {
+
+    /* Zakładki - zawijanie */
+    .stTabs [data-baseweb="tab-list"] {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        flex: 1 1 auto;
+        min-width: 100px;
+        text-align: center;
+        font-size: 0.85rem;
+        padding: 8px 10px;
+    }
+
+    /* Metryki - pełna szerokość */
+    [data-testid="stMetric"] {
+        padding: 12px !important;
+    }
+
+    /* Sticky header - mniejszy padding */
+    .sticky-metrics {
+        padding: 10px;
+    }
+
+    .sticky-metrics .metric-box {
+        min-width: 80px;
+        padding: 8px;
+    }
+
+    .sticky-metrics .metric-box .value {
+        font-size: 16px;
+    }
+
+    /* Tabele - scroll poziomy */
+    .stDataFrame {
+        overflow-x: auto;
+    }
+}
+
+@media screen and (max-width: 480px) {
+
+    /* Jeszcze mniejsze ekrany */
+    h1 {
+        font-size: 1.5rem !important;
+    }
+
+    h2 {
+        font-size: 1.2rem !important;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        font-size: 0.75rem;
+        padding: 6px 8px;
+        height: 36px;
+    }
+
+    .breadcrumb-nav {
+        font-size: 0.75rem;
+        padding: 8px 10px;
+    }
+}
+
+/* ========================================
+   ANIMACJE
+   ======================================== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.stTabs [data-baseweb="tab-panel"] {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* ========================================
+   WYKRESY PLOTLY - Zapobieganie obcinaniu
+   ======================================== */
+/* Kontener Streamlit dla Plotly */
+[data-testid="stPlotlyChart"],
+.stPlotlyChart {
+    overflow: visible !important;
+}
+
+/* Główny kontener Plotly */
+.js-plotly-plot,
+.plotly {
+    overflow: visible !important;
+}
+
+/* Warstwa SVG i canvas */
+.js-plotly-plot .plotly .main-svg,
+.js-plotly-plot .plotly .svg-container {
+    overflow: visible !important;
+}
+
+/* Legenda i tytuły */
+.js-plotly-plot .plotly .gtitle,
+.js-plotly-plot .plotly .legend {
+    overflow: visible !important;
+}
+
+/* Margines na górze dla tytułów */
+.stPlotlyChart>div {
+    padding-top: 10px;
+}
+
+/* Ekspandery - poprawka overflow */
+[data-testid="stExpander"] {
+    overflow: visible !important;
+}
+
+/* Kontenery zakładek - overflow visible */
+.stTabs [data-baseweb="tab-panel"]>div {
+    overflow: visible !important;
+}
+
+/* Fix dla sticky header który może nachodzić */
+.sticky-metrics {
+    position: sticky;
+    top: 60px;
+    z-index: 100;
+    background: linear-gradient(135deg, #1a1f25 0%, #0e1117 100%);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #30363d;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    margin-bottom: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.sticky-metrics h4 {
+    margin: 0 0 10px 0;
+    color: #00cc96;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric-row {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.metric-box {
+    flex: 1;
+    min-width: 120px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metric-box .label {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+}
+
+.metric-box .value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f0f6fc;
+    margin-top: 5px;
+}
+
+.metric-box .unit {
+    font-size: 12px;
+    color: #8b949e;
+}
+
+/* Główny kontener treści */
+[data-testid="stVerticalBlock"] {
+    overflow: visible !important;
+}

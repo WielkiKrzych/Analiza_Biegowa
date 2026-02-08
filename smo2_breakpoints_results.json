@@ -1,0 +1,41 @@
+{
+  "file": "RampTest 03.01.2026.csv",
+  "algorithm": "Segmented Regression (Piecewise Linear)",
+  "methodology": "Based on Feldmann et al. (2022) and Moxy Monitor guidelines",
+  "results": {
+    "bp1_lt1": {
+      "power_watts": 250.0,
+      "smo2_percent": 69.14333441941511,
+      "expected_range": "280-310W",
+      "in_expected_range": false
+    },
+    "bp2_lt2": {
+      "power_watts": 410.0,
+      "smo2_percent": 55.039248915802894,
+      "expected_range": "360-400W",
+      "in_expected_range": false
+    },
+    "slopes": {
+      "segment1_baseline": 0.019172995138386845,
+      "segment2_moderate_drop": -0.07346215514676344,
+      "segment3_steep_drop": -0.2812627954136584
+    },
+    "fit_quality": {
+      "r_squared": 0.7660919697788515,
+      "is_valid": true
+    }
+  },
+  "notes": [
+    "BP1 (LT1): 250W @ 69.1% SmO2",
+    "BP2 (LT2): 410W @ 55.0% SmO2",
+    "Slopes: 0.0192, -0.0735, -0.2813",
+    "R\u00b2 = 0.766",
+    "\u26a0\ufe0f BP1 outside expected range (280-310W)",
+    "\u26a0\ufe0f BP2 outside expected range (360-400W)"
+  ],
+  "interpretation": {
+    "bp1_description": "Transition from baseline/plateau to moderate desaturation",
+    "bp2_description": "Transition from moderate to steep desaturation",
+    "comparison_to_expected": "Auto-detected breakpoints may differ from expected (280-310W, 360-400W) because: (1) Expected values may be from VT/ventilatory thresholds, not SmO2; (2) Expected values may be manually annotated; (3) SmO2 breakpoints are local muscle measures"
+  }
+}
