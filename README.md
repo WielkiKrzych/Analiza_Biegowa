@@ -70,16 +70,16 @@ Aplikacja oferuje analizę podstawowych parametrów treningowych poprzez cztery 
 ## Parametry w Sidebar
 
 ### ⚙️ Parametry Podstawowe
-- Waga [kg] - domyślnie 95kg
-- Wzrost [cm] - domyślnie 180cm
-- Wiek [lata] - domyślnie 30
+- Waga [kg]
+- Wzrost [cm]
+- Wiek [lata]
 - Płeć
 
 ### 🏃 Parametry Progowe
-- **Tempo Progowe** [s/km] - domyślnie 230s (3:50 min/km)
-- **LTHR** [bpm] - tętno progowe, domyślnie 170
+- **Tempo Progowe** [s/km]
+- **LTHR** [bpm] - tętno progowe
 - **Threshold Power** [W] - dla biegaczy z czujnikiem mocy (opcjonalnie)
-- **MaxHR** [bpm] - maksymalne tętno, domyślnie 185
+- **MaxHR** [bpm] - maksymalne tętno
 
 ### 🫁 Wentylacja
 - VT1 [L/min] - próg tlenowy
