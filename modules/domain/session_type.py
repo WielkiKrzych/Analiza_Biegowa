@@ -348,11 +348,162 @@ def classify_session_type(
             if ramp_result.is_ramp:
                 return ramp_result.suggested_type
     
-    # Rule 3: Default to Training if valid power data exists
+    # Rule 3: Check for progressive run (pace-based test)
+    if "pace" in df.columns:
+        pace = df["pace"].dropna()
+        if len(pace) >= 600:  # At least 10 minutes
+            progressive_result = classify_progressive_run(pace)
+            if progressive_result.is_progressive:
+                return SessionType.RAMP_TEST  # Reuse for progressive runs
+    
+    # Rule 4: Default to Training if valid power/pace data exists
     if "watts" in df.columns or "power" in df.columns:
         power_col = "watts" if "watts" in df.columns else "power"
         valid_power = df[power_col].dropna()
         if len(valid_power) > 0 and valid_power.mean() > 0:
             return SessionType.TRAINING
     
+    if "pace" in df.columns:
+        valid_pace = df["pace"].dropna()
+        if len(valid_pace) > 0 and valid_pace.mean() > 0:
+            return SessionType.TRAINING
+    
     return SessionType.UNKNOWN
+
+
+@dataclass
+class ProgressiveClassificationResult:
+    """Result of progressive run classification."""
+    is_progressive: bool
+    confidence: float
+    reason: str
+    criteria_met: List[str]
+    criteria_failed: List[str]
+
+
+def classify_progressive_run(
+    pace: pd.Series,
+    step_duration_range: tuple = (300, 900)  # 5-15 min per step
+) -> 'ProgressiveClassificationResult':
+    """Deterministic progressive run classifier."""
+    criteria_met = []
+    criteria_failed = []
+    
+    MIN_DURATION_SEC = 600  # 10 minutes minimum
+    if len(pace) < MIN_DURATION_SEC:
+        return ProgressiveClassificationResult(
+            is_progressive=False,
+            confidence=0.0,
+            reason=f"Za malo danych ({len(pace)}s < {MIN_DURATION_SEC}s minimum)",
+            criteria_met=[],
+            criteria_failed=["min_duration"]
+        )
+    
+    pace_clean = pace.dropna()
+    if len(pace_clean) < MIN_DURATION_SEC:
+        return ProgressiveClassificationResult(
+            is_progressive=False,
+            confidence=0.0,
+            reason="Za duzo brakujacych danych",
+            criteria_met=[],
+            criteria_failed=["valid_data"]
+        )
+    
+    pace_arr = pace_clean.values
+    
+    # Detect pace steps
+    steps = _detect_pace_steps(pace_arr, step_duration_range)
+    
+    if len(steps) < 2:
+        return ProgressiveClassificationResult(
+            is_progressive=False,
+            confidence=0.0,
+            reason=f"Wykryto tylko {len(steps)} segmentow (minimum 2)",
+            criteria_met=[],
+            criteria_failed=["min_steps"]
+        )
+    
+    # Check if pace generally decreases (gets faster)
+    step_paces = [s['mean_pace'] for s in steps]
+    decreases = sum(1 for i in range(1, len(step_paces)) 
+                   if step_paces[i] < step_paces[i-1])
+    monotonicity_ratio = decreases / (len(step_paces) - 1)
+    
+    if monotonicity_ratio >= 0.7:
+        criteria_met.append("pace_decreasing")
+    else:
+        criteria_failed.append("pace_decreasing")
+    
+    # Check consistent step duration
+    step_durations = [s['duration'] for s in steps]
+    duration_cv = np.std(step_durations) / np.mean(step_durations) if np.mean(step_durations) > 0 else 1
+    
+    if duration_cv < 0.5:
+        criteria_met.append("consistent_duration")
+    else:
+        criteria_failed.append("consistent_duration")
+    
+    # Calculate confidence
+    total_criteria = 2
+    met_count = len(criteria_met)
+    confidence = met_count / total_criteria
+    
+    is_progressive = met_count >= 2
+    
+    if is_progressive:
+        reason = f"Progressive Run wykryty ({met_count}/{total_criteria} kryteriow)"
+    else:
+        reason = f"NIE jest Progressive Run. Niespelnione: {', '.join(criteria_failed)}"
+    
+    return ProgressiveClassificationResult(
+        is_progressive=is_progressive,
+        confidence=confidence,
+        reason=reason,
+        criteria_met=criteria_met,
+        criteria_failed=criteria_failed
+    )
+
+
+def _detect_pace_steps(pace_arr: np.ndarray, duration_range: tuple) -> List[dict]:
+    """Detect distinct pace steps in the data."""
+    min_dur, max_dur = duration_range
+    window = min(60, len(pace_arr) // 10)
+    if window < 10:
+        window = 10
+    
+    # Smooth to find plateaus
+    smoothed = pd.Series(pace_arr).rolling(window=window, center=True).mean().ffill().bfill().values
+    
+    # Detect changes using gradient
+    gradient = np.gradient(smoothed)
+    
+    # Find step boundaries
+    step_threshold = 2.0  # sec/km change threshold
+    step_starts = [0]
+    
+    in_transition = False
+    for i in range(1, len(gradient)):
+        if abs(gradient[i]) > step_threshold and not in_transition:
+            in_transition = True
+        elif abs(gradient[i]) <= step_threshold and in_transition:
+            in_transition = False
+            if i - step_starts[-1] >= min_dur:
+                step_starts.append(i)
+    
+    # Build step list
+    steps = []
+    for i in range(len(step_starts)):
+        start = step_starts[i]
+        end = step_starts[i + 1] if i + 1 < len(step_starts) else len(pace_arr)
+        duration = end - start
+        
+        if duration >= min_dur:
+            mean_pace = np.mean(pace_arr[start:end])
+            steps.append({
+                'start': start,
+                'end': end,
+                'mean_pace': mean_pace,
+                'duration': duration
+            })
+    
+    return steps
