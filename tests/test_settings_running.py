@@ -22,8 +22,8 @@ def test_default_settings_running():
     assert "cp" not in defaults
     assert "w_prime" not in defaults
     
-    # Default threshold pace should be realistic (4:00-6:00 min/km = 240-360s)
-    assert 240 <= defaults["threshold_pace"] <= 360  # seconds per km
+    # Default threshold pace should be realistic (3:30-6:00 min/km = 210-360s)
+    assert 210 <= defaults["threshold_pace"] <= 360  # seconds per km
 
 def test_load_settings_returns_defaults():
     """Test that load_settings returns default settings."""
