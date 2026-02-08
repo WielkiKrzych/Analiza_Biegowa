@@ -86,19 +86,14 @@ uploaded_file, params = layout.render_sidebar()
 
 # Parameters shorthand - RUNNING oriented
 runner_weight = params.get("runner_weight", 75.0)
-threshold_pace_input = params.get("threshold_pace", 300)  # sec/km (5:00 min/km)
-cs_input = params.get("critical_speed", 3.33)  # m/s
-d_prime_input = params.get("d_prime", 200)  # meters
-vt1_pace = params.get("vt1_pace", 330)  # sec/km
-vt2_pace = params.get("vt2_pace", 270)  # sec/km
+threshold_pace_input = params.get("threshold_pace", 300)
+threshold_power_input = params.get("threshold_power", 0)
+lthr_input = params.get("lthr", 170)
+max_hr_input = params.get("max_hr", 185)
 vt1_vent = params.get("vt1_vent", 0)
 vt2_vent = params.get("vt2_vent", 0)
 runner_age = params.get("runner_age", 30)
 is_male = params.get("is_male", True)
-
-# Legacy cycling params (for backward compatibility)
-cp_input = params.get("cp", 280)
-w_prime_input = params.get("w_prime", 20000)
 
 layout.render_header()
 
@@ -145,7 +140,7 @@ if uploaded_file is not None:
             from services.session_orchestrator import process_uploaded_session
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw, cp_input, w_prime_input, runner_weight, vt1_pace, vt2_pace
+                df_raw, threshold_power_input, 0  # removed, runner_weight, threshold_pace_input, threshold_pace_input
             )
 
             if error_msg:
@@ -175,7 +170,7 @@ if uploaded_file is not None:
     # --- RENDER DASHBOARD ---
 
     # 1. Header Metrics
-    np_header, if_header, tss_header = calculate_header_metrics(df_plot, cp_input)
+    np_header, if_header, tss_header = calculate_header_metrics(df_plot, threshold_power_input)
 
     # Auto-save
     try:
@@ -260,7 +255,7 @@ if uploaded_file is not None:
                 df_plot_resampled,
                 metrics,
                 runner_weight,
-                cp_input,
+                threshold_power_input,
                 decoupling_percent,
                 drift_z2,
                 vt1_vent,
@@ -274,11 +269,11 @@ if uploaded_file is not None:
                 metrics,
                 training_notes,
                 uploaded_file.name,
-                cp_input,
-                w_prime_input,
+                threshold_power_input,
+                0  # removed,
                 runner_weight,
-                vt1_pace,
-                vt2_pace,
+                threshold_pace_input,
+                threshold_pace_input,
                 0,
                 0,
             )
@@ -300,15 +295,15 @@ if uploaded_file is not None:
                 "power",
                 df_plot,
                 df_plot_resampled,
-                cp_input,
-                w_prime_input,
+                threshold_power_input,
+                0  # removed,
                 runner_weight,
                 metrics.get("vo2_max_est", 0),
             )
         with t2:
             render_tab_content("biomech", df_plot, df_plot_resampled)
         with t3:
-            render_tab_content("model", df_plot, cp_input, w_prime_input)
+            render_tab_content("model", df_plot, threshold_power_input, 0  # removed)
         with t4:
             render_tab_content("heart_rate", df_plot)
         with t5:
@@ -320,9 +315,9 @@ if uploaded_file is not None:
         UIComponents.show_breadcrumb("🧠 Intelligence")
         t1, t2 = st.tabs(["🍎 Nutrition", "🚧 Limiters"])
         with t1:
-            render_tab_content("nutrition", df_plot, cp_input, vt1_pace, vt2_pace)
+            render_tab_content("nutrition", df_plot, threshold_power_input, threshold_pace_input, threshold_pace_input)
         with t2:
-            render_tab_content("limiters", df_plot, cp_input, vt2_vent)
+            render_tab_content("limiters", df_plot, threshold_power_input, vt2_vent)
 
     with tab_physiology:
         UIComponents.show_breadcrumb("🫀 Physiology")

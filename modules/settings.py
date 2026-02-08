@@ -6,30 +6,26 @@ class SettingsManager:
     def __init__(self, file_path=SETTINGS_FILE):
         self.file_path = file_path
         self.default_settings = {
-            # Athlete basic data - RUNNING oriented
-            "runner_weight": 75.0,  # kg
-            "runner_height": 175,   # cm
+            # Athlete basic data
+            "runner_weight": 75.0,     # kg
+            "runner_height": 175,      # cm
             "runner_age": 30,
             "is_male": True,
             
             # Running performance metrics
             "threshold_pace": 300,     # seconds per km (5:00 min/km)
+            "threshold_power": 0,      # Watts (optional, for runners with power meter)
+            "lthr": 170,               # Lactate Threshold Heart Rate (bpm)
+            "max_hr": 185,             # Maximum Heart Rate (bpm)
             "critical_speed": 3.33,    # m/s (equivalent to 5:00 min/km)
-            "d_prime": 200,            # meters (anaerobic distance capacity)
             
             # Thresholds from ventilatory markers
-            "vt1_pace": 330,           # seconds per km (5:30 min/km)
-            "vt2_pace": 270,           # seconds per km (4:30 min/km)
-            "vt1_vent": 71.0,          # L/min (keep for compatibility)
-            "vt2_vent": 109.0,         # L/min (keep for compatibility)
+            "vt1_vent": 71.0,          # L/min
+            "vt2_vent": 109.0,         # L/min
             
             # Running form preferences
             "preferred_cadence": 170,  # SPM (steps per minute)
             "target_stride_length": 0, # 0 = auto-calculate from height
-            
-            # Legacy cycling params (for backward compatibility during transition)
-            "cp": 280,                 # Critical Power - deprecated
-            "w_prime": 20000,          # W' - deprecated
         }
 
     def load_settings(self):

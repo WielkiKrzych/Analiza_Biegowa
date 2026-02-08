@@ -13,11 +13,14 @@ def test_default_settings_running():
     
     # Should have running-specific params
     assert "threshold_pace" in defaults  # min/km
-    assert "critical_speed" in defaults  # m/s or min/km
-    assert "d_prime" in defaults  # meters
+    assert "threshold_power" in defaults  # Watts
+    assert "lthr" in defaults  # Lactate Threshold HR
+    assert "max_hr" in defaults  # Maximum HR
     
-    # Should NOT have cycling-specific params (removed)
-    assert "crank_length" not in defaults
+    # Should NOT have old params (removed)
+    assert "d_prime" not in defaults
+    assert "cp" not in defaults
+    assert "w_prime" not in defaults
     
     # Default threshold pace should be realistic (4:00-6:00 min/km = 240-360s)
     assert 240 <= defaults["threshold_pace"] <= 360  # seconds per km
@@ -28,11 +31,12 @@ def test_load_settings_returns_defaults():
     settings = sm.load_settings()
     assert settings["runner_weight"] == sm.default_settings["runner_weight"]
 
-def test_legacy_params_present_for_compatibility():
-    """Test that legacy cycling params exist for backward compatibility."""
+def test_new_running_params():
+    """Test that new running params are present."""
     sm = SettingsManager()
     defaults = sm.default_settings
     
-    # Legacy params should exist during transition
-    assert "cp" in defaults
-    assert "w_prime" in defaults
+    # New running params should exist
+    assert "threshold_power" in defaults
+    assert "lthr" in defaults
+    assert "max_hr" in defaults
