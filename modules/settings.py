@@ -6,19 +6,19 @@ class SettingsManager:
     def __init__(self, file_path=SETTINGS_FILE):
         self.file_path = file_path
         self.default_settings = {
-            "runner_weight": None,
-            "runner_height": None,
-            "runner_age": None,
+            "runner_weight": 95.0,
+            "runner_height": 180,
+            "runner_age": 30,
             "is_male": True,
-            "threshold_pace": None,
-            "threshold_power": None,
-            "lthr": None,
-            "max_hr": None,
-            "critical_speed": None,
-            "vt1_vent": None,
-            "vt2_vent": None,
-            "preferred_cadence": None,
-            "target_stride_length": None,
+            "threshold_pace": 230,
+            "threshold_power": 450,
+            "lthr": 167,
+            "max_hr": 180,
+            "critical_speed": 4.35,
+            "vt1_vent": 71.0,
+            "vt2_vent": 109.0,
+            "preferred_cadence": 170,
+            "target_stride_length": 0,
         }
 
     def load_settings(self):
