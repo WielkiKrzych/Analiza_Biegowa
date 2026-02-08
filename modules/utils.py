@@ -380,7 +380,7 @@ def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
 def detect_sport_type(df: pd.DataFrame) -> str:
     """Detect sport type based on available columns."""
     has_power = any(c in df.columns for c in ["watts", "power", "Watts"])
-    has_pace = any(c in df.columns for c in ["pace", "speed", "gap"])
+    has_pace = any(c in df.columns for c in ["pace", "speed", "velocity", "velocity_smooth", "gap"])
 
     if has_power and not has_pace:
         return "cycling"
