@@ -28,6 +28,7 @@ class TabRegistry:
     _tabs = {
         "report": ("modules.ui.report", "render_report_tab"),
         "power": ("modules.ui.power", "render_power_tab"),
+        "running": ("modules.ui.running", "render_running_tab"),
         "biomech": ("modules.ui.biomech", "render_biomech_tab"),
         "model": ("modules.ui.model", "render_model_tab"),
         "hrv": ("modules.ui.hrv", "render_hrv_tab"),
@@ -83,22 +84,27 @@ check_git_tracking("treningi_csv")
 layout = AppLayout(state)
 uploaded_file, params = layout.render_sidebar()
 
-# Parameters shorthand
-rider_weight = params.get("rider_weight", 75.0)
-cp_input = params.get("cp", 280)
-vt1_watts = params.get("vt1_watts", 0)
-vt2_watts = params.get("vt2_watts", 0)
+# Parameters shorthand - RUNNING oriented
+runner_weight = params.get("runner_weight", 75.0)
+threshold_pace_input = params.get("threshold_pace", 300)  # sec/km (5:00 min/km)
+cs_input = params.get("critical_speed", 3.33)  # m/s
+d_prime_input = params.get("d_prime", 200)  # meters
+vt1_pace = params.get("vt1_pace", 330)  # sec/km
+vt2_pace = params.get("vt2_pace", 270)  # sec/km
 vt1_vent = params.get("vt1_vent", 0)
 vt2_vent = params.get("vt2_vent", 0)
-w_prime_input = params.get("w_prime", 20000)
-rider_age = params.get("rider_age", 30)
+runner_age = params.get("runner_age", 30)
 is_male = params.get("is_male", True)
+
+# Legacy cycling params (for backward compatibility)
+cp_input = params.get("cp", 280)
+w_prime_input = params.get("w_prime", 20000)
 
 layout.render_header()
 
 
-if rider_weight <= 0 or cp_input <= 0:
-    st.error("Błąd: Waga i CP muszą być większe od zera.")
+if runner_weight <= 0 or threshold_pace_input <= 0:
+    st.error("Błąd: Waga i tempo progowe muszą być większe od zera.")
     st.stop()
 
 if uploaded_file is not None:
@@ -139,7 +145,7 @@ if uploaded_file is not None:
             from services.session_orchestrator import process_uploaded_session
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
+                df_raw, cp_input, w_prime_input, runner_weight, vt1_pace, vt2_pace
             )
 
             if error_msg:
@@ -239,7 +245,7 @@ if uploaded_file is not None:
                 df_plot,
                 df_plot_resampled,
                 metrics,
-                rider_weight,
+                runner_weight,
                 cp_input,
                 decoupling_percent,
                 drift_z2,
@@ -256,9 +262,9 @@ if uploaded_file is not None:
                 uploaded_file.name,
                 cp_input,
                 w_prime_input,
-                rider_weight,
-                vt1_watts,
-                vt2_watts,
+                runner_weight,
+                vt1_pace,
+                vt2_pace,
                 0,
                 0,
             )
@@ -282,7 +288,7 @@ if uploaded_file is not None:
                 df_plot_resampled,
                 cp_input,
                 w_prime_input,
-                rider_weight,
+                runner_weight,
                 metrics.get("vo2_max_est", 0),
             )
         with t2:
@@ -300,7 +306,7 @@ if uploaded_file is not None:
         UIComponents.show_breadcrumb("🧠 Intelligence")
         t1, t2 = st.tabs(["🍎 Nutrition", "🚧 Limiters"])
         with t1:
-            render_tab_content("nutrition", df_plot, cp_input, vt1_watts, vt2_watts)
+            render_tab_content("nutrition", df_plot, cp_input, vt1_pace, vt2_pace)
         with t2:
             render_tab_content("limiters", df_plot, cp_input, vt2_vent)
 
