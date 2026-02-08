@@ -27,38 +27,38 @@ class AppLayout:
         
         with st.sidebar.expander("⚙️ Parametry Podstawowe", expanded=True):
             params['runner_weight'] = st.number_input(
-                "Waga [kg]", step=0.5, min_value=30.0, max_value=200.0, value=95.0,
+                "Waga [kg]", step=0.5, min_value=30.0, max_value=200.0,
                 key="weight", on_change=self.state.save_settings_callback
             )
             params['runner_height'] = st.number_input(
-                "Wzrost [cm]", step=1, min_value=100, max_value=250, value=180,
+                "Wzrost [cm]", step=1, min_value=100, max_value=250,
                 key="height", on_change=self.state.save_settings_callback
             )
             params['runner_age'] = st.number_input(
-                "Wiek [lata]", step=1, min_value=10, max_value=100, value=30,
+                "Wiek [lata]", step=1, min_value=10, max_value=100,
                 key="age", on_change=self.state.save_settings_callback
             )
             params['is_male'] = st.checkbox(
-                "Mężczyzna?", value=True, key="gender_m", on_change=self.state.save_settings_callback
+                "Mężczyzna?", key="gender_m", on_change=self.state.save_settings_callback
             )
         
         with st.sidebar.expander("🏃 Parametry Progowe", expanded=True):
             params['threshold_pace'] = st.number_input(
-                "Tempo Progowe [s/km]", min_value=120, max_value=600, value=230,
-                help="3:50 min/km = 230s",
+                "Tempo Progowe [s/km]", min_value=120, max_value=600,
+                help="Np. 3:50 min/km = 230s",
                 key="threshold_pace", on_change=self.state.save_settings_callback
             )
             params['lthr'] = st.number_input(
-                "LTHR (Tętno Progowe) [bpm]", min_value=100, max_value=200, value=170,
+                "LTHR (Tętno Progowe) [bpm]", min_value=100, max_value=200,
                 key="lthr", on_change=self.state.save_settings_callback
             )
             params['threshold_power'] = st.number_input(
-                "Threshold Power [W]", min_value=0, max_value=500, value=0,
+                "Threshold Power [W]", min_value=0, max_value=500,
                 help="Dla biegaczy z czujnikiem mocy (opcjonalnie)",
                 key="threshold_power", on_change=self.state.save_settings_callback
             )
             params['max_hr'] = st.number_input(
-                "MaxHR [bpm]", min_value=120, max_value=220, value=185,
+                "MaxHR [bpm]", min_value=120, max_value=220,
                 key="max_hr", on_change=self.state.save_settings_callback
             )
         
