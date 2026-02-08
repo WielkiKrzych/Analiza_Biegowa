@@ -25,16 +25,16 @@ class AppLayout:
         
         params = {}
         
-        with st.sidebar.expander("⚙️ Parametry Fizyczne", expanded=True):
-            params['rider_weight'] = st.number_input(
-                "Waga Zawodnika [kg]", step=0.5, min_value=30.0, max_value=200.0, 
+        with st.sidebar.expander("⚙️ Parametry Biegowe", expanded=True):
+            params['runner_weight'] = st.number_input(
+                "Waga Biegacza [kg]", step=0.5, min_value=30.0, max_value=200.0, 
                 key="weight", on_change=self.state.save_settings_callback
             )
-            params['rider_height'] = st.number_input(
+            params['runner_height'] = st.number_input(
                 "Wzrost [cm]", step=1, min_value=100, max_value=250, 
                 key="height", on_change=self.state.save_settings_callback
             )
-            params['rider_age'] = st.number_input(
+            params['runner_age'] = st.number_input(
                 "Wiek [lata]", step=1, min_value=10, max_value=100, 
                 key="age", on_change=self.state.save_settings_callback
             )
@@ -43,13 +43,15 @@ class AppLayout:
             )
             
             st.markdown("---")
-            params['vt1_watts'] = st.number_input(
-                "VT1 (Próg Tlenowy) [W]", min_value=0, value=0, 
-                key="vt1_w", on_change=self.state.save_settings_callback
+            st.markdown("### 🏃 Tempo Progowe")
+            params['threshold_pace'] = st.number_input(
+                "Tempo Progowe [s/km]", min_value=120, max_value=600, value=300,
+                help="5:00 min/km = 300s",
+                key="threshold_pace", on_change=self.state.save_settings_callback
             )
-            params['vt2_watts'] = st.number_input(
-                "VT2 (Próg Beztlenowy/FTP) [W]", min_value=0, value=0, 
-                key="vt2_w", on_change=self.state.save_settings_callback
+            params['d_prime'] = st.number_input(
+                "D' (Pojemność Anaerobowa) [m]", min_value=0, max_value=1000, value=200,
+                key="d_prime", on_change=self.state.save_settings_callback
             )
             st.divider()
 
@@ -64,17 +66,14 @@ class AppLayout:
             )
 
         st.sidebar.divider()
+        st.sidebar.markdown("### ⚡ Parametry Legacy (Kolarstwo)")
         params['cp'] = st.sidebar.number_input(
-            "Moc Krytyczna (CP) [W]", min_value=1, 
+            "Moc Krytyczna (CP) [W]", min_value=1, value=280,
             key="cp_in", on_change=self.state.save_settings_callback
         )
         params['w_prime'] = st.sidebar.number_input(
-            "W' (W Prime) [J]", min_value=0, 
+            "W' [J]", min_value=0, value=20000,
             key="wp_in", on_change=self.state.save_settings_callback
-        )
-        st.sidebar.divider()
-        params['crank_length'] = st.sidebar.number_input(
-            "Długość korby [mm]", key="crank", on_change=self.state.save_settings_callback
         )
         uploaded_file = st.sidebar.file_uploader("Wgraj plik (CSV / TXT)", type=['csv', 'txt'])
             

@@ -190,10 +190,24 @@ if uploaded_file is not None:
     header_data = prepare_sticky_header_data(df_plot, metrics)
     UIComponents.render_sticky_header(header_data)
 
+    # Calculate running metrics
+    from modules.calculations.dual_mode import calculate_running_stress_score
+    from modules.calculations.pace_utils import format_pace
+    
+    duration_sec = len(df_plot)
+    rss_header = calculate_running_stress_score(df_plot, threshold_pace_input, duration_sec)
+    intensity_factor = threshold_pace_input / np_header if np_header > 0 else 0
+    
+    # Calculate distance if pace data available
+    distance_km = 0
+    if "pace" in df_plot.columns and df_plot["pace"].mean() > 0:
+        avg_pace_sec_per_km = df_plot["pace"].mean()
+        distance_km = (duration_sec / avg_pace_sec_per_km)
+    
     m1, m2, m3 = st.columns(3)
-    m1.metric("NP (Norm. Power)", f"{np_header:.0f} W")
-    m2.metric("TSS", f"{tss_header:.0f}", help=f"IF: {if_header:.2f}")
-    m3.metric("Praca [kJ]", f"{df_plot['watts'].sum() / 1000:.0f}")
+    m1.metric("Tempo Normalizowane", format_pace(np_header))
+    m2.metric("RSS", f"{rss_header:.0f}", help=f"IF: {intensity_factor:.2f}")
+    m3.metric("Dystans", f"{distance_km:.2f} km")
 
     # Session Type Badge with Confidence
     session_type = st.session_state.get("session_type")
@@ -273,8 +287,8 @@ if uploaded_file is not None:
         UIComponents.show_breadcrumb("⚡ Performance")
         t1, t2, t3, t4, t5, t6 = st.tabs(
             [
-                "🔋 Power",
-                "🦵 Biomech",
+                "🏃 Running",
+                "🦶 Biomechanika",
                 "📐 Model",
                 "❤️ HR",
                 "🧬 Hematology",
@@ -324,7 +338,7 @@ if uploaded_file is not None:
             render_tab_content("hrv", df_clean_pl)
         with t2:
             render_tab_content("smo2", df_plot, training_notes, uploaded_file.name)
-        max_hr = int(208 - 0.7 * rider_age) if rider_age else 185
+        max_hr = int(208 - 0.7 * runner_age) if runner_age else 185
         with t3:
             render_tab_content("vent", df_plot, training_notes, uploaded_file.name)
         with t4:
