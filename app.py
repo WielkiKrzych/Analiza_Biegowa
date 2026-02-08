@@ -140,7 +140,12 @@ if uploaded_file is not None:
             from services.session_orchestrator import process_uploaded_session
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw, threshold_power_input, runner_weight, threshold_pace_input
+                df_raw,
+                cp_input=threshold_power_input,
+                w_prime_input=0,
+                rider_weight=runner_weight,
+                vt1_watts=0,
+                vt2_watts=0
             )
 
             if error_msg:

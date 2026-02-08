@@ -28,11 +28,11 @@ from modules.calculations import (
 
 def process_uploaded_session(
     df_raw: pd.DataFrame,
-    cp_input: float,
-    w_prime_input: float,
-    rider_weight: float,
-    vt1_watts: float,
-    vt2_watts: float
+    cp_input: float = 0,
+    w_prime_input: float = 0,
+    rider_weight: float = 75.0,
+    vt1_watts: float = 0,
+    vt2_watts: float = 0
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[Dict[str, Any]], Optional[str]]:
     """Process an uploaded session file through the full analysis pipeline.
     
