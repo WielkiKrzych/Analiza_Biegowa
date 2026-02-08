@@ -140,7 +140,7 @@ if uploaded_file is not None:
             from services.session_orchestrator import process_uploaded_session
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw, threshold_power_input, 0  # removed, runner_weight, threshold_pace_input, threshold_pace_input
+                df_raw, threshold_power_input, runner_weight, threshold_pace_input
             )
 
             if error_msg:
@@ -270,7 +270,7 @@ if uploaded_file is not None:
                 training_notes,
                 uploaded_file.name,
                 threshold_power_input,
-                0  # removed,
+                0,
                 runner_weight,
                 threshold_pace_input,
                 threshold_pace_input,
@@ -296,14 +296,14 @@ if uploaded_file is not None:
                 df_plot,
                 df_plot_resampled,
                 threshold_power_input,
-                0  # removed,
+                0,
                 runner_weight,
                 metrics.get("vo2_max_est", 0),
             )
         with t2:
             render_tab_content("biomech", df_plot, df_plot_resampled)
         with t3:
-            render_tab_content("model", df_plot, threshold_power_input, 0  # removed)
+            render_tab_content("model", df_plot, threshold_power_input, 0)
         with t4:
             render_tab_content("heart_rate", df_plot)
         with t5:
