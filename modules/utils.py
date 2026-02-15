@@ -236,6 +236,13 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
     # 2. Normalization -> Standard Column Names
     df_pd = normalize_columns_pandas(df_pd)
 
+    if "pace" not in df_pd.columns and "velocity_smooth" in df_pd.columns:
+        df_pd["pace"] = np.where(
+            df_pd["velocity_smooth"] > 0,
+            1000.0 / df_pd["velocity_smooth"],
+            np.nan
+        )
+
     # 3. Data Cleaning (HRV)
     df_pd = _process_hrv_column(df_pd)
 
@@ -270,6 +277,12 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
 
         # Process chunk
         chunk = normalize_columns_pandas(chunk)
+        if "pace" not in chunk.columns and "velocity_smooth" in chunk.columns:
+            chunk["pace"] = np.where(
+                chunk["velocity_smooth"] > 0,
+                1000.0 / chunk["velocity_smooth"],
+                np.nan
+            )
         chunk = _process_hrv_column(chunk)
 
         if "time" not in chunk.columns:
@@ -337,7 +350,7 @@ def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
             "vo": ["verticaloscillation", "VerticalOscillation", "vo"],
         },
         "running": {
-            "pace": ["pace", "speed"],
+            "pace": ["pace", "speed", "velocity_smooth"],
             "gct": ["ground_contact", "gct"],
         },
     }

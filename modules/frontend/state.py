@@ -26,13 +26,24 @@ class StateManager:
         }
 
     def init_session_state(self) -> None:
-        """Initialize session state from saved settings if needed."""
-        saved_settings = self.settings_manager.load_settings()
-        
-        for ui_key, json_key in self._keys_map.items():
-            if ui_key not in st.session_state:
-                st.session_state[ui_key] = saved_settings.get(json_key)
-        
+        """Initialize session state with hardcoded defaults."""
+        defaults = {
+            "weight": 95.0,
+            "height": 180,
+            "age": 30,
+            "gender_m": True,
+            "threshold_pace": 230,
+            "threshold_power": 450,
+            "lthr": 167,
+            "max_hr": 180,
+            "vt1_v": 0.0,
+            "vt2_v": 0.0,
+        }
+    
+        for key, value in defaults.items():
+            if key not in st.session_state:
+                st.session_state[key] = value
+    
         if 'report_generation_requested' not in st.session_state:
             st.session_state['report_generation_requested'] = False
 
