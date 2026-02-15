@@ -52,11 +52,6 @@ class AppLayout:
                 "LTHR (Tętno Progowe) [bpm]", min_value=100, max_value=200, value=167,
                 key="lthr", on_change=self.state.save_settings_callback
             )
-            params['threshold_power'] = st.number_input(
-                "Threshold Power [W]", min_value=0, max_value=500, value=450,
-                help="Dla biegaczy z czujnikiem mocy (opcjonalnie)",
-                key="threshold_power", on_change=self.state.save_settings_callback
-            )
             params['max_hr'] = st.number_input(
                 "MaxHR [bpm]", min_value=120, max_value=220, value=180,
                 key="max_hr", on_change=self.state.save_settings_callback

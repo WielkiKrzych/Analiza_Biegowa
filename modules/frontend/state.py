@@ -33,7 +33,6 @@ class StateManager:
             "age": 30,
             "gender_m": True,
             "threshold_pace": 230,
-            "threshold_power": 450,
             "lthr": 167,
             "max_hr": 180,
             "vt1_v": 0.0,

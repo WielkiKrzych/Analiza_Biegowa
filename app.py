@@ -18,7 +18,7 @@ from modules.db import SessionStore, SessionRecord
 from modules.reporting.persistence import check_git_tracking
 
 # --- SERVICES IMPORTS ---
-from services import calculate_header_metrics, prepare_session_record, prepare_sticky_header_data
+from services import prepare_session_record, prepare_sticky_header_data
 
 
 # --- TAB REGISTRY (OCP) ---
@@ -27,7 +27,6 @@ class TabRegistry:
 
     _tabs = {
         "report": ("modules.ui.report", "render_report_tab"),
-        "power": ("modules.ui.power", "render_power_tab"),
         "running": ("modules.ui.running", "render_running_tab"),
         "biomech": ("modules.ui.biomech", "render_biomech_tab"),
         "model": ("modules.ui.model", "render_model_tab"),
@@ -84,10 +83,9 @@ check_git_tracking("treningi_csv")
 layout = AppLayout(state)
 uploaded_file, params = layout.render_sidebar()
 
-# Parameters shorthand - RUNNING oriented
+# Parameters shorthand - RUNNING only
 runner_weight = params.get("runner_weight", 75.0)
 threshold_pace_input = params.get("threshold_pace", 300)
-threshold_power_input = params.get("threshold_power", 0)
 lthr_input = params.get("lthr", 170)
 max_hr_input = params.get("max_hr", 185)
 vt1_vent = params.get("vt1_vent", 0)
@@ -148,8 +146,6 @@ if uploaded_file is not None:
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
                 df_raw,
-                cp_input=threshold_power_input,
-                w_prime_input=0,
                 rider_weight=runner_weight,
                 vt1_watts=0,
                 vt2_watts=0
@@ -181,16 +177,11 @@ if uploaded_file is not None:
 
     # --- RENDER DASHBOARD ---
 
-    # 1. Header Metrics — sport-aware
-    sport_type = st.session_state.get("sport_type", "unknown")
-    
-    if sport_type == "running" or ("pace" in df_plot.columns and "watts" not in df_plot.columns):
-        from modules.calculations.dual_mode import calculate_normalized_pace
-        np_header = calculate_normalized_pace(df_plot)
-        if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
-        tss_header = 0.0
-    else:
-        np_header, if_header, tss_header = calculate_header_metrics(df_plot, threshold_power_input)
+    # 1. Header Metrics — Running only
+    from modules.calculations.dual_mode import calculate_normalized_pace
+    np_header = calculate_normalized_pace(df_plot)
+    if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
+    tss_header = 0.0
 
     # Auto-save
     try:
@@ -261,28 +252,16 @@ if uploaded_file is not None:
             unsafe_allow_html=True,
         )
 
-    # Sport Type Indicator
-    sport_type = st.session_state.get("sport_type", "unknown")
-    if sport_type == "cycling":
-        st.markdown(
-            """
-            <div style="background: linear-gradient(90deg, rgba(52, 152, 219, 0.2), transparent); 
-                        padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
-                <span style="font-size: 1em;">🚴 Wykryto dane kolarskie</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    elif sport_type == "running":
-        st.markdown(
-            """
-            <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent); 
-                        padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
-                <span style="font-size: 1em;">🏃 Wykryto dane biegowe</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    # Sport Type Indicator - Running only
+    st.markdown(
+        """
+        <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent); 
+                    padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
+            <span style="font-size: 1em;">🏃 Analiza Biegowa</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Data Quality Report
     quality_report = st.session_state.get("data_quality_report")
@@ -324,7 +303,7 @@ if uploaded_file is not None:
                 df_plot_resampled,
                 metrics,
                 runner_weight,
-                threshold_power_input,
+                0,
                 decoupling_percent,
                 drift_z2,
                 vt1_vent,
@@ -338,7 +317,7 @@ if uploaded_file is not None:
                 metrics,
                 training_notes,
                 uploaded_file.name,
-                threshold_power_input,
+                0,
                 0,
                 runner_weight,
                 threshold_pace_input,
@@ -369,7 +348,7 @@ if uploaded_file is not None:
         with t2:
             render_tab_content("biomech", df_plot, df_plot_resampled)
         with t3:
-            render_tab_content("model", df_plot, threshold_power_input, 0)
+            render_tab_content("model", df_plot, 0, 0)
         with t4:
             render_tab_content("heart_rate", df_plot)
         with t5:
@@ -381,9 +360,9 @@ if uploaded_file is not None:
         UIComponents.show_breadcrumb("🧠 Intelligence")
         t1, t2 = st.tabs(["🍎 Nutrition", "🚧 Limiters"])
         with t1:
-            render_tab_content("nutrition", df_plot, threshold_power_input, threshold_pace_input, threshold_pace_input)
+            render_tab_content("nutrition", df_plot, 0, threshold_pace_input, threshold_pace_input)
         with t2:
-            render_tab_content("limiters", df_plot, threshold_power_input, vt2_vent)
+            render_tab_content("limiters", df_plot, 0, vt2_vent)
 
     with tab_physiology:
         UIComponents.show_breadcrumb("🫀 Physiology")

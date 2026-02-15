@@ -2,21 +2,19 @@
 SOLID: Single Responsibility Principle - Reorganizacja obliczeń.
 
 Ten pakiet grupuje funkcje obliczeniowe według odpowiedzialności:
-- w_prime.py: Obliczenia W' Balance
 - hrv.py: Analiza HRV / DFA
 - thermal.py: Indeks ciepła HSI
-- power.py: NP, strefy mocy, PDC, FRI, Match Burns, TTE, Phenotype
 - nutrition.py: Spalanie węglowodanów
 - metrics.py: Podstawowe metryki treningowe
-- stamina.py: Stamina Score, VLamax estimation, Durability
-- kinetics.py: VO2/SmO2 kinetics analysis
-- thresholds.py: VT1/VT2, LT1/LT2 threshold detection
+- pace.py: Tempo, strefy tempa, PDC, RSS, GAP
+- dual_mode.py: Normalized Pace, RSS, running stress
+- running_dynamics.py: Kadencja, GCT, stride length, VO
 - data_processing.py: Przetwarzanie danych
-- async_runner.py: Async calculation wrappers
 - polars_adapter.py: Polars/Pandas interoperability
 - repeatability.py: Repeatability and stability analysis
 - quality.py: Data reliability checks
 - interpretation.py: Training advice generation
+- thresholds.py: VT1/VT2, LT1/LT2 threshold detection
 
 Dla wstecznej kompatybilności, wszystkie funkcje są re-eksportowane z tego modułu.
 """
@@ -27,15 +25,6 @@ Dla wstecznej kompatybilności, wszystkie funkcje są re-eksportowane z tego mod
 # nadal działa jak wcześniej
 # ============================================================
 
-from .w_prime import (
-    calculate_w_prime_balance,
-    calculate_w_prime_fast,
-    # Recovery Score (NEW)
-    calculate_recovery_score,
-    get_recovery_recommendation,
-    estimate_w_prime_reconstitution,
-)
-
 from .hrv import (
     calculate_dynamic_dfa_v2,
 )
@@ -43,23 +32,6 @@ from .hrv import (
 from .thermal import (
     calculate_heat_strain_index,
     calculate_thermal_decay,
-)
-
-from .power import (
-    calculate_normalized_power,
-    calculate_pulse_power_stats,
-    # Advanced power analytics
-    calculate_power_duration_curve,
-    calculate_fatigue_resistance_index,
-    count_match_burns,
-    calculate_power_zones_time,
-    get_fri_interpretation,
-    DEFAULT_PDC_DURATIONS,
-    # TTE & Phenotype (NEW)
-    estimate_tte,
-    estimate_tte_range,
-    classify_phenotype,
-    get_phenotype_description,
 )
 
 from .nutrition import (
