@@ -2,6 +2,37 @@ import streamlit as st
 import os
 import logging
 
+# Mobile responsive CSS
+st.markdown("""
+<style>
+    /* Mobile responsive styles */
+    @media (max-width: 768px) {
+        .stHorizontalBlock {
+            flex-direction: column !important;
+        }
+        .stColumn > div {
+            margin-bottom: 10px !important;
+        }
+        div[data-testid="stMetric"] {
+            padding: 5px !important;
+        }
+        div[data-testid="stExpander"] {
+            margin-bottom: 5px !important;
+        }
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+        }
+    }
+    /* Hide certain elements on mobile */
+    @media (max-width: 480px) {
+        div[data-testid="stMarkdown"] p {
+            font-size: 14px !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- FRONTEND IMPORTS ---
 from modules.frontend.theme import ThemeManager
 from modules.frontend.state import StateManager
@@ -44,6 +75,13 @@ class TabRegistry:
         "heart_rate": ("modules.ui.heart_rate", "render_hr_tab"),
         "summary": ("modules.ui.summary", "render_summary_tab"),
         "drift_maps": ("modules.ui.drift_maps_ui", "render_drift_maps_tab"),
+        "training_load": ("modules.ui.training_load_ui", "render_training_load_tab"),
+        "custom_dashboard": ("modules.ui.custom_dashboard", "render_custom_dashboard"),
+        "training_zones": ("modules.ui.custom_dashboard", "render_training_zones_chart"),
+        "weekly_report": ("modules.ui.custom_dashboard", "render_weekly_report"),
+        "recommendations": ("modules.ui.custom_dashboard", "render_training_recommendations"),
+        "smart_intervals": ("modules.ui.custom_dashboard", "render_smart_intervals"),
+        "strava": ("modules.integrations.strava", "render_strava_tab"),
     }
 
     @classmethod
@@ -295,7 +333,7 @@ if uploaded_file is not None:
 
     with tab_overview:
         UIComponents.show_breadcrumb("📊 Overview")
-        t1, t2 = st.tabs(["📋 Raport z KPI", "📊 Podsumowanie"])
+        t1, t2, t3, t4 = st.tabs(["📋 Raport z KPI", "📊 Podsumowanie", "📅 Tydzień", "🏃 Strava"])
         with t1:
             render_tab_content(
                 "report",
@@ -325,14 +363,19 @@ if uploaded_file is not None:
                 0,
                 0,
             )
+        with t3:
+            render_tab_content("weekly_report")
+        with t4:
+            render_tab_content("strava")
 
     with tab_performance:
         UIComponents.show_breadcrumb("⚡ Performance")
-        t1, t2, t3, t4, t5, t6 = st.tabs(
+        t1, t2, t3, t4, t5, t6, t7 = st.tabs(
             [
                 "🏃 Running",
                 "🦶 Biomechanika",
                 "📐 Model",
+                "📊 Training Load",
                 "❤️ HR",
                 "🧬 Hematology",
                 "📈 Drift Maps",
@@ -350,19 +393,29 @@ if uploaded_file is not None:
         with t3:
             render_tab_content("model", df_plot, 0, 0)
         with t4:
-            render_tab_content("heart_rate", df_plot)
+            render_tab_content("training_load")
         with t5:
-            render_tab_content("hemo", df_plot)
+            render_tab_content("heart_rate", df_plot)
         with t6:
+            render_tab_content("hemo", df_plot)
+        with t7:
             render_tab_content("drift_maps", df_plot)
 
     with tab_intelligence:
         UIComponents.show_breadcrumb("🧠 Intelligence")
-        t1, t2 = st.tabs(["🍎 Nutrition", "🚧 Limiters"])
+        t1, t2, t3, t4, t5 = st.tabs(
+            ["🍎 Nutrition", "🚧 Limiters", "📊 Dashboard", "🎯 Strefy", "🤖 AI Rekomendacje"]
+        )
         with t1:
             render_tab_content("nutrition", df_plot, 0, threshold_pace_input, threshold_pace_input)
         with t2:
             render_tab_content("limiters", df_plot, 0, vt2_vent)
+        with t3:
+            render_tab_content("custom_dashboard")
+        with t4:
+            render_tab_content("training_zones")
+        with t5:
+            render_tab_content("recommendations")
 
     with tab_physiology:
         UIComponents.show_breadcrumb("🫀 Physiology")

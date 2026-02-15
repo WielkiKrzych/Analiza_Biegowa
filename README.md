@@ -6,8 +6,16 @@ Aplikacja do analizy danych treningowych biegowych. W pełni poświęcona biegac
 
 ### ✅ Poprawki obliczeń (luty 2026)
 - **Poprawiony dystans** — aplikacja teraz używa rzeczywistego dystansu z pliku CSV zamiast wyliczać go z tempa
-- **Poprawione tempo średnie** — obliczane jako `czas_całkowity / dystans` zamiast średniej arytmetycznej (eliminuje błąd przy zmiennym tempie)
+- **Poprawione tempo średnie** — obliczane jako `czas_całkowity / dystans` zamiast średniej arytmetycznej
 - **PDC (Pace Duration Curve)** — wykres dostępny z poprawnym tytułem
+- **RSS (Running Stress Score)** — w pełni zaimplementowany dla metryki obciążenia treningowego
+
+### 📊 Training Load (PMC)
+- **CTL (Chronic Training Load)** — 42-dniowa średnia EWMA formy
+- **ATL (Acute Training Load)** — 7-dniowa średnia zmęczenia  
+- **TSB (Training Stress Balance)** — forma = CTL - ATL
+- **Ramp Rate** — monitorowanie wzrostu obciążenia
+- **Predykcja formy** — symulacja wpływu planowanych treningów
 
 ### 🏃 Analiza Biegowa
 Wszystkie zakładki analityczne dedykowane dla biegania:
@@ -17,6 +25,21 @@ Wszystkie zakładki analityczne dedykowane dla biegania:
 - **🦶 Biomechanika** — kadencja SPM, GCT, długość kroku, Running Effectiveness, Vertical Oscillation
 - **🍎 Nutrition** — model metaboliczny biegu (kcal/kg/km)
 - **🚧 Limiters** — profile biegaczy (Maratończyk, Średniak, Sprinter)
+
+### 🌐 Integracje
+- **Strava OAuth** — bezpośrednia synchronizacja aktywności ze Stravą
+- **Import CSV** — obsługa plików z Garmin Connect, Strava, Coros i innych
+
+### 📱 Mobile & Responsive
+- **Responsywny design** — aplikacja działa na telefonie
+- **Własny Dashboard** — konfigurowalne widżety
+
+### 🎯 Nowe Funkcje
+- **Własny Dashboard** — dostosuj widoki do swoich potrzeb
+- **Wykres Stref** — wizualizacja stref treningowych
+- **Raport Tygodniowy** — podsumowanie tygodnia z trendami
+- **Rekomendacje AI** — inteligentne sugestie treningowe na podstawie formy
+- **Smart Intervals** — automatyczna detekcja interwałów (wkrótce)
 
 ### ✅ Ulepszona obsługa danych
 - **Raport Jakości Danych** — automatyczna walidacja kompletności danych przy imporcie

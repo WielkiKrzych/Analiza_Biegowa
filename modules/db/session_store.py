@@ -18,19 +18,24 @@ class SessionRecord:
     date: str = ""
     filename: str = ""
     duration_sec: int = 0
-    tss: float = 0.0
-    np: float = 0.0
+    rss: float = 0.0  # Running Stress Score (replaces TSS for running)
+    np_pace: float = 0.0  # Normalized Pace (s/km)
     if_factor: float = 0.0
-    avg_watts: float = 0.0
+    avg_pace: float = 0.0  # Average pace (s/km)
     avg_hr: float = 0.0
     max_hr: float = 0.0
-    work_kj: float = 0.0
+    distance_km: float = 0.0
     avg_cadence: float = 0.0
-    # MMP values
-    mmp_5s: Optional[float] = None
+    # Legacy cycling fields (kept for backwards compatibility)
+    tss: float = 0.0
+    np: float = 0.0
+    avg_watts: float = 0.0
+    work_kj: float = 0.0
+    # MMP values (running - pace based)
     mmp_1m: Optional[float] = None
     mmp_5m: Optional[float] = None
     mmp_20m: Optional[float] = None
+    mmp_60m: Optional[float] = None
     # HRV
     avg_rmssd: Optional[float] = None
     # Alerts count
