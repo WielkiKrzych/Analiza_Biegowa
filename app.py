@@ -213,11 +213,12 @@ if uploaded_file is not None:
     rss_header = calculate_running_stress_score(df_plot, threshold_pace_input, duration_sec)
     intensity_factor = threshold_pace_input / np_header if np_header > 0 else 0
     
-    # Calculate distance if pace data available
-    distance_km = 0
-    if "pace" in df_plot.columns and df_plot["pace"].mean() > 0:
-        avg_pace_sec_per_km = df_plot["pace"].mean()
-        distance_km = (duration_sec / avg_pace_sec_per_km)
+    if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
+        distance_km = float(df_plot["distance"].max()) / 1000.0
+    elif "pace" in df_plot.columns and df_plot["pace"].mean() > 0:
+        distance_km = duration_sec / df_plot["pace"].mean()
+    else:
+        distance_km = 0
     
     m1, m2, m3 = st.columns(3)
     m1.metric("Tempo Normalizowane", format_pace(np_header))

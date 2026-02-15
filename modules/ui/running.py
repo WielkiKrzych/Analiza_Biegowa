@@ -371,13 +371,20 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     duration_sec = len(df_plot)
     np_pace = calculate_normalized_pace(df_plot)
     rss = calculate_running_stress_score(df_plot, threshold_pace, duration_sec)
-    avg_pace = float(df_plot["pace"].mean())
-    intensity_factor = threshold_pace / np_pace if np_pace > 0 else 0
     
-    # Distance
-    distance_km = 0.0
-    if avg_pace > 0:
-        distance_km = duration_sec / avg_pace
+    # Distance — prefer real cumulative distance from CSV
+    if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
+        distance_km = float(df_plot["distance"].max()) / 1000.0
+    else:
+        distance_km = 0.0
+    
+    # Avg pace — total_time / total_distance (not arithmetic mean of per-second pace)
+    if distance_km > 0:
+        avg_pace = duration_sec / distance_km
+    else:
+        avg_pace = float(df_plot["pace"].mean())
+    
+    intensity_factor = threshold_pace / np_pace if np_pace > 0 else 0
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     col_m1.metric("Tempo Normalizowane", format_pace(np_pace),
