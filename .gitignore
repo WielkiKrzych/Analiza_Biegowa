@@ -47,3 +47,5 @@ treningi_csv/
 # JSON results (generated)
 *_results.json
 *_history.json
+.worktrees/
+worktrees/
