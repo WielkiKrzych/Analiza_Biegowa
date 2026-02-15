@@ -17,6 +17,15 @@ Wszystkie zakładki analityczne automatycznie dostosowują się do typu sportu:
 - **Raport Jakości Danych** — automatyczna walidacja kompletności danych przy imporcie
 - **Auto-detekcja typu sportu** — automatyczne rozpoznawanie czy to rower, bieg czy trening hybrydowy
 - **Lepsze komunikaty** — szczegółowe wyjaśnienia gdy brakuje danych (wentylacja, SmO2, itp.)
+- **Auto-doubling kadencji** — Garmin eksportuje kadencję jako half-steps (RPM), automatyczna konwersja na SPM
+- **Estymacja GCT z kadencji** — Ground Contact Time szacowany z kadencji (duty cycle ~65%) gdy brak czujnika
+- **Derivacja stride length** — automatyczne obliczanie długości kroku z prędkości i kadencji
+
+### 📈 Wykresy Garmin Connect-style
+- **Tempo (pace)** — czytelne wykresy z osią Y w formacie mm:ss, osią X w HH:MM:SS
+- **Outlier capping** — ograniczenie ekstremalnych wartości tempa do 10:00/km
+- **Area fill** — wypełnienie wykresu tempa w stylu Garmin Connect
+- **PDC** — Pace Duration Curve z formatowaną osią Y
 
 ### 📊 Vertical Oscillation (VO)
 - Analiza oscylacji pionowej z czujników biegowych (Garmin HRM-Run, Stryd)

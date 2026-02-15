@@ -12,7 +12,7 @@ Analyzes biomechanical metrics from Garmin/Stryd:
 from typing import Dict, Optional, Union, Any
 import numpy as np
 import pandas as pd
-from .pace_utils import pace_to_speed
+from .pace_utils import pace_to_speed, pace_array_to_speed_array
 
 
 def calculate_cadence_stats(cadence_spm: np.ndarray) -> Dict:
@@ -85,7 +85,7 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
     if len(valid) == 0:
         return {}
     
-    speed_m_s = pace_to_speed(valid["pace"].values)
+    speed_m_s = pace_array_to_speed_array(valid["pace"].values)
     cadence_spm = valid["cadence"].values
     
     # Stride length = speed / (cadence / 60) * 2

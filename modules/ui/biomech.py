@@ -186,6 +186,8 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 
                 **Krótsze GCT = lepsza sprężystość i ekonomia biegu**
                 """)
+                if gct_col == 'gct':
+                    st.caption("⚠️ GCT estymowane z kadencji (duty cycle ~65%). Dla dokładnych pomiarów użyj Garmin HRM-Run lub Stryd.")
         else:
             st.info("ℹ️ Brak danych GCT - wymagany czujnik biegowy (np. Garmin HRM-Run, Stryd)")
         

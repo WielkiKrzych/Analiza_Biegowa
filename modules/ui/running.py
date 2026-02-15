@@ -77,40 +77,57 @@ def render_pace_chart(df: pd.DataFrame, threshold_pace: float):
         st.warning("Brak danych tempa")
         return
     
+    PACE_CAP = 600
     fig = go.Figure()
     
-    # Pace line
+    pace_data = df["pace"].clip(upper=PACE_CAP)
+    
+    fig.add_trace(go.Scatter(
+        x=df.index, y=[PACE_CAP] * len(df),
+        mode='lines', line=dict(width=0),
+        showlegend=False, hoverinfo='skip',
+    ))
     fig.add_trace(go.Scatter(
         x=df.index,
-        y=df["pace"],
-        mode='lines',
+        y=pace_data,
         name='Tempo',
-        line=dict(color='#3498db', width=2)
+        fill='tonexty',
+        fillcolor='rgba(52, 152, 219, 0.3)',
+        line=dict(color='#3498db', width=1.5),
+        hovertemplate="Tempo: %{customdata}<extra></extra>",
+        customdata=[format_pace(p) for p in pace_data],
     ))
     
-    # GAP line if available
     if "gap" in df.columns:
         fig.add_trace(go.Scatter(
             x=df.index,
-            y=df["gap"],
+            y=df["gap"].clip(upper=PACE_CAP),
             mode='lines',
             name='GAP',
             line=dict(color='#2ecc71', width=2, dash='dash')
         ))
     
-    # Threshold line
     fig.add_hline(
         y=threshold_pace,
         line_dash="dot",
         line_color="red",
-        annotation_text="Prog"
+        annotation_text=f"Próg ({format_pace(threshold_pace)})"
     )
+    
+    pace_min_val = max(120, int(pace_data.min() // 30 * 30))
+    y_tickvals = list(range(pace_min_val, PACE_CAP + 1, 30))
+    y_ticktext = [format_pace(v) for v in y_tickvals]
     
     fig.update_layout(
         title="Tempo podczas biegu",
-        yaxis_title="Tempo (s/km)",
         xaxis_title="Czas",
-        yaxis=dict(autorange="reversed")
+        yaxis=dict(
+            title="Tempo [min/km]",
+            autorange="reversed",
+            tickvals=y_tickvals,
+            ticktext=y_ticktext,
+            range=[PACE_CAP, pace_min_val],
+        ),
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -211,31 +228,39 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     time_col = "time_min" if "time_min" in df_plot.columns else df_plot.index
     x_data = df_plot[time_col] if isinstance(time_col, str) else time_col
     
-    # Pace (smoothed)
+    PACE_CAP = 600  # 10:00/km
     pace_smooth = df_plot["pace"].rolling(window=10, min_periods=1, center=True).mean()
+    pace_clipped = pace_smooth.clip(upper=PACE_CAP)
+    
+    # Invisible baseline for Garmin-style fill from slow pace downward
+    fig_pace.add_trace(go.Scatter(
+        x=x_data, y=[PACE_CAP] * len(x_data),
+        mode='lines', line=dict(width=0),
+        showlegend=False, hoverinfo='skip',
+    ))
     fig_pace.add_trace(go.Scatter(
         x=x_data,
-        y=pace_smooth,
+        y=pace_clipped,
         name="Tempo",
-        fill="tozeroy",
-        line=dict(color="#3498db", width=1),
+        fill="tonexty",
+        fillcolor="rgba(52, 152, 219, 0.3)",
+        line=dict(color="#3498db", width=1.5),
         hovertemplate="Tempo: %{customdata}<extra></extra>",
-        customdata=[format_pace(p) for p in pace_smooth],
+        customdata=[format_pace(p) for p in pace_clipped],
     ))
     
-    # GAP if available
     if "gap" in df_plot.columns:
         gap_smooth = df_plot["gap"].rolling(window=10, min_periods=1, center=True).mean()
+        gap_clipped = gap_smooth.clip(upper=PACE_CAP)
         fig_pace.add_trace(go.Scatter(
             x=x_data,
-            y=gap_smooth,
+            y=gap_clipped,
             name="GAP",
             line=dict(color="#2ecc71", width=1.5, dash="dash"),
             hovertemplate="GAP: %{customdata}<extra></extra>",
-            customdata=[format_pace(p) for p in gap_smooth],
+            customdata=[format_pace(p) for p in gap_clipped],
         ))
     
-    # Threshold line
     fig_pace.add_hline(
         y=threshold_pace,
         line_dash="dot",
@@ -244,14 +269,39 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         annotation_position="top left",
     )
     
+    # mm:ss Y-axis ticks
+    pace_min_val = max(120, int(pace_clipped.min() // 30 * 30))
+    tick_step = 30
+    y_tickvals = list(range(pace_min_val, PACE_CAP + 1, tick_step))
+    y_ticktext = [format_pace(v) for v in y_tickvals]
+    
+    # HH:MM:SS X-axis ticks
+    x_min_val = float(x_data.min()) if hasattr(x_data, 'min') else 0
+    x_max_val = float(x_data.max()) if hasattr(x_data, 'max') else 60
+    x_tick_step = max(1, int((x_max_val - x_min_val) / 10))
+    x_tickvals = list(range(int(x_min_val), int(x_max_val) + 1, x_tick_step))
+    x_ticktext = []
+    for m in x_tickvals:
+        total_sec = int(m * 60)
+        hrs = total_sec // 3600
+        mins = (total_sec % 3600) // 60
+        secs = total_sec % 60
+        if hrs > 0:
+            x_ticktext.append(f"{hrs}:{mins:02d}:{secs:02d}")
+        else:
+            x_ticktext.append(f"{mins}:{secs:02d}")
+    
     fig_pace.update_layout(
         template="plotly_dark",
         title="Zarządzanie Tempem (Pace & GAP)",
         hovermode="x unified",
-        xaxis=dict(title="Czas [min]", tickformat=".0f", hoverformat=".0f"),
+        xaxis=dict(title="Czas", tickvals=x_tickvals, ticktext=x_ticktext),
         yaxis=dict(
-            title="Tempo [s/km]",
-            autorange="reversed",  # Lower pace = faster = top
+            title="Tempo [min/km]",
+            autorange="reversed",
+            tickvals=y_tickvals,
+            ticktext=y_ticktext,
+            range=[PACE_CAP, pace_min_val],
         ),
         margin=dict(l=10, r=10, t=40, b=10),
         height=450,
@@ -403,11 +453,21 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
                 annotation_text=f"Próg ({format_pace(threshold_pace)})",
             )
             
+            pdc_min = max(120, int(min(paces) // 30 * 30))
+            pdc_max = int(max(paces) // 30 * 30) + 30
+            pdc_tickvals = list(range(pdc_min, pdc_max + 1, 30))
+            pdc_ticktext = [format_pace(v) for v in pdc_tickvals]
+            
             fig_pdc.update_layout(
                 template="plotly_dark",
-                title="Pace Duration Curve — najlepsze tempo dla każdego okna czasowego",
+                title="Pace Duration Curve",
                 xaxis=dict(title="Czas [min]", type="log"),
-                yaxis=dict(title="Tempo [s/km]", autorange="reversed"),
+                yaxis=dict(
+                    title="Tempo [min/km]",
+                    autorange="reversed",
+                    tickvals=pdc_tickvals,
+                    ticktext=pdc_ticktext,
+                ),
                 height=400,
                 margin=dict(l=10, r=10, t=40, b=10),
             )
