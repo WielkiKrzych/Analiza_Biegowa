@@ -1,21 +1,25 @@
 # Analiza_Biegowa
 
-Aplikacja do analizy danych treningowych biegowych i kolarskich. Rozwinięcie koncepcji Analiza_Kolarska, z pełnym wsparciem dla biegania, kolarstwa i treningów hybrydowych.
+Aplikacja do analizy danych treningowych biegowych. W pełni poświęcona biegaczom - od amatorów po zawodowców.
 
 ## Nowości (Luty 2026) 🎉
 
-### 🏃 Pełne wsparcie Dual-Mode (bieganie + kolarstwo)
-Wszystkie zakładki analityczne automatycznie dostosowują się do typu sportu:
+### ✅ Poprawki obliczeń (luty 2026)
+- **Poprawiony dystans** — aplikacja teraz używa rzeczywistego dystansu z pliku CSV zamiast wyliczać go z tempa
+- **Poprawione tempo średnie** — obliczane jako `czas_całkowity / dystans` zamiast średniej arytmetycznej (eliminuje błąd przy zmiennym tempie)
+- **PDC (Pace Duration Curve)** — wykres dostępny z poprawnym tytułem
 
-- **🏃 Running tab** — analiza tempa, strefy pace, RSS, Normalized Pace, GAP, Pace Duration Curve, Durability Index, Running Phenotype
-- **📐 Model tab** — Critical Speed + D' (bieganie) / Critical Power + W' (kolarstwo) z regresją liniową i oceną R²
-- **🦶 Biomechanika** — kadencja SPM, GCT, długość kroku, Running Effectiveness (bieganie) / torque, Pulse Power, Gross Efficiency (kolarstwo)
-- **🍎 Nutrition** — model metaboliczny biegu (kcal/kg/km) z Menu Biegowym / model mocy (kolarstwo) z Menu Kolarskim
-- **🚧 Limiters** — profile biegaczy (Maratończyk, Średniak, Sprinter) / profile kolarzy (Climber, TT, Puncheur)
+### 🏃 Analiza Biegowa
+Wszystkie zakładki analityczne dedykowane dla biegania:
+
+- **🏃 Running tab** — analiza tempa, strefy pace, RSS, Normalized Pace, GAP, Pace Duration Curve, Durability Index
+- **📐 Model tab** — Critical Speed + D' z regresją liniową i oceną R²
+- **🦶 Biomechanika** — kadencja SPM, GCT, długość kroku, Running Effectiveness, Vertical Oscillation
+- **🍎 Nutrition** — model metaboliczny biegu (kcal/kg/km)
+- **🚧 Limiters** — profile biegaczy (Maratończyk, Średniak, Sprinter)
 
 ### ✅ Ulepszona obsługa danych
 - **Raport Jakości Danych** — automatyczna walidacja kompletności danych przy imporcie
-- **Auto-detekcja typu sportu** — automatyczne rozpoznawanie czy to rower, bieg czy trening hybrydowy
 - **Lepsze komunikaty** — szczegółowe wyjaśnienia gdy brakuje danych (wentylacja, SmO2, itp.)
 - **Auto-doubling kadencji** — Garmin eksportuje kadencję jako half-steps (RPM), automatyczna konwersja na SPM
 - **Estymacja GCT z kadencji** — Ground Contact Time szacowany z kadencji (duty cycle ~65%) gdy brak czujnika
@@ -73,28 +77,28 @@ Aplikacja oferuje analizę podstawowych parametrów treningowych poprzez cztery 
 | Metryka | Opis |
 |---------|------|
 | **Tempo (Pace)** | min/km - główny wskaźnik intensywności |
-| **Critical Speed** | Prędkość krytyczna (biegowy odpowiednik CP) |
-| **D'** | Pojemność anaerobowa w metrach (biegowy odpowiednik W') |
-| **RSS** | Running Stress Score (biegowy odpowiednik TSS) |
+| **Tempo Normalizowane** | Algorytm 4-potęgowy (jak NP dla mocy) |
+| **Critical Speed** | Prędkość krytyczna |
+| **D'** | Pojemność anaerobowa w metrach |
+| **RSS** | Running Stress Score |
 | **GAP** | Grade-Adjusted Pace (tempo skorygowane o podbieg) |
 | **Cadence SPM** | Kadencja w krokach na minutę |
 | **GCT** | Ground Contact Time (czas kontaktu z podłożem) |
-| **Running Effectiveness** | Efektywność biegu (speed/power) |
+| **Stride Length** | Długość kroku |
+| **Running Effectiveness** | Efektywność biegu |
 | **Vertical Oscillation** | Oscylacja pionowa (cm) - efektywność biegu |
-| **VO Efficiency** | Efektywność na podstawie oscylacji vs wzrost |
 
 ## Parametry w Sidebar
 
-### ⚙️ Parametry Podstawowe
-- Waga [kg]
-- Wzrost [cm]
-- Wiek [lata]
+### ⚙️ Parametry Podstawowe (domyślne)
+- Waga: **95 kg**
+- Wzrost: **180 cm**
+- Wiek: **30 lat**
 - Płeć
 
 ### 🏃 Parametry Progowe
 - **Tempo Progowe** [s/km]
 - **LTHR** [bpm] - tętno progowe
-- **Threshold Power** [W] - dla biegaczy z czujnikiem mocy (opcjonalnie)
 - **MaxHR** [bpm] - maksymalne tętno
 
 ### 🫁 Wentylacja
@@ -105,7 +109,7 @@ Aplikacja oferuje analizę podstawowych parametrów treningowych poprzez cztery 
 
 - Python 3.11+
 - Streamlit - interfejs użytkownika
-- Pandas/NumPy/Polars - przetwarzanie danych
+- Pandas/NumPy - przetwarzanie danych
 - Plotly - wizualizacja danych
 
 ## Uruchomienie
@@ -127,7 +131,7 @@ Analiza_Biegowa/
 │   │   ├── running_dynamics.py  # Cadence, GCT, stride
 │   │   ├── gap.py           # Grade-Adjusted Pace
 │   │   ├── race_predictor.py    # Predykcja czasów (Riegel)
-│   │   └── dual_mode.py     # Wsparcie pace + power
+│   │   └── dual_mode.py     # Normalized Pace, RSS
 │   ├── ui/                   # Komponenty UI
 │   ├── domain/               # Modele domenowe
 │   ├── db/                   # Baza danych sesji
@@ -144,53 +148,38 @@ Analiza_Biegowa/
 pytest tests/ -v
 ```
 
-Wszystkie testy przechodzą: 164/164 ✅
+Wszystkie testy przechodzą: 31/31 ✅
 
 Testy obejmują:
 - Obliczenia biegowe (pace, GAP, strefy)
-- Obliczenia kolarskie (power, NP, TSS)
 - Dynamikę biegu (cadence, GCT, VO)
 - Progi VT1/VT2
-- Model wydolnościowy (D', W')
+- Model wydolnościowy (D')
 - Integrację systemów
 - Walidację danych
 
-## Transformacja z Kolarskiej
-
-Aplikacja została przekształcona z analizy kolarskiej (power-based) na analizę biegową (pace-based):
-
-| Kolarstwo | → | Bieganie |
-|-----------|---|----------|
-| Power [W] | → | **Pace [min/km]** |
-| Critical Power | → | **Critical Speed + Threshold Pace** |
-| W' [J] | → | **D' [m]** |
-| Normalized Power | → | **Normalized Pace** |
-| TSS | → | **RSS** |
-| Cadence [RPM] | → | **Cadence [SPM]** |
-| Ramp Test | → | **Progressive Run** |
-
 ## Wymagane dane CSV
 
-Aplikacja obsługuje pliki CSV z danymi z:
+Aplikacja obsługuje pliki CSV z danych z:
 - Garmin Connect
 - Stryd
-- VO2 Master / Cosmed
+- Coros
 - Innych aplikacji GPS
 
 Wymagane kolumny (minimum):
-- `pace` lub `speed` - tempo biegu (dla biegania)
-- `watts` lub `power` - moc (dla kolarstwa)
+- `pace` lub `speed` - tempo biegu
+- `distance` - dystans (opcjonalnie, ale zalecane dla poprawnych metryk)
 - `heartrate` lub `hr` - tętno (opcjonalnie)
 - `cadence` - kadencja (opcjonalnie)
 
 ### Opcjonalne kolumny zaawansowane:
-- `tymeventilation` - wentylacja (L/min) - dla analizy wentylacyjnej
-- `tymebreathrate` - częstość oddechów - dla analizy wentylacyjnej
-- `smo2` - saturacja mięśniowa (%) - dla analizy NIRS
-- `thb` - hemoglobina całkowita - dla analizy NIRS
-- `VerticalOscillation` - oscylacja pionowa (cm) - dla analizy biomechanicznej
-- `core_temperature` - temperatura ciała - dla analizy termicznej
-- `skin_temperature` - temperatura skóry - dla analizy termicznej
+- `verticaloscillation` - oscylacja pionowa (cm)
+- `tymeventilation` - wentylacja (L/min)
+- `tymebreathrate` - częstość oddechów
+- `smo2` - saturacja mięśniowa (%)
+- `thb` - hemoglobina całkowita
+- `core_temperature` - temperatura ciała
+- `skin_temperature` - temperatura skóry
 
 ### Raport Jakości Danych
 Po zaimportowaniu pliku CSV aplikacja automatycznie generuje **Raport Jakości Danych** który pokazuje:
