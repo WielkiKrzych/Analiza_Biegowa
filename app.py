@@ -181,8 +181,16 @@ if uploaded_file is not None:
 
     # --- RENDER DASHBOARD ---
 
-    # 1. Header Metrics
-    np_header, if_header, tss_header = calculate_header_metrics(df_plot, threshold_power_input)
+    # 1. Header Metrics — sport-aware
+    sport_type = st.session_state.get("sport_type", "unknown")
+    
+    if sport_type == "running" or ("pace" in df_plot.columns and "watts" not in df_plot.columns):
+        from modules.calculations.dual_mode import calculate_normalized_pace
+        np_header = calculate_normalized_pace(df_plot)
+        if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
+        tss_header = 0.0
+    else:
+        np_header, if_header, tss_header = calculate_header_metrics(df_plot, threshold_power_input)
 
     # Auto-save
     try:
@@ -352,13 +360,10 @@ if uploaded_file is not None:
         )
         with t1:
             render_tab_content(
-                "power",
+                "running",
                 df_plot,
-                df_plot_resampled,
-                threshold_power_input,
-                0,
+                threshold_pace_input,
                 runner_weight,
-                metrics.get("vo2_max_est", 0),
             )
         with t2:
             render_tab_content("biomech", df_plot, df_plot_resampled)

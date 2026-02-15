@@ -20,8 +20,289 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
     has_ve = any(c in df_plot.columns for c in ['tymeventilation', 've', 'ventilation'])
     has_smo2 = 'smo2' in df_plot.columns
     has_watts = 'watts' in df_plot.columns
+    
+    # Sport detection: running uses pace, cycling uses watts
+    is_running = "pace" in df_plot.columns and "watts" not in df_plot.columns
 
-    if has_watts:
+    # =========================================================================
+    # RUNNING MODE - Pace-based athlete profiling
+    # =========================================================================
+    if is_running:
+        st.header("Analiza Limiterów Biegowych")
+        st.markdown("Identyfikujemy Twój profil biegacza i ograniczenia wydolnościowe na podstawie tempa.")
+        
+        # --- SEKCJA 1: PROFIL BIEGACZA ---
+        st.subheader("🏃 Profil Biegacza")
+        
+        # Calculate best pace for different windows (lower = faster)
+        df_plot['pace_1min'] = df_plot['pace'].rolling(window=60, min_periods=60).mean()
+        df_plot['pace_5min'] = df_plot['pace'].rolling(window=300, min_periods=300).mean()
+        df_plot['pace_10min'] = df_plot['pace'].rolling(window=600, min_periods=600).mean()
+        df_plot['pace_20min'] = df_plot['pace'].rolling(window=1200, min_periods=1200).mean()
+        
+        # Best (minimum) pace values
+        best_1min = df_plot['pace_1min'].min() if not df_plot['pace_1min'].isna().all() else None
+        best_5min = df_plot['pace_5min'].min() if not df_plot['pace_5min'].isna().all() else None
+        best_10min = df_plot['pace_10min'].min() if not df_plot['pace_10min'].isna().all() else None
+        best_20min = df_plot['pace_20min'].min() if not df_plot['pace_20min'].isna().all() else None
+        
+        # Display pace metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Najlepsze 1 min", f"{best_1min/60:.2f} min/km" if best_1min else "N/A")
+        col2.metric("Najlepsze 5 min", f"{best_5min/60:.2f} min/km" if best_5min else "N/A")
+        col3.metric("Najlepsze 10 min", f"{best_10min/60:.2f} min/km" if best_10min else "N/A")
+        col4.metric("Najlepsze 20 min", f"{best_20min/60:.2f} min/km" if best_20min else "N/A")
+        
+        # Classify runner phenotype based on pace ratio
+        if best_5min and best_10min and best_5min > 0:
+            pace_ratio = best_10min / best_5min  # Lower ratio = better endurance
+            
+            if pace_ratio < 1.03:
+                profile = "🏃 Maratończyk / Ultra"
+                profile_color = "#4ecdc4"
+                strength = "Doskonała wytrzymałość, utrzymuje tempo na długich dystansach"
+                weakness = "Może brakować dynamiki na krótkich odcinkach"
+                phenotype = "marathoner"
+            elif pace_ratio < 1.06:
+                profile = "⚖️ Wszechstronny biegacz"
+                profile_color = "#ffd93d"
+                strength = "Zbalansowany profil, dobry na różnych dystansach"
+                weakness = "Brak dominującej specjalizacji"
+                phenotype = "all_rounder"
+            elif pace_ratio < 1.10:
+                profile = "🏃‍♂️ Średniak (5K-10K)"
+                profile_color = "#45b7d1"
+                strength = "Dobre połączenie szybkości i wytrzymałości"
+                weakness = "Może słabnąć na dystansach powyżej 10K"
+                phenotype = "middle_distance"
+            else:
+                profile = "⚡ Sprinter / Miler"
+                profile_color = "#ff6b6b"
+                strength = "Wysoka prędkość maksymalna, dynamika"
+                weakness = "Szybki spadek tempa na dłuższych dystansach"
+                phenotype = "sprinter"
+            
+            # Display profile
+            st.markdown(f"""
+            <div style="padding:15px; border-radius:8px; border:2px solid {profile_color}; background-color: #222; margin-top:15px;">
+                <h4 style="margin:0; color:{profile_color};">{profile}</h4>
+                <p style="margin:10px 0 0 0;"><b>💪 Mocna strona:</b> {strength}</p>
+                <p style="margin:5px 0 0 0;"><b>⚠️ Do poprawy:</b> {weakness}</p>
+                <p style="margin:5px 0 0 0; font-size:0.85em; color:#888;">Ratio 10min/5min: {pace_ratio:.3f}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            profile = "❓ Nieznany"
+            profile_color = "#888"
+            phenotype = "unknown"
+            pace_ratio = None
+            st.info("Trening zbyt krótki dla pełnej analizy profilu (min. 10 min).")
+        
+        st.divider()
+        
+        # --- SEKCJA 2: ANALIZA LIMITERÓW BIEGOWYCH ---
+        st.subheader("📊 Analiza Limiterów Biegowych")
+        
+        if best_1min and best_5min and best_20min:
+            # Calculate limiter scores (0-100)
+            # 1. Speed - based on how fast 1min pace is relative to 5min
+            speed_drop = (best_1min / best_5min) if best_5min > 0 else 1
+            speed_score = max(0, min(100, (1 - speed_drop) * 1000 + 50))  # Higher = more speed reserve
+            
+            # 2. Aerobic endurance - based on pace degradation 5min → 20min
+            endurance_drop = (best_20min / best_5min) if best_5min > 0 else 1.5
+            endurance_score = max(0, min(100, (1.2 - endurance_drop) * 500))  # Higher = better endurance
+            
+            # 3. Threshold capacity - based on ratio to estimated threshold pace
+            threshold_pace_est = best_20min * 1.01 if best_20min else best_5min * 1.1
+            avg_pace = df_plot['pace'].mean()
+            threshold_score = max(0, min(100, (threshold_pace_est / avg_pace - 0.8) * 250)) if avg_pace else 50
+            
+            # Normalize to 0-100 range with better scaling
+            speed_score = min(100, max(0, speed_score))
+            endurance_score = min(100, max(0, endurance_score))
+            threshold_score = min(100, max(0, threshold_score))
+            
+            # Radar chart
+            categories = ['Szybkość', 'Wytrzymałość', 'Próg']
+            values = [speed_score, endurance_score, threshold_score]
+            values_closed = values + [values[0]]
+            categories_closed = categories + [categories[0]]
+            
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=values_closed,
+                theta=categories_closed,
+                fill='toself',
+                name='Profil Biegowy',
+                line=dict(color='#00cc96'),
+                fillcolor='rgba(0, 204, 150, 0.3)',
+                hovertemplate="%{theta}: <b>%{r:.0f}</b><extra></extra>"
+            ))
+            
+            fig_radar.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                template="plotly_dark",
+                title="Radar Limitatorów Biegowych",
+                height=400
+            )
+            
+            st.plotly_chart(fig_radar, use_container_width=True)
+            
+            # Identify weakest limiter
+            limiters = {
+                "Szybkość": speed_score,
+                "Wytrzymałość": endurance_score,
+                "Próg": threshold_score
+            }
+            weakest = min(limiters, key=lambda k: limiters[k])
+            
+            # Display limiter table
+            st.markdown(f"""
+            ### 🔍 Diagnoza Limiterów
+            
+            | Limiter | Wynik | Status |
+            |---------|-------|--------|
+            | **Szybkość** | {speed_score:.0f} | {"🔴 Najsłabszy" if weakest == "Szybkość" else "🟢 OK"} |
+            | **Wytrzymałość** | {endurance_score:.0f} | {"🔴 Najsłabszy" if weakest == "Wytrzymałość" else "🟢 OK"} |
+            | **Próg** | {threshold_score:.0f} | {"🔴 Najsłabszy" if weakest == "Próg" else "🟢 OK"} |
+            
+            **Główny Limiter: {weakest}**
+            """)
+            
+            st.divider()
+            
+            # --- SEKCJA 3: REKOMENDACJE TRENINGOWE ---
+            st.subheader("💡 Rekomendacje Treningowe")
+            
+            if weakest == "Wytrzymałość":
+                st.info("""
+                **🏃 Ograniczenie: Wytrzymałość Aerobowa**
+                
+                Twoja szybkość na krótszych dystansach nie przekłada się na dłuższe wysiłki.
+                
+                **Sugerowane treningi:**
+                - Dodaj więcej długich biegów Z2 (80% tygodniowego objętości)
+                - Progressive long runs - zwiększaj dystans o 10% co tydzień
+                - Biegi ciągłe 45-90 min w tempie konwersacyjnym
+                - Cross-training na rowerze dla objętości bez obciążenia
+                """)
+            elif weakest == "Szybkość":
+                st.info("""
+                **⚡ Ograniczenie: Szybkość**
+                
+                Masz dobrą wytrzymałość, ale brakuje Ci wyższej prędkości maksymalnej.
+                
+                **Sugerowane treningi:**
+                - Dodaj interwały 200-400m na torze, 2x/tydzień
+                - Strides 4-6x 100m po łatwych biegach
+                - Hill sprints 8-10x 10-15 sek na stromym podbiegu
+                - Pływanie/siłownia dla dynamiki (plyometrics)
+                """)
+            else:  # Threshold
+                st.info("""
+                **📈 Ograniczenie: Wydolność Progowa**
+                
+                Twój próg mleczanowy jest zbyt nisko względem potencjału.
+                
+                **Sugerowane treningi:**
+                - Tempo runs 20-40 min w strefie Z4, 1x/tydzień
+                - Interwały progowe: 3-4x 10-15 min @ tempo 10K
+                - Cruise intervals: 6-8x 5 min @ pół-maratońskie tempo
+                - Podwójne sesje progowe w okresie specjalnym
+                """)
+            
+            # Additional phenotype-specific advice
+            st.markdown("#### 🎯 Porady dla Twojego Fenotypu")
+            if phenotype == "marathoner":
+                st.success("""
+                **Maratończyk/Ultra** - Twoja wytrzymałość jest Twoją siłą!
+                - Skup się na maratonach i ultra dystansach
+                - Regularne biegi 2-3h budują economy
+                - Trening na czczo dla adaptacji tłuszczowych
+                """)
+            elif phenotype == "all_rounder":
+                st.success("""
+                **Wszechstronny** - Możesz startować na każdym dystansie!
+                - Sezonowo specjalizuj się (wiosna 10K, jesień maraton)
+                - Utrzymuj zróżnicowany trening
+                - Testuj siebie na różnych dystansach
+                """)
+            elif phenotype == "middle_distance":
+                st.success("""
+                **Średni dystans (5K-10K)** - Idealny balans szybkość/wytrzymałość!
+                - Skup się na 5K i 10K - tu masz potencjał
+                - VO2max intervals 4-6x 3-5 min @ 3K-5K pace
+                - Tempo runs budują specyfikę wyścigową
+                """)
+            elif phenotype == "sprinter":
+                st.success("""
+                **Sprinter/Miler** - Wykorzystaj swoją szybkość!
+                - Mile (1609m) i 1500m to Twoje dystanse
+                - Wiele treningu szybkościowego (150-400m)
+                - Siłownia i plyometrics dla eksplozywności
+                """)
+        else:
+            st.warning("Za mało danych do pełnej analizy limiterów (wymagane min. 20 min danych).")
+        
+        st.divider()
+        
+        # --- SEKCJA 4: TEORIA PROFILÓW BIEGOWYCH ---
+        with st.expander("📚 Teoria: Typy Biegaczy i Profilowanie", expanded=False):
+            st.markdown("""
+            ## Profilowanie Biegaczy
+            
+            Podobnie jak w kolarstwie (INSCYD), biegacze mają różne profile metaboliczne:
+            
+            ### 1. Sprinter / Miler
+            * Wysoki VLaMax, duża moc anaerobowa
+            * Szybki na 400m-1500m, duży spadek tempa na dłuższych dystansach
+            * Przykłady: Noah Lyles, Jakob Ingebrigtsen (1500m)
+            
+            ### 2. Średni dystans (5K-10K)
+            * Zbalansowany VO2max i wytrzymałość
+            * Dobre tempo na 5K-10K
+            * Przykłady: Joshua Cheptegei, Jakob Ingebrigtsen (5K)
+            
+            ### 3. Maratończyk
+            * Niski VLaMax, wysoka ekonomia biegu
+            * Utrzymuje równe tempo przez 2-3h
+            * Przykłady: Eliud Kipchoge, Kelvin Kiptum
+            
+            ### 4. Ultra-biegacz
+            * Ekstremalna wytrzymałość, odporność mięśniowa
+            * Specjalizuje się w dystansach > maratonu
+            * Przykłady: Kilian Jornet, Jim Walmsley
+            
+            ---
+            
+            ## Jak Zmienić Swój Profil?
+            
+            | Cel | Strategia | Przykładowe Treningi |
+            |-----|-----------|---------------------|
+            | ⬆️ **Szybkość** | Sprinty, interwały krótkie | 10x200m @ max, Hill sprints |
+            | ⬆️ **VO2max** | Interwały 3-5 min | 5x4 min @ 5K pace |
+            | ⬆️ **Próg** | Tempo runs | 3x15 min @ 10K pace |
+            | ⬆️ **Wytrzymałość** | Długie biegi | 90-180 min Z2 |
+            
+            ---
+            
+            ## Wskaźnik FRI (Fatigue Resistance Index)
+            
+            FRI = tempo 10K / tempo 5K
+            
+            * FRI < 1.03: Wyjątkowa wytrzymałość (maratończyk/ultra)
+            * FRI 1.03-1.06: Dobra wytrzymałość
+            * FRI 1.06-1.10: Przeciętna
+            * FRI > 1.10: Niska wytrzymałość (sprinter)
+            
+            *Analiza oparta na stosunku tempa 10min/5min.*
+            """)
+    
+    # =========================================================================
+    # CYCLING MODE - Power-based athlete profiling (EXISTING CODE)
+    # =========================================================================
+    elif has_watts:
         # --- SEKCJA 1: PROFIL METABOLICZNY (INSCYD-style) ---
         st.subheader("🧬 Profil Metaboliczny (Szacunkowy)")
         

@@ -4,27 +4,34 @@ Aplikacja do analizy danych treningowych biegowych i kolarskich. Rozwinięcie ko
 
 ## Nowości (Luty 2026) 🎉
 
+### 🏃 Pełne wsparcie Dual-Mode (bieganie + kolarstwo)
+Wszystkie zakładki analityczne automatycznie dostosowują się do typu sportu:
+
+- **🏃 Running tab** — analiza tempa, strefy pace, RSS, Normalized Pace, GAP, Pace Duration Curve, Durability Index, Running Phenotype
+- **📐 Model tab** — Critical Speed + D' (bieganie) / Critical Power + W' (kolarstwo) z regresją liniową i oceną R²
+- **🦶 Biomechanika** — kadencja SPM, GCT, długość kroku, Running Effectiveness (bieganie) / torque, Pulse Power, Gross Efficiency (kolarstwo)
+- **🍎 Nutrition** — model metaboliczny biegu (kcal/kg/km) z Menu Biegowym / model mocy (kolarstwo) z Menu Kolarskim
+- **🚧 Limiters** — profile biegaczy (Maratończyk, Średniak, Sprinter) / profile kolarzy (Climber, TT, Puncheur)
+
 ### ✅ Ulepszona obsługa danych
-- **Raport Jakości Danych** - automatyczna walidacja kompletności danych przy imporcie
-- **Auto-detekcja typu sportu** - automatyczne rozpoznawanie czy to rower, bieg czy trening hybrydowy
-- **Lepsze komunikaty** - szczegółowe wyjaśnienia gdy brakuje danych (wentylacja, SmO2, itp.)
+- **Raport Jakości Danych** — automatyczna walidacja kompletności danych przy imporcie
+- **Auto-detekcja typu sportu** — automatyczne rozpoznawanie czy to rower, bieg czy trening hybrydowy
+- **Lepsze komunikaty** — szczegółowe wyjaśnienia gdy brakuje danych (wentylacja, SmO2, itp.)
 
 ### 📊 Vertical Oscillation (VO)
 - Analiza oscylacji pionowej z czujników biegowych (Garmin HRM-Run, Stryd)
 - Wykres VO w czasie z linią trendu
 - Analiza VO vs kadencja
 - Wskaźnik optymalnej kadencji (najniższa oscylacja)
-- Nowy wskaźnik **Running Effectiveness z VO** - efektywność biegu na podstawie oscylacji
+- Nowy wskaźnik **Running Effectiveness z VO**
 
 ### 🫁 Ulepszona analiza wentylacji
 - Szczegółowe komunikaty gdy brakuje danych wentylacyjnych
 - Wskazówki jakie czujniki są potrzebne (VO2 Master, Cosmed)
-- Sugestie alternatywnych analiz (np. przejście do zakładki SmO2)
 
 ### 📈 Ulepszone TDI (Threshold Discordance Index)
 - Szczegółowe wyjaśnienie dlaczego nie można obliczyć TDI
 - Instrukcje jak uzupełnić brakujące dane
-- Sugestie rozwiązań (ręczne wprowadzenie progów)
 
 ## Funkcjonalności
 
@@ -128,7 +135,7 @@ Analiza_Biegowa/
 pytest tests/ -v
 ```
 
-Wszystkie testy przechodzą: 163/164 ✅
+Wszystkie testy przechodzą: 164/164 ✅
 
 Testy obejmują:
 - Obliczenia biegowe (pace, GAP, strefy)

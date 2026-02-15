@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+data/*.db
+
+# ML weights
+*.npz
+*.nbi
+*.nbc
+
+# Pytest
+.pytest_cache/
+
+# Streamlit
+.streamlit/
+
+# Environment
+.env
+
+# Reports (generated)
+reports/
+treningi_csv/
+
+# JSON results (generated)
+*_results.json
+*_history.json
