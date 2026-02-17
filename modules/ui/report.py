@@ -59,6 +59,8 @@ def _calculate_zone_distribution(watts: pd.Series, cp: float) -> pd.Series:
     Returns:
         Series with zone percentages indexed by zone label
     """
+    if cp <= 0:
+        return pd.Series(0.0, index=ZONE_LABELS)
     bins = [0, 0.55 * cp, 0.75 * cp, 0.90 * cp, 1.05 * cp, 1.20 * cp, float("inf")]
     zones = pd.cut(watts, bins=bins, labels=ZONE_LABELS, right=False)
     # value_counts with normalize=True avoids extra division
