@@ -61,6 +61,29 @@ from .stamina import (
     get_durability_interpretation,
 )
 
+from .w_prime import (
+    calculate_w_prime_balance,
+    calculate_w_prime_fast,
+    calculate_recovery_score,
+    get_recovery_recommendation,
+    estimate_w_prime_reconstitution,
+)
+
+from .power import (
+    calculate_normalized_power,
+    calculate_pulse_power_stats,
+    calculate_power_duration_curve,
+    calculate_fatigue_resistance_index,
+    count_match_burns,
+    calculate_power_zones_time,
+    get_fri_interpretation,
+    estimate_tte,
+    estimate_tte_range,
+    classify_phenotype,
+    get_phenotype_description,
+    DEFAULT_PDC_DURATIONS,
+)
+
 from .kinetics import (
     fit_smo2_kinetics,
     get_tau_interpretation,
