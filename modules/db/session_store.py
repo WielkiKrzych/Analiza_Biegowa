@@ -78,6 +78,11 @@ class SessionStore:
                     UNIQUE(date, filename)
                 )
             """)
+            
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_tss ON sessions(tss)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_np ON sessions(np)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)")
             conn.commit()
 
     def add_session(self, record: SessionRecord) -> int:

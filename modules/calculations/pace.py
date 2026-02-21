@@ -3,6 +3,8 @@ SRP: Main pace module for running analysis.
 
 Replaces power.py for running context.
 Implements pace zones, pace duration curve, and phenotype classification.
+
+PERFORMANCE: Uses Numba JIT for speed-critical calculations.
 """
 
 from typing import Union, Any, Dict, Tuple, Optional
@@ -11,6 +13,12 @@ import pandas as pd
 
 from .pace_utils import pace_to_speed, speed_to_pace
 from .common import ensure_pandas
+from modules.numba_utils import is_numba_available
+
+NUMBA_AVAILABLE = is_numba_available()
+
+if NUMBA_AVAILABLE:
+    from numba import njit, prange
 
 
 def calculate_pace_zones_time(
@@ -74,22 +82,41 @@ def calculate_pace_zones_time(
 DEFAULT_PDC_DURATIONS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200]
 
 
+if NUMBA_AVAILABLE:
+    @njit(cache=True)
+    def _calculate_pdc_numba(pace: np.ndarray, durations: np.ndarray) -> np.ndarray:
+        n = len(pace)
+        m = len(durations)
+        results = np.empty(m, dtype=np.float64)
+        
+        for i in range(m):
+            duration = int(durations[i])
+            if n < duration:
+                results[i] = np.nan
+                continue
+            
+            best_pace = np.inf
+            for j in range(n - duration + 1):
+                window_mean = np.mean(pace[j:j + duration])
+                if window_mean < best_pace:
+                    best_pace = window_mean
+            
+            if best_pace == np.inf:
+                results[i] = np.nan
+            else:
+                results[i] = best_pace
+        
+        return results
+
+
 def calculate_pace_duration_curve(
     df_pl: Union[pd.DataFrame, Any], 
     durations: list = None
 ) -> dict:
-    """
-    Calculate Pace Duration Curve (best pace for each duration).
+    """Calculate Pace Duration Curve (best pace for each duration).
     
     Similar to Power Duration Curve but for pace.
     Returns the BEST (lowest) pace achieved for each duration.
-    
-    Args:
-        df_pl: DataFrame with 'pace' column (sec/km)
-        durations: List of durations in seconds
-        
-    Returns:
-        Dict mapping duration (seconds) to best pace (sec/km)
     """
     df = ensure_pandas(df_pl)
     
@@ -102,15 +129,26 @@ def calculate_pace_duration_curve(
     pace = df["pace"].ffill().bfill().values
     n = len(pace)
     
+    if NUMBA_AVAILABLE and n > 100:
+        try:
+            durations_arr = np.array(durations, dtype=np.float64)
+            results_arr = _calculate_pdc_numba(pace, durations_arr)
+            
+            results = {}
+            for i, duration in enumerate(durations):
+                val = results_arr[i]
+                results[duration] = None if np.isnan(val) else float(val)
+            return results
+        except Exception:
+            pass
+    
     results = {}
     for duration in durations:
         if n < duration:
             results[duration] = None
             continue
         
-        # Rolling mean for this duration
         rolling = pd.Series(pace).rolling(window=duration, min_periods=duration).mean()
-        # Best pace = minimum (lower = faster)
         best_pace = rolling.min()
         
         if pd.notna(best_pace):

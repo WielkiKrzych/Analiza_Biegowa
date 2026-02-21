@@ -1,14 +1,20 @@
 import streamlit as st
 import os
 import logging
+import json
+import time
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # --- FRONTEND IMPORTS ---
 from modules.frontend.theme import ThemeManager
 from modules.frontend.state import StateManager
 from modules.frontend.layout import AppLayout
 from modules.frontend.components import UIComponents
-
-logger = logging.getLogger(__name__)
 
 # --- MODULE IMPORTS ---
 from modules.utils import load_data
@@ -47,8 +53,14 @@ class TabRegistry:
     }
 
     @classmethod
-    def render(cls, tab_name, *args, **kwargs):
-        """Dynamic dispatcher for tab rendering (Lazy loading)."""
+    def render(cls, tab_name: str, *args, **kwargs):
+        """Dynamic dispatcher for tab rendering (Lazy loading).
+        
+        Includes error boundary - tabs fail gracefully without crashing app.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if tab_name not in cls._tabs:
             st.error(f"Unknown tab: {tab_name}")
             return
@@ -56,12 +68,16 @@ class TabRegistry:
         module_path, func_name = cls._tabs[tab_name]
         try:
             import importlib
-
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
             return func(*args, **kwargs)
         except Exception as e:
-            st.error(f"Error loading tab {tab_name}: {e}")
+            logger.warning(f"Tab {tab_name} failed: {e}")
+            with st.expander(f"⚠️ Błąd w zakładce {tab_name}", expanded=True):
+                st.error(f"Nie udało się załadować zakładki: {tab_name}")
+                st.caption(f"Szczegóły błędu: {type(e).__name__}: {e}")
+                st.caption("Spróbuj przeładować plik lub zmienić parametry.")
+            return None
 
 
 def render_tab_content(tab_name, *args, **kwargs):

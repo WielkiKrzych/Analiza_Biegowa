@@ -79,3 +79,27 @@ ML_TARGET_BASE: int = 280
 ML_TARGET_THRESH: int = 360
 ML_TOLERANCE: int = 15
 ML_MIN_SAMPLES: int = 30
+
+# =============================================================================
+# RUNNING DYNAMICS
+# =============================================================================
+GCT_DUTY_CYCLE: float = 0.65  # Duty cycle for GCT estimation from cadence (~65%)
+OUTLIER_CAP_PACE: float = 600.0  # Max pace cap in sec/km (10:00/km)
+CADENCE_HALFPIPE_THRESHOLD: float = 120.0  # Threshold for auto-doubling Garmin cadence
+
+# Running cadence zones (SPM)
+CADENCE_ZONE_LOW: int = 160
+CADENCE_ZONE_MODERATE: int = 170
+CADENCE_ZONE_OPTIMAL: int = 180
+CADENCE_ZONE_HIGH: int = 190
+
+# Ground Contact Time (ms)
+GCT_EXCELLENT: float = 200.0
+GCT_GOOD: float = 220.0
+GCT_AVERAGE: float = 240.0
+GCT_VALID_MIN: float = 100.0
+GCT_VALID_MAX: float = 400.0
+
+# Vertical oscillation (cm)
+VO_OPTIMAL_MAX: float = 10.0
+VO_GOOD_MAX: float = 12.0

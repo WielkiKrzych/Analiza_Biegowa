@@ -3,11 +3,19 @@ Session Orchestrator Service
 
 High-level orchestration of session processing pipeline.
 Coordinates data loading, validation, metrics calculation, and storage preparation.
+
+PERFORMANCE OPTIMIZATIONS:
+- @st.cache_data for heavy calculations (cached between re-runs)
+- Cached inputs are serialized to bytes for hash stability
+- Cache invalidation on file changes via hash
 """
 
+import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import date
 from typing import Dict, Any, Optional, Tuple
+import hashlib
 
 from .session_analysis import (
     calculate_extended_metrics,
@@ -24,6 +32,62 @@ from modules.calculations import (
     calculate_heat_strain_index,
     process_data,
 )
+
+
+def _serialize_df_for_cache(df: pd.DataFrame) -> bytes:
+    """Serialize DataFrame to bytes for stable cache key."""
+    import io
+    bio = io.BytesIO()
+    df.to_parquet(bio, index=False)
+    return bio.getvalue()
+
+
+def _df_to_bytes_hash(df: pd.DataFrame) -> str:
+    """Generate stable hash for DataFrame cache key."""
+    return hashlib.md5(_serialize_df_for_cache(df)).hexdigest()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _process_session_cached(
+    df_bytes: bytes,
+    cp_input: float,
+    w_prime_input: float,
+    rider_weight: float,
+    vt1_watts: float,
+    vt2_watts: float,
+) -> Tuple[bytes, bytes, Dict[str, Any]]:
+    """Cached session processing - internal implementation.
+    
+    Takes serialized DataFrame bytes for stable hashing.
+    Returns serialized DataFrames for cache stability.
+    """
+    import io
+    df_raw = pd.read_parquet(io.BytesIO(df_bytes))
+    
+    is_valid, error_msg = validate_dataframe(df_raw)
+    if not is_valid:
+        return b'', b'', {'_error': error_msg}
+    
+    df_clean_pl = process_data(df_raw)
+    metrics = calculate_metrics(df_clean_pl, cp_input)
+    df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
+    decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
+    drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
+    df_with_hsi = calculate_heat_strain_index(df_w_prime)
+    df_plot = df_with_hsi
+    metrics = calculate_extended_metrics(
+        df_plot, metrics, rider_weight, vt1_watts, vt2_watts, ef_factor
+    )
+    df_plot = apply_smo2_smoothing(df_plot)
+    df_plot_resampled = resample_dataframe(df_plot)
+    
+    metrics['_decoupling_percent'] = decoupling_percent
+    metrics['_drift_z2'] = drift_z2
+    
+    df_plot_bytes = _serialize_df_for_cache(df_plot)
+    df_resampled_bytes = _serialize_df_for_cache(df_plot_resampled)
+    
+    return df_plot_bytes, df_resampled_bytes, metrics
 
 
 def process_uploaded_session(
@@ -49,48 +113,47 @@ def process_uploaded_session(
     Returns:
     (df_plot, df_plot_resampled, metrics, error_message)
     """
-    # Validate data
-    is_valid, error_msg = validate_dataframe(df_raw)
-    if not is_valid:
-        return None, None, None, error_msg
+    df_bytes = _serialize_df_for_cache(df_raw)
     
-    # Process data
-    df_clean_pl = process_data(df_raw)
-    
-    # Calculate base metrics
-    metrics = calculate_metrics(df_clean_pl, cp_input)
-    
-    # Calculate W' balance
-    df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
-    
-    # Calculate advanced KPIs
-    decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
-    
-    # Calculate Z2 drift
-    drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
-    
-    # Calculate Heat Strain Index
-    df_with_hsi = calculate_heat_strain_index(df_w_prime)
-    df_plot = df_with_hsi
-    
-    # Calculate extended metrics
-    metrics = calculate_extended_metrics(
-        df_plot, metrics, rider_weight, vt1_watts, vt2_watts, ef_factor
-    )
-    
-    # Apply SmO2 smoothing
-    df_plot = apply_smo2_smoothing(df_plot)
-    
-    # Resample for performance
-    df_plot_resampled = resample_dataframe(df_plot)
-    
-    # Store intermediate values in metrics for later use
-    # We use a leading underscore convention for internal values
-    metrics['_decoupling_percent'] = decoupling_percent
-    metrics['_drift_z2'] = drift_z2
-    metrics['_df_clean_pl'] = df_clean_pl
-    
-    return df_plot, df_plot_resampled, metrics, None
+    try:
+        df_plot_bytes, df_resampled_bytes, metrics = _process_session_cached(
+            df_bytes, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
+        )
+        
+        if metrics.get('_error'):
+            return None, None, None, metrics['_error']
+        
+        import io
+        df_plot = pd.read_parquet(io.BytesIO(df_plot_bytes))
+        df_plot_resampled = pd.read_parquet(io.BytesIO(df_resampled_bytes))
+        
+        return df_plot, df_plot_resampled, metrics, None
+        
+    except Exception as e:
+        import io
+        df_raw = pd.read_parquet(io.BytesIO(df_bytes))
+        is_valid, error_msg = validate_dataframe(df_raw)
+        if not is_valid:
+            return None, None, None, error_msg
+        
+        df_clean_pl = process_data(df_raw)
+        metrics = calculate_metrics(df_clean_pl, cp_input)
+        df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
+        decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
+        drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
+        df_with_hsi = calculate_heat_strain_index(df_w_prime)
+        df_plot = df_with_hsi
+        metrics = calculate_extended_metrics(
+            df_plot, metrics, rider_weight, vt1_watts, vt2_watts, ef_factor
+        )
+        df_plot = apply_smo2_smoothing(df_plot)
+        df_plot_resampled = resample_dataframe(df_plot)
+        
+        metrics['_decoupling_percent'] = decoupling_percent
+        metrics['_drift_z2'] = drift_z2
+        metrics['_df_clean_pl'] = df_clean_pl
+        
+        return df_plot, df_plot_resampled, metrics, None
 
 
 def prepare_session_record(
