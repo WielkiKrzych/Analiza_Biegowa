@@ -108,7 +108,7 @@ def scatter_pace_hr(
         y=hr_col,
         color='time_min',
         color_continuous_scale='Viridis',
-        labels={'pace_min': 'Tempo [min/km]', hr_col: 'HR [bpm]', 'time_min': 'Czas [min]'},
+        labels={'pace_min': 'Tempo [min/km]', hr_col: 'HR [bpm]', 'time_min': 'Czas [hh:mm:ss]'},
         hover_data={
             'pace_min': ':.2f',
             hr_col: ':.0f',
@@ -140,7 +140,7 @@ def scatter_pace_hr(
         height=450,
         margin=dict(l=20, r=20, t=50, b=20),
         coloraxis_colorbar=dict(
-            title="Czas [min]",
+            title="Czas [hh:mm:ss]",
             tickformat=".0f"
         )
     )
@@ -204,7 +204,7 @@ def scatter_pace_smo2(
         y=smo2_col,
         color='time_min',
         color_continuous_scale='Plasma',
-        labels={'pace_min': 'Tempo [min/km]', smo2_col: 'SmO₂ [%]', 'time_min': 'Czas [min]'},
+        labels={'pace_min': 'Tempo [min/km]', smo2_col: 'SmO₂ [%]', 'time_min': 'Czas [hh:mm:ss]'},
         hover_data={
             'pace_min': ':.2f',
             smo2_col: ':.1f',
@@ -236,7 +236,7 @@ def scatter_pace_smo2(
         height=450,
         margin=dict(l=20, r=20, t=50, b=20),
         coloraxis_colorbar=dict(
-            title="Czas [min]",
+            title="Czas [hh:mm:ss]",
             tickformat=".0f"
         )
     )
@@ -454,7 +454,7 @@ def trend_at_constant_pace(
     pace_min_str = _sec_to_min(pace_target_sec)
     fig.update_layout(
         title=f"Fizjologia przy Tempo {pace_min_str:.2f} min/km (±{tolerance_pct}%)",
-        xaxis_title="Czas w segmencie [min]",
+        xaxis_title="Czas w segmencie [hh:mm:ss]",
         yaxis=dict(
             title="HR [bpm]",
             title_font=dict(color="#FF4B4B"),

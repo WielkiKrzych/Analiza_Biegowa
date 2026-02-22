@@ -24,6 +24,38 @@ from scipy import stats
 from .plots import add_stats_to_legend
 
 
+def _get_time_axis_config(time_max_min: float, title: str = 'Czas [hh:mm:ss]') -> dict:
+    """Generate xaxis config with hh:mm:ss tick labels.
+    
+    Args:
+        time_max_min: Maximum time in minutes
+        title: X-axis title
+        
+    Returns:
+        Dict with xaxis configuration for fig.update_layout()
+    """
+    tick_step = max(5, int(time_max_min / 10))  # ~10 ticks, minimum 5 min
+    tick_vals = list(range(0, int(time_max_min) + tick_step + 1, tick_step))
+    tick_text = []
+    for m in tick_vals:
+        total_sec = int(m * 60)
+        hrs = total_sec // 3600
+        mins = (total_sec % 3600) // 60
+        secs = total_sec % 60
+        if hrs > 0:
+            tick_text.append(f"{hrs}:{mins:02d}:{secs:02d}")
+        else:
+            tick_text.append(f"{mins}:{secs:02d}")
+    
+    return dict(
+        title=title,
+        tickmode='array',
+        tickvals=tick_vals,
+        ticktext=tick_text,
+        tickangle=0
+    )
+
+
 # ============================================================
 # SOLID: Kontener danych - zamiast wielu parametrów (ISP)
 # ============================================================
@@ -156,9 +188,11 @@ class PowerChartExporter(ChartExporter):
         ]
         add_stats_to_legend(fig, legend_stats)
         
+        time_max = df['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis_title='Power (W)', 
             **ctx.layout_args
         )
@@ -203,9 +237,11 @@ class HeartRateChartExporter(ChartExporter):
         ]
         add_stats_to_legend(fig, legend_stats)
         
+        time_max = df['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis_title='HR (bpm)', 
             **ctx.layout_args
         )
@@ -249,9 +285,11 @@ class SmO2ChartExporter(ChartExporter):
         ]
         add_stats_to_legend(fig, legend_stats)
         
+        time_max = df['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis_title='SmO2 (%)', 
             yaxis=dict(range=[0, 100]),
             **ctx.layout_args
@@ -304,9 +342,11 @@ class VentilationChartExporter(ChartExporter):
         
         add_stats_to_legend(fig, legend_stats)
         
+        time_max = df['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis=dict(title='VE (L/min)'),
             yaxis2=dict(title='RR (bpm)', overlaying='y', side='right'),
             **ctx.layout_args
@@ -368,9 +408,11 @@ class PulsePowerChartExporter(ChartExporter):
         ]
         add_stats_to_legend(fig, legend_stats)
         
+        time_max = df_pp['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis_title='Efficiency (W/bpm)', 
             **ctx.layout_args
         )
@@ -536,9 +578,11 @@ class SmO2AnalysisChartExporter(ChartExporter):
                 ]
                 add_stats_to_legend(fig, legend_stats)
         
+        time_max = df['time_min'].max()
+        
         fig.update_layout(
             title=self.title, 
-            xaxis_title='Time (min)', 
+            xaxis=_get_time_axis_config(time_max),
             yaxis=dict(title='SmO2 (%)'),
             yaxis2=dict(title='Pace (min/km)', overlaying='y', side='right', showgrid=False, autorange='reversed'),
             **ctx.layout_args
