@@ -2,9 +2,9 @@
 Full Ventilation Chart Generator.
 
 Generates:
-1. Ventilation Dynamics (VE vs Power over Time)
+1. Ventilation Dynamics (VE vs Pace over Time)
    - Left Axis: VE (L/min)
-   - Right Axis: Power (W)
+   - Right Axis: Pace (min/km)
 """
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -23,6 +23,10 @@ def _find_column(df: pd.DataFrame, aliases: list) -> Optional[str]:
         if alias in df.columns:
             return alias
     return None
+
+def _sec_to_min(pace_sec: float) -> float:
+    """Convert pace from sec/km to min/km for axis display."""
+    return pace_sec / 60.0 if pace_sec and pace_sec > 0 else 0
 
 def generate_full_vent_chart(
     report_data: Dict[str, Any],
@@ -45,16 +49,18 @@ def generate_full_vent_chart(
     title_size = cfg.get('title_size', 14)
     
     if source_df is None or source_df.empty:
-        return create_empty_figure("Brak danych źródłowych", "Dynamika Wentylacji", output_path, **cfg)
+        empty_result = create_empty_figure("Brak danych źródłowych", "Dynamika Wentylacji", output_path, **cfg)
+        return empty_result if output_path else empty_result.to_image(format='png')
 
     # Resolve columns
     df = source_df.copy()
     ve_col = _find_column(df, ['tymeventilation', 've', 'ventilation', 've_smooth'])
-    pwr_col = _find_column(df, ['watts', 'watts_smooth', 'power'])
+    pace_col = _find_column(df, ['pace', 'pace_smooth', 'pace_sec_per_km', 'tempo'])
     time_col = _find_column(df, ['time_min', 'time'])
     
     if not ve_col:
-        return create_empty_figure("Brak danych Wentylacji", "Dynamika Wentylacji", output_path, **cfg)
+        empty_result = create_empty_figure("Brak danych Wentylacji", "Dynamika Wentylacji", output_path, **cfg)
+        return empty_result if output_path else empty_result.to_image(format='png')
 
     # Normalize time
     if time_col == 'time':
@@ -71,20 +77,24 @@ def generate_full_vent_chart(
     ax1.set_ylabel("Wentylacja [L/min]", fontsize=font_size, color=get_color("vt1"))
     ax1.tick_params(axis='y', labelcolor=get_color("vt1"))
     
-    # Power (Right Axis - Secondary)
-    if pwr_col:
+    # Pace (Right Axis - Secondary)
+    if pace_col:
         ax2 = ax1.twinx()
-        l2, = ax2.plot(time_vals, df[pwr_col], color=get_color("power"), linestyle='-', alpha=0.3, label="Moc (W)", linewidth=1)
-        ax2.set_ylabel("Moc [W]", fontsize=font_size, color=get_color("power"))
-        ax2.tick_params(axis='y', labelcolor=get_color("power"))
-        ax2.grid(False) 
+        # Convert pace to min/km for display
+        pace_min_km = df[pace_col].apply(_sec_to_min)
+        l2, = ax2.plot(time_vals, pace_min_km, color=get_color("pace"), linestyle='-', alpha=0.3, label="Tempo (min/km)", linewidth=1)
+        ax2.set_ylabel("Tempo [min/km]", fontsize=font_size, color=get_color("pace"))
+        ax2.tick_params(axis='y', labelcolor=get_color("pace"))
+        ax2.grid(False)
+        # Invert Y-axis (lower pace = faster)
+        ax2.invert_yaxis()
         
         lines = [l1, l2]
     else:
         lines = [l1]
         
     # Title & Legend
-    ax1.set_title("Dynamika Wentylacji vs Moc", fontsize=title_size, fontweight='bold')
+    ax1.set_title("Dynamika Wentylacji vs Tempo", fontsize=title_size, fontweight='bold')
     
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc='upper left', framealpha=0.9)

@@ -1,18 +1,19 @@
 """
-SmO₂ vs Power Chart Generator.
+SmO₂ vs Pace Chart Generator.
 
-Generates SmO₂ saturation vs power scatter with LT1/LT2 range bands.
+Generates SmO₂ saturation vs pace scatter with LT1/LT2 range bands.
 Input: Canonical JSON report
 Output: PNG file
 
 Chart shows:
-- Raw scatter of SmO₂ vs Power (NO smoothing/interpolation)
+- Raw scatter of SmO₂ vs Pace (NO smoothing/interpolation)
 - LT1/LT2 as HORIZONTAL RANGE BANDS if available
 - Annotation about SmO₂ being a local signal
 - Footer with test_id and method version
 """
 import matplotlib.pyplot as plt
 from typing import Dict, Any, Optional
+import pandas as pd
 
 from .common import (
     apply_common_style, 
@@ -22,13 +23,18 @@ from .common import (
 )
 
 
+def _sec_to_min(pace_sec: float) -> float:
+    """Convert pace from sec/km to min/km for axis display."""
+    return pace_sec / 60.0 if pace_sec and pace_sec > 0 else 0
+
+
 def generate_smo2_power_chart(
     report_data: Dict[str, Any],
     config: Optional[Any] = None,
     output_path: Optional[str] = None,
     source_df: Optional["pd.DataFrame"] = None
 ) -> bytes:
-    """Generate SmO₂ vs Power chart with LT1/LT2 range bands."""
+    """Generate SmO₂ vs Pace chart with LT1/LT2 range bands."""
     # Handle config as dict if passed, or use defaults
     if hasattr(config, '__dict__'):
         cfg = config.__dict__
@@ -49,67 +55,79 @@ def generate_smo2_power_chart(
     metadata = report_data.get("metadata", {})
     smo2_context = report_data.get("smo2_context", {})
     
-    # Extract data from source_df or fallback
-    time_series = report_data.get("time_series", {})
-    
     # Try to get data from source_df first
     if source_df is not None and len(source_df) > 0:
         df = source_df.copy()
         df.columns = df.columns.str.lower().str.strip()
         
-        # Get power data
-        power_col = next((c for c in ['watts', 'power', 'watts_smooth', 'watts_smooth_5s'] if c in df.columns), None)
+        # Get pace data (instead of power)
+        pace_col = next((c for c in ['pace', 'pace_smooth', 'pace_sec_per_km', 'tempo'] if c in df.columns), None)
         
         # Get smo2 data
         smo2_col = next((c for c in ['smo2', 'smo2_pct', 'muscle_oxygen', 'smo2_smooth'] if c in df.columns), None)
         
-        if power_col and smo2_col:
-            # Filter out NaN values
-            mask = ~(df[power_col].isna() | df[smo2_col].isna())
-            power_data = df.loc[mask, power_col].tolist()
+        if pace_col and smo2_col:
+            # Filter out NaN values and convert pace to min/km
+            mask = ~(df[pace_col].isna() | df[smo2_col].isna()) & (df[pace_col] > 0) & (df[pace_col] < 1200)
+            pace_sec_data = df.loc[mask, pace_col].tolist()
             smo2_data = df.loc[mask, smo2_col].tolist()
+            # Convert pace to min/km for display
+            pace_data = [_sec_to_min(p) for p in pace_sec_data]
         else:
-            power_data, smo2_data = [], []
+            pace_data, smo2_data = [], []
     else:
         # Fallback to time_series from JSON
-        power_data = time_series.get("power_watts", [])
+        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
+        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
         smo2_data = time_series.get("smo2_pct", [])
     
     # Handle missing data
-    if not power_data or not smo2_data:
-        return create_empty_figure("Brak danych SmO₂", "SmO₂ vs Moc", output_path, **cfg)
+    if not pace_data or not smo2_data:
+        empty_result = create_empty_figure("Brak danych SmO₂", "SmO₂ vs Tempo", output_path, **cfg)
+        return empty_result if output_path else empty_result.to_image(format='png')
     
-    # Get SmO2 drop point from smo2_context
+    # Get SmO2 drop point from smo2_context (convert watts to pace if available)
     drop_point = smo2_context.get("drop_point", {})
-    lt1_watts = drop_point.get("midpoint_watts", 0) if drop_point else 0
+    # Try to get pace-based threshold, fallback to converting watts
+    lt1_pace_sec = drop_point.get("midpoint_pace_sec", 0)
+    if not lt1_pace_sec and drop_point.get("midpoint_watts", 0):
+        # If only watts available, we'd need conversion - for now use placeholder
+        lt1_pace_sec = 0
     
     # MANUAL OVERRIDE: Check config for manual SmO2 LT1 (priority over saved)
     manual_overrides = cfg.get('manual_overrides', {})
-    if manual_overrides.get('smo2_lt1_m') and manual_overrides['smo2_lt1_m'] > 0:
-        lt1_watts = float(manual_overrides['smo2_lt1_m'])
+    if manual_overrides.get('smo2_lt1_pace') and manual_overrides['smo2_lt1_pace'] > 0:
+        lt1_pace_sec = float(manual_overrides['smo2_lt1_pace'])
     
-    # Define LT ranges (±5% for visual band width)
-    lt1_range = (lt1_watts * 0.95, lt1_watts * 1.05) if lt1_watts else None
+    # Define LT ranges in min/km (±5% for visual band width)
+    if lt1_pace_sec:
+        lt1_pace_min = _sec_to_min(lt1_pace_sec)
+        lt1_range = (lt1_pace_min * 0.95, lt1_pace_min * 1.05)
+    else:
+        lt1_range = None
     
     # Create figure
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
     
-    # Raw scatter plot SmO2 vs Power (NO SMOOTHING)
-    ax.scatter(power_data, smo2_data, c=get_color("smo2"), 
+    # Raw scatter plot SmO2 vs Pace (NO SMOOTHING)
+    ax.scatter(pace_data, smo2_data, c=get_color("smo2"), 
                alpha=0.4, s=12, label="SmO₂", zorder=3, edgecolors='none')
     
     # LT1 vertical range band (semi-transparent) - SmO2 drop point
     if lt1_range:
         ax.axvspan(lt1_range[0], lt1_range[1], 
                    alpha=0.2, color=get_color("vt1"), 
-                   zorder=1, label=f"SmO₂ Drop: {int(lt1_watts)} W")
+                   zorder=1, label=f"SmO₂ Drop: {_sec_to_min(lt1_pace_sec):.2f} min/km")
     
     # Axis labels
-    ax.set_xlabel("Moc [W]", fontsize=font_size, fontweight='medium')
+    ax.set_xlabel("Tempo [min/km]", fontsize=font_size, fontweight='medium')
     ax.set_ylabel("SmO₂ [%]", fontsize=font_size, fontweight='medium')
     
     # Title
-    ax.set_title("SmO₂ vs Moc", fontsize=title_size, fontweight='bold', pad=15)
+    ax.set_title("SmO₂ vs Tempo", fontsize=title_size, fontweight='bold', pad=15)
+    
+    # Invert X-axis (lower pace = faster)
+    ax.invert_xaxis()
     
     # Legend
     ax.legend(loc='upper right', fontsize=font_size - 1, 

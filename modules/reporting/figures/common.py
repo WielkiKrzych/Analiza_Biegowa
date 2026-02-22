@@ -12,6 +12,7 @@ DPI = 150
 # Static Color Palette (as requested)
 COLORS = {
     "power": "#4CAF50",
+    "pace": "#00BCD4",  # Cyan/Turquoise for pace (min/km)
     "vt1": "#FFA726",
     "vt2": "#EF5350",
     "smo2": "#42A5F5",

@@ -7,7 +7,7 @@ Output: PNG file
 
 Chart shows:
 - Ventilation (VE) on Left Y-Axis
-- Power (Watts) on Right Y-Axis (background)
+- Pace (min/km) on Right Y-Axis (background)
 - VT1 and VT2 vertical lines
 - Footer with test_id and method version
 """
@@ -21,13 +21,19 @@ from .common import (
     get_color
 )
 
+
+def _sec_to_min(pace_sec: float) -> float:
+    """Convert pace from sec/km to min/km for axis display."""
+    return pace_sec / 60.0 if pace_sec and pace_sec > 0 else 0
+
+
 def generate_ve_profile_chart(
     report_data: Dict[str, Any],
     config: Optional[Any] = None,
     output_path: Optional[str] = None,
     source_df: Optional[pd.DataFrame] = None
 ) -> bytes:
-    """Generate VE profile chart with Power overlay."""
+    """Generate VE profile chart with Pace overlay."""
     # Handle config as dict if passed, or use defaults
     if hasattr(config, '__dict__'):
         cfg = config.__dict__
@@ -49,57 +55,67 @@ def generate_ve_profile_chart(
         df.columns = df.columns.str.lower().str.strip()
         
         ve_col = next((c for c in ['tymeventilation', 've', 'ventilation', 've_smooth'] if c in df.columns), None)
-        power_col = next((c for c in ['watts', 'power', 'watts_smooth', 'watts_smooth_5s'] if c in df.columns), None)
+        pace_col = next((c for c in ['pace', 'pace_smooth', 'pace_sec_per_km', 'tempo'] if c in df.columns), None)
         time_col = next((c for c in ['time', 'seconds'] if c in df.columns), None)
         
         if ve_col and time_col:
             time_data = df[time_col].tolist()
             ve_data = df[ve_col].fillna(0).tolist()
-            power_data = df[power_col].fillna(0).tolist() if power_col else []
+            # Convert pace to min/km
+            pace_sec_data = df[pace_col].fillna(0).tolist() if pace_col else []
+            pace_data = [_sec_to_min(p) for p in pace_sec_data] if pace_col else []
         else:
-            time_data, ve_data, power_data = [], [], []
+            time_data, ve_data, pace_data = [], [], []
     else:
         # Fallback to JSON time_series
         time_data = time_series.get("time_sec", [])
         ve_data = time_series.get("ve_lmin", [])
-        power_data = time_series.get("power_watts", [])
+        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
+        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
         
     if not time_data or not ve_data:
-        return create_empty_figure("Brak danych wentylacji", "Dynamika Wentylacji", output_path, **cfg)
+        empty_result = create_empty_figure("Brak danych wentylacji", "Dynamika Wentylacji", output_path, **cfg)
+        return empty_result if output_path else empty_result.to_image(format='png')
     
-    # Get threshold values
+    # Get threshold values - convert watts to pace if needed
     thresholds = report_data.get("thresholds", {})
     vt1_data = thresholds.get("vt1", {})
     vt2_data = thresholds.get("vt2", {})
     
-    vt1_watts = vt1_data.get("midpoint_watts", 0)
-    vt2_watts = vt2_data.get("midpoint_watts", 0)
+    # Try pace-based thresholds first, fallback to watts
+    vt1_pace_sec = vt1_data.get("midpoint_pace_sec", 0)
+    vt2_pace_sec = vt2_data.get("midpoint_pace_sec", 0)
     
     vt1_time = None
     vt2_time = None
+    vt1_pace_min = _sec_to_min(vt1_pace_sec) if vt1_pace_sec else None
+    vt2_pace_min = _sec_to_min(vt2_pace_sec) if vt2_pace_sec else None
     
-    if power_data and vt1_watts:
-        for t, p in zip(time_data, power_data):
-            if p >= vt1_watts:
+    # Find time when pace reaches threshold
+    if pace_data and vt1_pace_sec:
+        for t, p_sec in zip(time_data, time_series.get("pace_sec_per_km", time_series.get("pace", []))):
+            if p_sec >= vt1_pace_sec:
                 vt1_time = t
                 break
                 
-    if power_data and vt2_watts:
-        for t, p in zip(time_data, power_data):
-            if p >= vt2_watts:
+    if pace_data and vt2_pace_sec:
+        for t, p_sec in zip(time_data, time_series.get("pace_sec_per_km", time_series.get("pace", []))):
+            if p_sec >= vt2_pace_sec:
                 vt2_time = t
                 break
 
     # Create figure
     fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
     
-    # Plot Power on Right Axis (Background)
+    # Plot Pace on Right Axis (Background)
     ax2 = ax1.twinx()
-    if power_data:
-        ax2.plot(time_data, power_data, color=get_color("power"), alpha=0.3, linewidth=1, label="Moc")
-        ax2.fill_between(time_data, power_data, color=get_color("power"), alpha=0.05)
-        ax2.set_ylabel("Moc [W]", color=get_color("power"), fontsize=font_size)
-        ax2.tick_params(axis='y', labelcolor=get_color("power"))
+    if pace_data:
+        ax2.plot(time_data, pace_data, color=get_color("pace"), alpha=0.3, linewidth=1, label="Tempo")
+        ax2.fill_between(time_data, pace_data, color=get_color("pace"), alpha=0.05)
+        ax2.set_ylabel("Tempo [min/km]", color=get_color("pace"), fontsize=font_size)
+        ax2.tick_params(axis='y', labelcolor=get_color("pace"))
+        # Invert Y-axis (lower pace = faster)
+        ax2.invert_yaxis()
     
     # Plot VE on Left Axis (Foreground)
     ax1.plot(time_data, ve_data, color=get_color("ve"), linewidth=2, label="VE (Wentylacja)")
@@ -108,17 +124,17 @@ def generate_ve_profile_chart(
     ax1.tick_params(axis='y', labelcolor=get_color("ve"))
     
     # Vertical Lines for VT1/VT2
-    if vt1_time:
+    if vt1_time and vt1_pace_min:
         ax1.axvline(x=vt1_time, color=get_color("vt1"), linestyle='--', alpha=0.9, linewidth=1.5,
-                   label=f"VT1: {int(vt1_watts)} W")
-        ax1.text(vt1_time, max(ve_data)*0.95, f"VT1\n{int(vt1_watts)} W", 
+                   label=f"VT1: {vt1_pace_min:.2f} min/km")
+        ax1.text(vt1_time, max(ve_data)*0.95, f"VT1\n{vt1_pace_min:.2f}", 
                  color=get_color("vt1"), ha='center', va='top', fontweight='bold', 
                  bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
-                 
-    if vt2_time:
+                  
+    if vt2_time and vt2_pace_min:
         ax1.axvline(x=vt2_time, color=get_color("vt2"), linestyle='--', alpha=0.9, linewidth=1.5,
-                   label=f"VT2: {int(vt2_watts)} W")
-        ax1.text(vt2_time, max(ve_data)*0.95, f"VT2\n{int(vt2_watts)} W", 
+                   label=f"VT2: {vt2_pace_min:.2f} min/km")
+        ax1.text(vt2_time, max(ve_data)*0.95, f"VT2\n{vt2_pace_min:.2f}", 
                  color=get_color("vt2"), ha='center', va='top', fontweight='bold',
                  bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
 

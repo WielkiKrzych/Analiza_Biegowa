@@ -1,11 +1,11 @@
 """
 Physio Drift Maps Module.
 
-Provides scatter plots and drift analysis for Power-HR-SmO2 relationships:
-- Power vs HR scatter with time coloring and trendline
-- Power vs SmO2 scatter
-- Constant-power segment detection
-- HR and SmO2 drift analysis at constant power
+Provides scatter plots and drift analysis for Pace-HR-SmO2 relationships:
+- Pace vs HR scatter with time coloring and trendline
+- Pace vs SmO2 scatter
+- Constant-pace segment detection
+- HR and SmO2 drift analysis at constant pace
 """
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
@@ -20,28 +20,34 @@ import plotly.express as px
 logger = logging.getLogger(__name__)
 
 
+def _sec_to_min(pace_sec: float) -> float:
+    """Convert pace from sec/km to min/km for display."""
+    return pace_sec / 60.0 if pace_sec and pace_sec > 0 else 0
+
+
 @dataclass
 class DriftMetrics:
-    """Result of drift analysis at constant power."""
+    """Result of drift analysis at constant pace."""
     hr_drift_slope: Optional[float]      # HR slope per minute
     hr_drift_pvalue: Optional[float]     # p-value for HR slope
     smo2_slope: Optional[float]          # SmO2 slope per minute
     smo2_pvalue: Optional[float]         # p-value for SmO2 slope
-    correlation_power_hr: Optional[float]
-    correlation_power_smo2: Optional[float]
+    correlation_pace_hr: Optional[float]
+    correlation_pace_smo2: Optional[float]
     segment_duration_min: float
-    avg_power: float
+    avg_pace: float
     
     def to_dict(self) -> Dict:
+        avg_pace_min = _sec_to_min(self.avg_pace)
         return {
             "hr_drift_slope_per_min": round(self.hr_drift_slope, 3) if self.hr_drift_slope else None,
             "hr_drift_pvalue": round(self.hr_drift_pvalue, 4) if self.hr_drift_pvalue else None,
             "smo2_slope_per_min": round(self.smo2_slope, 3) if self.smo2_slope else None,
             "smo2_pvalue": round(self.smo2_pvalue, 4) if self.smo2_pvalue else None,
-            "correlation_power_hr": round(self.correlation_power_hr, 3) if self.correlation_power_hr else None,
-            "correlation_power_smo2": round(self.correlation_power_smo2, 3) if self.correlation_power_smo2 else None,
+            "correlation_pace_hr": round(self.correlation_pace_hr, 3) if self.correlation_pace_hr else None,
+            "correlation_pace_smo2": round(self.correlation_pace_smo2, 3) if self.correlation_pace_smo2 else None,
             "segment_duration_min": round(self.segment_duration_min, 1),
-            "avg_power_watts": round(self.avg_power, 0)
+            "avg_pace_min_per_km": round(avg_pace_min, 2)
         }
 
 
@@ -49,14 +55,14 @@ class DriftMetrics:
 # Scatter Plot Functions
 # ============================================================
 
-def scatter_power_hr(
+def scatter_pace_hr(
     df: pd.DataFrame,
-    title: str = "Power vs Heart Rate"
+    title: str = "Pace vs Heart Rate"
 ) -> Optional[go.Figure]:
-    """Create Power vs HR scatter with time coloring and trendline.
+    """Create Pace vs HR scatter with time coloring and trendline.
     
     Args:
-        df: DataFrame with 'watts' and 'heartrate' (or 'hr') columns
+        df: DataFrame with 'pace' and 'heartrate' (or 'hr') columns
         title: Chart title
         
     Returns:
@@ -68,33 +74,43 @@ def scatter_power_hr(
         if col in df.columns:
             hr_col = col
             break
+    
+    # Detect pace column
+    pace_col = None
+    for col in ['pace', 'pace_sec_per_km', 'tempo']:
+        if col in df.columns:
+            pace_col = col
+            break
             
-    if 'watts' not in df.columns or hr_col is None:
-        logger.warning(f"Missing watts or HR columns for scatter_power_hr. Found: {df.columns.tolist()}")
+    if pace_col is None or hr_col is None:
+        logger.warning(f"Missing pace or HR columns for scatter_pace_hr. Found: {df.columns.tolist()}")
         return None
     
     # Prepare data
-    plot_df = df[['watts', hr_col]].dropna()
+    plot_df = df[[pace_col, hr_col]].dropna()
     if len(plot_df) < 10:
         return None
     
+    # Filter valid pace data and convert to min/km
+    plot_df = plot_df[(plot_df[pace_col] > 0) & (plot_df[pace_col] < 1200)].copy()
+    plot_df['pace_min'] = plot_df[pace_col] / 60.0
+    
     # Add time index for coloring
-    plot_df = plot_df.copy()
     plot_df['time_min'] = np.arange(len(plot_df)) / 60
     
     # Calculate correlation
-    corr = plot_df['watts'].corr(plot_df[hr_col])
+    corr = plot_df['pace_min'].corr(plot_df[hr_col])
     
     # Create scatter
     fig = px.scatter(
         plot_df,
-        x='watts',
+        x='pace_min',
         y=hr_col,
         color='time_min',
         color_continuous_scale='Viridis',
-        labels={'watts': 'Moc [W]', hr_col: 'HR [bpm]', 'time_min': 'Czas [min]'},
+        labels={'pace_min': 'Tempo [min/km]', hr_col: 'HR [bpm]', 'time_min': 'Czas [min]'},
         hover_data={
-            'watts': ':.0f',
+            'pace_min': ':.2f',
             hr_col: ':.0f',
             'time_min': ':.0f'
         },
@@ -103,9 +119,9 @@ def scatter_power_hr(
     
     # Add trendline
     slope, intercept, r_value, p_value, std_err = stats.linregress(
-        plot_df['watts'], plot_df[hr_col]
+        plot_df['pace_min'], plot_df[hr_col]
     )
-    x_line = np.array([plot_df['watts'].min(), plot_df['watts'].max()])
+    x_line = np.array([plot_df['pace_min'].min(), plot_df['pace_min'].max()])
     y_line = slope * x_line + intercept
     
     fig.add_trace(go.Scatter(
@@ -115,6 +131,9 @@ def scatter_power_hr(
         name=f'Trend (slope={slope:.2f})',
         line=dict(color='red', width=2, dash='dash')
     ))
+    
+    # Invert x-axis (lower pace = faster = better)
+    fig.update_xaxes(autorange="reversed")
     
     fig.update_layout(
         template='plotly_dark',
@@ -129,20 +148,27 @@ def scatter_power_hr(
     return fig
 
 
-def scatter_power_smo2(
+def scatter_pace_smo2(
     df: pd.DataFrame,
-    title: str = "Power vs SmO₂"
+    title: str = "Pace vs SmO₂"
 ) -> Optional[go.Figure]:
-    """Create Power vs SmO2 scatter with time coloring.
+    """Create Pace vs SmO2 scatter with time coloring.
     
     Args:
-        df: DataFrame with 'watts' and 'smo2' columns
+        df: DataFrame with 'pace' and 'smo2' columns
         title: Chart title
         
     Returns:
         Plotly Figure or None if SmO2 data missing (graceful degradation)
     """
-    if 'watts' not in df.columns:
+    # Detect pace column
+    pace_col = None
+    for col in ['pace', 'pace_sec_per_km', 'tempo']:
+        if col in df.columns:
+            pace_col = col
+            break
+    
+    if pace_col is None:
         return None
     
     # Check for SmO2 column variants
@@ -157,26 +183,30 @@ def scatter_power_smo2(
         return None
     
     # Prepare data
-    plot_df = df[['watts', smo2_col]].dropna()
+    plot_df = df[[pace_col, smo2_col]].dropna()
     if len(plot_df) < 10:
         return None
     
-    plot_df = plot_df.copy()
+    # Filter valid pace data and convert to min/km
+    plot_df = plot_df[(plot_df[pace_col] > 0) & (plot_df[pace_col] < 1200)].copy()
+    plot_df['pace_min'] = plot_df[pace_col] / 60.0
+    
+    # Add time index for coloring
     plot_df['time_min'] = np.arange(len(plot_df)) / 60
     
     # Calculate correlation
-    corr = plot_df['watts'].corr(plot_df[smo2_col])
+    corr = plot_df['pace_min'].corr(plot_df[smo2_col])
     
     # Create scatter
     fig = px.scatter(
         plot_df,
-        x='watts',
+        x='pace_min',
         y=smo2_col,
         color='time_min',
         color_continuous_scale='Plasma',
-        labels={'watts': 'Moc [W]', smo2_col: 'SmO₂ [%]', 'time_min': 'Czas [min]'},
+        labels={'pace_min': 'Tempo [min/km]', smo2_col: 'SmO₂ [%]', 'time_min': 'Czas [min]'},
         hover_data={
-            'watts': ':.0f',
+            'pace_min': ':.2f',
             smo2_col: ':.1f',
             'time_min': ':.0f'
         },
@@ -185,9 +215,9 @@ def scatter_power_smo2(
     
     # Add trendline
     slope, intercept, r_value, p_value, std_err = stats.linregress(
-        plot_df['watts'], plot_df[smo2_col]
+        plot_df['pace_min'], plot_df[smo2_col]
     )
-    x_line = np.array([plot_df['watts'].min(), plot_df['watts'].max()])
+    x_line = np.array([plot_df['pace_min'].min(), plot_df['pace_min'].max()])
     y_line = slope * x_line + intercept
     
     fig.add_trace(go.Scatter(
@@ -197,6 +227,9 @@ def scatter_power_smo2(
         name=f'Trend (slope={slope:.3f})',
         line=dict(color='cyan', width=2, dash='dash')
     ))
+    
+    # Invert x-axis (lower pace = faster = better)
+    fig.update_xaxes(autorange="reversed")
     
     fig.update_layout(
         template='plotly_dark',
@@ -212,29 +245,49 @@ def scatter_power_smo2(
 
 
 # ============================================================
-# Constant Power Segment Detection
+# Legacy Power-based Functions (kept for backwards compatibility)
 # ============================================================
 
-def detect_constant_power_segments(
+def scatter_power_hr(df: pd.DataFrame, title: str = "Power vs Heart Rate") -> Optional[go.Figure]:
+    """Legacy function - redirects to pace-based analysis."""
+    return scatter_pace_hr(df, title)
+
+
+def scatter_power_smo2(df: pd.DataFrame, title: str = "Power vs SmO₂") -> Optional[go.Figure]:
+    """Legacy function - redirects to pace-based analysis."""
+    return scatter_pace_smo2(df, title)
+
+
+# ============================================================
+# Constant Pace Segment Detection
+# ============================================================
+
+def detect_constant_pace_segments(
     df: pd.DataFrame,
     tolerance_pct: float = 5.0,
     min_duration_sec: int = 120
 ) -> List[Tuple[int, int, float]]:
-    """Find segments where power is stable within tolerance.
+    """Find segments where pace is stable within tolerance.
     
     Args:
-        df: DataFrame with 'watts' column
-        tolerance_pct: Percentage tolerance around median power
+        df: DataFrame with 'pace' column (sec/km)
+        tolerance_pct: Percentage tolerance around median pace
         min_duration_sec: Minimum segment duration in seconds
         
     Returns:
-        List of (start_idx, end_idx, avg_power) tuples
+        List of (start_idx, end_idx, avg_pace_sec) tuples
     """
-    if 'watts' not in df.columns:
+    pace_col = None
+    for col in ['pace', 'pace_sec_per_km', 'tempo']:
+        if col in df.columns:
+            pace_col = col
+            break
+    
+    if pace_col is None:
         return []
     
-    watts = df['watts'].fillna(0).values
-    n = len(watts)
+    pace = df[pace_col].ffill().values
+    n = len(pace)
     
     if n < min_duration_sec:
         return []
@@ -246,28 +299,28 @@ def detect_constant_power_segments(
     
     i = 0
     while i < n - window_size:
-        window = watts[i:i + window_size]
-        median_power = np.median(window)
+        window = pace[i:i + window_size]
+        median_pace = np.median(window)
         
-        if median_power < 50:  # Skip very low power
+        if median_pace <= 0 or median_pace > 1200:  # Skip invalid pace
             i += window_size // 2
             continue
         
         # Check if window is within tolerance
-        lower = median_power * (1 - tolerance_pct / 100)
-        upper = median_power * (1 + tolerance_pct / 100)
+        lower = median_pace * (1 - tolerance_pct / 100)
+        upper = median_pace * (1 + tolerance_pct / 100)
         
         if np.all((window >= lower) & (window <= upper)):
             # Extend segment as far as possible
             end_idx = i + window_size
             while end_idx < n:
-                if lower <= watts[end_idx] <= upper:
+                if lower <= pace[end_idx] <= upper:
                     end_idx += 1
                 else:
                     break
             
-            avg_power = np.mean(watts[i:end_idx])
-            segments.append((i, end_idx, avg_power))
+            avg_pace = np.mean(pace[i:end_idx])
+            segments.append((i, end_idx, avg_pace))
             i = end_idx
         else:
             i += 1
@@ -275,18 +328,22 @@ def detect_constant_power_segments(
     return segments
 
 
-def trend_at_constant_power(
+# Legacy function name
+detect_constant_power_segments = detect_constant_pace_segments
+
+
+def trend_at_constant_pace(
     df: pd.DataFrame,
-    power_target: float,
+    pace_target_sec: float,
     tolerance_pct: float = 5.0,
     min_duration_sec: int = 120
 ) -> Tuple[Optional[go.Figure], Optional[DriftMetrics]]:
-    """Extract segment at target power and compute HR/SmO2 drift.
+    """Extract segment at target pace and compute HR/SmO2 drift.
     
     Args:
-        df: DataFrame with watts, hr, and optionally smo2
-        power_target: Target power level in watts
-        tolerance_pct: Tolerance around target power
+        df: DataFrame with pace, hr, and optionally smo2
+        pace_target_sec: Target pace in sec/km
+        tolerance_pct: Tolerance around target pace
         min_duration_sec: Minimum segment duration
         
     Returns:
@@ -299,14 +356,21 @@ def trend_at_constant_power(
             hr_col = col
             break
 
-    if 'watts' not in df.columns or hr_col is None:
+    # Detect pace column
+    pace_col = None
+    for col in ['pace', 'pace_sec_per_km', 'tempo']:
+        if col in df.columns:
+            pace_col = col
+            break
+
+    if pace_col is None or hr_col is None:
         return None, None
     
     # Find matching segment
-    lower = power_target * (1 - tolerance_pct / 100)
-    upper = power_target * (1 + tolerance_pct / 100)
+    lower = pace_target_sec * (1 - tolerance_pct / 100)
+    upper = pace_target_sec * (1 + tolerance_pct / 100)
     
-    mask = (df['watts'] >= lower) & (df['watts'] <= upper)
+    mask = (df[pace_col] >= lower) & (df[pace_col] <= upper)
     segment = df[mask].copy()
     
     if len(segment) < min_duration_sec:
@@ -330,14 +394,14 @@ def trend_at_constant_power(
     
     smo2_slope = None
     smo2_p = None
-    corr_power_smo2 = None
+    corr_pace_smo2 = None
     
     if smo2_col and segment[smo2_col].notna().sum() > 10:
         smo2_clean = segment.dropna(subset=[smo2_col])
         smo2_slope, smo2_int, smo2_r, smo2_p, smo2_se = stats.linregress(
             smo2_clean['time_min'], smo2_clean[smo2_col]
         )
-        corr_power_smo2 = df['watts'].corr(df[smo2_col]) if smo2_col in df.columns else None
+        corr_pace_smo2 = df[pace_col].corr(df[smo2_col]) if smo2_col in df.columns else None
     
     # Create figure
     fig = go.Figure()
@@ -348,159 +412,146 @@ def trend_at_constant_power(
         x=segment['time_min'],
         y=segment[f'{hr_col}_smooth'],
         mode='lines',
-        name='HR (30s avg)',
-        line=dict(color='#FF6B6B', width=2),
-        hovertemplate='%{y:.1f} bpm'
+        name='HR [bpm]',
+        line=dict(color='#FF4B4B', width=2),
+        yaxis='y'
     ))
     
-    # HR trendline
-    hr_trend = hr_slope * segment['time_min'] + hr_intercept
+    # Add trendline for HR
+    hr_trend = hr_intercept + hr_slope * segment['time_min']
     fig.add_trace(go.Scatter(
         x=segment['time_min'],
         y=hr_trend,
         mode='lines',
-        name=f'Trend HR: {hr_slope:.2f}',
-        line=dict(color='#FF6B6B', width=2, dash='dash'),
-        hovertemplate='%{y:.1f} bpm'
+        name=f'HR Trend (slope={hr_slope:.2f}/min)',
+        line=dict(color='#FF4B4B', width=1, dash='dash'),
+        yaxis='y'
     ))
     
-    # SmO2 trace (smoothed)
-    if smo2_col and smo2_slope is not None:
+    # SmO2 trace on secondary axis (if available)
+    if smo2_col:
         segment[f'{smo2_col}_smooth'] = segment[smo2_col].rolling(window=30, min_periods=1).mean()
         fig.add_trace(go.Scatter(
             x=segment['time_min'],
             y=segment[f'{smo2_col}_smooth'],
             mode='lines',
-            name='SmO₂ (30s avg)',
-            line=dict(color='#4ECDC4', width=2),
-            yaxis='y2',
-            hovertemplate='%{y:.1f} %'
+            name='SmO₂ [%]',
+            line=dict(color='#00CC96', width=2),
+            yaxis='y2'
         ))
         
-        # SmO2 trendline
-        smo2_trend = smo2_slope * segment['time_min'] + smo2_int
-        fig.add_trace(go.Scatter(
-            x=segment['time_min'],
-            y=smo2_trend,
-            mode='lines',
-            name=f'Trend SmO₂: {smo2_slope:.2f}',
-            line=dict(color='#4ECDC4', width=2, dash='dash'),
-            yaxis='y2',
-            hovertemplate='Trend: %{y:.1f} %'
-        ))
+        if smo2_slope is not None:
+            smo2_trend = smo2_int + smo2_slope * segment['time_min']
+            fig.add_trace(go.Scatter(
+                x=segment['time_min'],
+                y=smo2_trend,
+                mode='lines',
+                name=f'SmO₂ Trend (slope={smo2_slope:.3f}/min)',
+                line=dict(color='#00CC96', width=1, dash='dash'),
+                yaxis='y2'
+            ))
     
+    pace_min_str = _sec_to_min(pace_target_sec)
     fig.update_layout(
-        template='plotly_dark',
-        title=f'Drift Analysis @ {power_target:.0f}W (±{tolerance_pct}%)',
-        xaxis=dict(
-            title='Czas [min]',
-            tickformat='.0f',
-            hoverformat='.0f'
+        title=f"Fizjologia przy Tempo {pace_min_str:.2f} min/km (±{tolerance_pct}%)",
+        xaxis_title="Czas w segmencie [min]",
+        yaxis=dict(
+            title="HR [bpm]",
+            title_font=dict(color="#FF4B4B"),
+            tickfont=dict(color="#FF4B4B")
         ),
-        yaxis=dict(title='HR [bpm]', color='#FF6B6B'),
         yaxis2=dict(
-            title='SmO₂ [%]',
-            color='#4ECDC4',
-            overlaying='y',
-            side='right'
-        ) if smo2_col else None,
-        hovermode="x unified",
-        height=400,
-        margin=dict(l=20, r=60, t=50, b=20),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02)
-    )
-    
-    # Precise axes formatting
-    fig.update_yaxes(title_text="HR [bpm]", tickformat=".0f", color='#FF6B6B', side='left')
-    if smo2_col:
-        fig.update_layout(yaxis2=dict(
-            title='SmO₂ [%]',
-            tickformat=".1f",
-            color='#4ECDC4',
+            title="SmO₂ [%]",
+            title_font=dict(color="#00CC96"),
+            tickfont=dict(color="#00CC96"),
             overlaying='y',
             side='right',
-            anchor='x'
-        ))
+            range=[0, 100] if smo2_col else None
+        ),
+        template='plotly_dark',
+        height=400,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(x=0.01, y=0.99)
+    )
     
-    # Calculate correlations
-    # Detect HR column again for safety
-    hr_col = next((c for c in ['heartrate', 'hr', 'heart_rate'] if c in df.columns), 'hr')
-    corr_power_hr = df['watts'].corr(df[hr_col]) if hr_col in df.columns else None
-    
+    # Build metrics
+    duration_min = len(segment) / 60
     metrics = DriftMetrics(
         hr_drift_slope=hr_slope,
         hr_drift_pvalue=hr_p,
         smo2_slope=smo2_slope,
         smo2_pvalue=smo2_p,
-        correlation_power_hr=corr_power_hr,
-        correlation_power_smo2=corr_power_smo2,
-        segment_duration_min=len(segment) / 60,
-        avg_power=segment['watts'].mean()
+        correlation_pace_hr=df[pace_col].corr(df[hr_col]),
+        correlation_pace_smo2=corr_pace_smo2,
+        segment_duration_min=duration_min,
+        avg_pace=pace_target_sec
     )
     
     return fig, metrics
 
 
-def calculate_drift_metrics(df: pd.DataFrame) -> Dict:
-    """Calculate overall drift metrics for the session.
+# Legacy function name
+trend_at_constant_power = trend_at_constant_pace
+
+
+# ============================================================
+# Drift Analysis Functions
+# ============================================================
+
+def analyze_drift_pace_hr(
+    df: pd.DataFrame,
+    min_segment_duration_min: float = 3.0
+) -> Dict:
+    """Analyze HR drift at constant pace across all detected segments.
     
     Args:
-        df: DataFrame with watts, hr, and optionally smo2
+        df: DataFrame with pace and HR data
+        min_segment_duration_min: Minimum segment duration in minutes
         
     Returns:
-        Dict with drift metrics
+        Dictionary with drift analysis results
     """
-    result = {
-        "hr_drift_slope": None,
-        "smo2_slope": None,
-        "correlation_power_hr": None,
-        "correlation_power_smo2": None
+    segments = detect_constant_pace_segments(
+        df, 
+        tolerance_pct=5.0, 
+        min_duration_sec=int(min_segment_duration_min * 60)
+    )
+    
+    if not segments:
+        return {"error": "No constant-pace segments found"}
+    
+    results = []
+    for start_idx, end_idx, avg_pace in segments:
+        fig, metrics = trend_at_constant_pace(
+            df.iloc[start_idx:end_idx],
+            pace_target_sec=avg_pace,
+            tolerance_pct=10.0,  # Already filtered, use loose tolerance
+            min_duration_sec=int(min_segment_duration_min * 60)
+        )
+        if metrics:
+            results.append({
+                "pace_sec_per_km": round(avg_pace, 1),
+                "pace_min_per_km": round(_sec_to_min(avg_pace), 2),
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+                **metrics.to_dict()
+            })
+    
+    if not results:
+        return {"error": "No valid drift segments analyzed"}
+    
+    # Summary statistics
+    df_results = pd.DataFrame(results)
+    return {
+        "segments": results,
+        "summary": {
+            "total_segments": len(results),
+            "avg_hr_drift_per_min": round(df_results["hr_drift_slope_per_min"].mean(), 3),
+            "max_hr_drift_per_min": round(df_results["hr_drift_slope_per_min"].max(), 3),
+            "avg_pace_min_per_km": round(df_results["pace_min_per_km"].mean(), 2)
+        }
     }
-    
-    # Detect HR column
-    hr_col = None
-    for col in ['heartrate', 'hr', 'heart_rate', 'HeartRate']:
-        if col in df.columns:
-            hr_col = col
-            break
 
-    if 'watts' not in df.columns or hr_col is None:
-        return result
-    
-    # Overall correlations
-    result["correlation_power_hr"] = round(df['watts'].corr(df[hr_col]), 3)
-    
-    # SmO2 correlation if available
-    for col in ['smo2', 'SmO2', 'muscle_oxygen']:
-        if col in df.columns:
-            result["correlation_power_smo2"] = round(df['watts'].corr(df[col]), 3)
-            break
-    
-    # Find longest constant-power segment for drift analysis
-    segments = detect_constant_power_segments(df, tolerance_pct=10, min_duration_sec=300)
-    
-    if segments:
-        # Use longest segment
-        longest = max(segments, key=lambda x: x[1] - x[0])
-        start, end, avg_power = longest
-        
-        segment = df.iloc[start:end].copy()
-        segment = segment.reset_index(drop=True)
-        segment['time_min'] = segment.index / 60
-        
-        # HR drift
-        if len(segment) > 30:
-            slope, _, _, _, _ = stats.linregress(segment['time_min'], segment[hr_col])
-            result["hr_drift_slope"] = round(slope, 3)
-        
-        # SmO2 drift
-        for col in ['smo2', 'SmO2', 'muscle_oxygen']:
-            if col in segment.columns and segment[col].notna().sum() > 30:
-                slope, _, _, _, _ = stats.linregress(
-                    segment.dropna(subset=[col])['time_min'],
-                    segment.dropna(subset=[col])[col]
-                )
-                result["smo2_slope"] = round(slope, 3)
-                break
-    
-    return result
+
+# Legacy function name
+analyze_drift_power_hr = analyze_drift_pace_hr

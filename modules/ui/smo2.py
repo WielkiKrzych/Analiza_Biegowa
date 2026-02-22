@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
 from scipy import stats
 from modules.calculations.kinetics import generate_state_timeline
 from modules.calculations.quality import check_signal_quality
@@ -23,8 +24,8 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         return
 
     # Ensure smoothed columns exist
-    if "watts_smooth_5s" not in target_df.columns and "watts" in target_df.columns:
-        target_df["watts_smooth_5s"] = target_df["watts"].rolling(window=5, center=True).mean()
+    if "pace_smooth" not in target_df.columns and "pace" in target_df.columns:
+        target_df["pace_smooth"] = target_df["pace"].rolling(window=5, center=True).mean()
     if "smo2_smooth" not in target_df.columns:
         target_df["smo2_smooth"] = target_df["smo2"].rolling(window=5, center=True).mean()
 
@@ -141,7 +142,8 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         duration_sec = int(endsec - startsec)
 
         # Obliczenia
-        avg_watts = interval_data["watts"].mean() if "watts" in interval_data.columns else 0
+        avg_pace = interval_data["pace"].mean() if "pace" in interval_data.columns else 0
+        avg_pace_min = avg_pace / 60.0 if avg_pace > 0 else 0
         avg_smo2 = interval_data["smo2"].mean()
         avg_thb = interval_data["thb"].mean() if "thb" in interval_data.columns else None
 
@@ -166,7 +168,8 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         else:
             m1, m2, m3, m4 = st.columns(4)
 
-        m1.metric("Śr. Moc", f"{avg_watts:.0f} W")
+        pace_str = f"{int(avg_pace_min):02d}:{int((avg_pace_min % 1) * 60):02d}" if avg_pace > 0 else "--:--"
+        m1.metric("Śr. Tempo", pace_str)
         m2.metric("Śr. SmO2", f"{avg_smo2:.1f} %")
 
         if avg_thb is not None:
@@ -195,19 +198,23 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
             )
         )
 
-        # Power (Secondary)
-        if "watts_smooth_5s" in target_df.columns:
+        # Pace (Secondary)
+        if "pace_smooth" in target_df.columns:
+            # Convert pace to min/km for display
+            pace_min_display = target_df["pace_smooth"] / 60.0
+            # Create formatted pace string as mm:ss
+            pace_formatted = pace_min_display.apply(lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--")
             fig_smo2.add_trace(
                 go.Scatter(
                     x=target_df["time"],
-                    y=target_df["watts_smooth_5s"],
-                    customdata=target_df["time_str"],
+                    y=pace_min_display,
+                    customdata=np.stack([target_df["time_str"], pace_formatted], axis=-1),
                     mode="lines",
-                    name="Power",
-                    line=dict(color="#1f77b4", width=1),
+                    name="Tempo",
+                    line=dict(color="#00BCD4", width=1),
                     yaxis="y2",
                     opacity=0.3,
-                    hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{y:.0f} W<extra></extra>",
+                    hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
                 )
             )
 
@@ -238,14 +245,15 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
             )
 
         fig_smo2.update_layout(
-            title="Dynamika SmO2 vs Moc (Surowe Wartości)",
+            title="Dynamika SmO2 vs Tempo (Surowe Wartości)",
             xaxis_title="Czas",
             yaxis=dict(title=dict(text="SmO2 (%)", font=dict(color="#FF4B4B"))),
             yaxis2=dict(
-                title=dict(text="Moc (W)", font=dict(color="#1f77b4")),
+                title=dict(text="Tempo (min/km)", font=dict(color="#00BCD4")),
                 overlaying="y",
                 side="right",
                 showgrid=False,
+                autorange="reversed",  # Invert pace axis (lower = faster)
             ),
             legend=dict(x=0.01, y=0.99),
             height=500,
@@ -282,7 +290,7 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
 
             # Metryki THb
             thb_cols = st.columns(4)
-            thb_cols[0].metric("Śr. Moc", f"{avg_watts:.0f} W")
+            thb_cols[0].metric("Śr. Tempo", f"{avg_pace_min:.2f} min/km")
             thb_cols[1].metric("Śr. THb", f"{avg_thb:.2f} g/dL")
             thb_cols[2].metric("Trend THb (Slope)", trend_thb_desc)
 
@@ -302,19 +310,23 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                 )
             )
 
-            # Power (Secondary)
-            if "watts_smooth_5s" in target_df.columns:
+            # Pace (Secondary)
+            if "pace_smooth" in target_df.columns:
+                # Convert pace to min/km for display
+                pace_min_thb = target_df["pace_smooth"] / 60.0
+                # Create formatted pace string as mm:ss
+                pace_thb_formatted = pace_min_thb.apply(lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--")
                 fig_thb.add_trace(
                     go.Scatter(
                         x=target_df["time"],
-                        y=target_df["watts_smooth_5s"],
-                        customdata=target_df["time_str"],
+                        y=pace_min_thb,
+                        customdata=np.stack([target_df["time_str"], pace_thb_formatted], axis=-1),
                         mode="lines",
-                        name="Power",
-                        line=dict(color="#1f77b4", width=1),
+                        name="Tempo",
+                        line=dict(color="#00BCD4", width=1),
                         yaxis="y2",
                         opacity=0.3,
-                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{y:.0f} W<extra></extra>",
+                        hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
                     )
                 )
 
@@ -345,14 +357,15 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                 )
 
             fig_thb.update_layout(
-                title="Dynamika THb vs Moc (Surowe Wartości)",
+                title="Dynamika THb vs Tempo (Surowe Wartości)",
                 xaxis_title="Czas",
                 yaxis=dict(title=dict(text="THb (g/dL)", font=dict(color="#9467bd"))),
                 yaxis2=dict(
-                    title=dict(text="Moc (W)", font=dict(color="#1f77b4")),
+                    title=dict(text="Tempo (min/km)", font=dict(color="#00BCD4")),
                     overlaying="y",
                     side="right",
                     showgrid=False,
+                    autorange="reversed",
                 ),
                 legend=dict(x=0.01, y=0.99),
                 height=500,

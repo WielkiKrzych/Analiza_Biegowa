@@ -475,12 +475,14 @@ class SmO2AnalysisChartExporter(ChartExporter):
             line=dict(color='#FF4B4B', width=1.5)
         ))
         
-        if 'watts' in df.columns:
+        if 'pace' in df.columns:
+            # Convert pace to min/km for display
+            pace_min = df['pace_smooth'] / 60.0 if 'pace_smooth' in df.columns else df['pace'] / 60.0
             fig.add_trace(go.Scatter(
                 x=df['time_min'], 
-                y=df['watts_smooth'],
-                name='Power', 
-                line=dict(color='#1f77b4', width=1), 
+                y=pace_min,
+                name='Pace', 
+                line=dict(color='#00BCD4', width=1), 
                 opacity=0.3, 
                 yaxis='y2'
             ))
@@ -505,7 +507,8 @@ class SmO2AnalysisChartExporter(ChartExporter):
             
             if not df_sel.empty and 'smo2_smooth' in df_sel.columns:
                 duration = e_sec - s_sec
-                avg_w_sel = df_sel['watts_smooth'].mean() if 'watts_smooth' in df_sel else 0
+                avg_pace_sel = df_sel['pace_smooth'].mean() if 'pace_smooth' in df_sel else (df_sel['pace'].mean() if 'pace' in df_sel else 0)
+                avg_pace_min_sel = avg_pace_sel / 60.0 if avg_pace_sel > 0 else 0
                 avg_s_sel = df_sel['smo2_smooth'].mean()
                 min_s_sel = df_sel['smo2_smooth'].min()
                 max_s_sel = df_sel['smo2_smooth'].max()
@@ -522,9 +525,10 @@ class SmO2AnalysisChartExporter(ChartExporter):
                 ))
                 
                 m_dur, s_dur = divmod(int(duration), 60)
+                pace_str = f"{int(avg_pace_min_sel):02d}:{int((avg_pace_min_sel % 1) * 60):02d}" if avg_pace_sel > 0 else "--:--"
                 legend_stats = [
                     f"⏱️ Time: {m_dur:02d}:{s_dur:02d}",
-                    f"⚡ Avg W: {avg_w_sel:.0f} W",
+                    f"🏃 Avg Pace: {pace_str} min/km",
                     f"📉 Slope: {slope:.4f} %/s",
                     f"📊 Avg SmO2: {avg_s_sel:.1f}%",
                     f"🔻 Min: {min_s_sel:.1f}%",
@@ -536,7 +540,7 @@ class SmO2AnalysisChartExporter(ChartExporter):
             title=self.title, 
             xaxis_title='Time (min)', 
             yaxis=dict(title='SmO2 (%)'),
-            yaxis2=dict(title='Power (W)', overlaying='y', side='right', showgrid=False),
+            yaxis2=dict(title='Pace (min/km)', overlaying='y', side='right', showgrid=False, autorange='reversed'),
             **ctx.layout_args
         )
         return fig
@@ -569,12 +573,14 @@ class VentAnalysisChartExporter(ChartExporter):
             line=dict(color='#ffa15a', width=1.5)
         ))
         
-        if 'watts' in df.columns:
+        if 'pace' in df.columns:
+            # Convert pace to min/km for display
+            pace_min = df['pace_smooth'] / 60.0 if 'pace_smooth' in df.columns else df['pace'] / 60.0
             fig.add_trace(go.Scatter(
                 x=df['time_min'], 
-                y=df['watts_smooth'],
-                name='Power', 
-                line=dict(color='#1f77b4', width=1), 
+                y=pace_min,
+                name='Pace', 
+                line=dict(color='#00BCD4', width=1), 
                 opacity=0.3, 
                 yaxis='y2'
             ))
@@ -599,7 +605,10 @@ class VentAnalysisChartExporter(ChartExporter):
             
             if not df_v.empty and 'tymeventilation_smooth' in df_v.columns:
                 duration_v = e_v_sec - s_v_sec
-                avg_w_v = df_v['watts_smooth'].mean() if 'watts_smooth' in df_v else 0
+                # Calculate average pace in min/km
+                pace_col = 'pace_smooth' if 'pace_smooth' in df_v.columns else 'pace'
+                avg_pace_sec = df_v[pace_col].mean() if pace_col in df_v else 0
+                avg_pace_min = avg_pace_sec / 60.0
                 avg_ve = df_v['tymeventilation_smooth'].mean()
                 min_ve = df_v['tymeventilation_smooth'].min()
                 max_ve = df_v['tymeventilation_smooth'].max()
@@ -616,9 +625,11 @@ class VentAnalysisChartExporter(ChartExporter):
                 ))
                 
                 m_dur_v, s_dur_v = divmod(int(duration_v), 60)
+                pace_m = int(avg_pace_min)
+                pace_s = int((avg_pace_min % 1) * 60)
                 legend_stats = [
                     f"⏱️ Time: {m_dur_v:02d}:{s_dur_v:02d}",
-                    f"⚡ Avg W: {avg_w_v:.0f} W",
+                    f"⚡ Avg Pace: {pace_m}:{pace_s:02d} min/km",
                     f"📈 Slope: {slope_v:.4f} L/s",
                     f"🫁 Avg VE: {avg_ve:.1f} L/min",
                     f"🔻 Min: {min_ve:.1f}",
@@ -630,7 +641,7 @@ class VentAnalysisChartExporter(ChartExporter):
             title=self.title, 
             xaxis_title='Time (min)', 
             yaxis=dict(title='VE (L/min)'),
-            yaxis2=dict(title='Power (W)', overlaying='y', side='right', showgrid=False),
+            yaxis2=dict(title='Pace (min/km)', overlaying='y', side='right', showgrid=False, autorange='reversed'),
             **ctx.layout_args
         )
         return fig
