@@ -90,10 +90,22 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     fig_cad.add_hline(y=185, line_dash="dot", line_color="green",
                                       annotation_text="Opt max", annotation_position="right")
                     
+                    # Convert time to hh:mm:ss format for x-axis
+                    time_vals_cad = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
+                    tick_step_cad = 5
+                    tick_vals_cad = np.arange(0, time_vals_cad.max() + tick_step_cad, tick_step_cad)
+                    tick_text_cad = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_cad]
+
                     fig_cad.update_layout(
                         template="plotly_dark",
                         title="Kadencja w czasie",
-                        xaxis_title="Czas [min]",
+                        hovermode="x unified",
+                        xaxis=dict(
+                            title="Czas [hh:mm:ss]",
+                            tickmode="array",
+                            tickvals=tick_vals_cad,
+                            ticktext=tick_text_cad,
+                        ),
                         yaxis_title="Kadencja [SPM]",
                         height=400,
                         margin=dict(l=10, r=10, t=40, b=10),
@@ -164,10 +176,22 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     fig_gct.add_hrect(y0=200, y1=250, fillcolor="yellow", opacity=0.1, line_width=0)
                     fig_gct.add_hrect(y0=250, y1=400, fillcolor="red", opacity=0.1, line_width=0)
                     
+                    # Convert time to hh:mm:ss format for x-axis
+                    time_vals_gct = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
+                    tick_step_gct = 5
+                    tick_vals_gct = np.arange(0, time_vals_gct.max() + tick_step_gct, tick_step_gct)
+                    tick_text_gct = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_gct]
+
                     fig_gct.update_layout(
                         template="plotly_dark",
                         title="Ground Contact Time w czasie",
-                        xaxis_title="Czas [min]",
+                        hovermode="x unified",
+                        xaxis=dict(
+                            title="Czas [hh:mm:ss]",
+                            tickmode="array",
+                            tickvals=tick_vals_gct,
+                            ticktext=tick_text_gct,
+                        ),
                         yaxis_title="GCT [ms]",
                         height=400,
                         margin=dict(l=10, r=10, t=40, b=10),
@@ -229,10 +253,22 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         hovertemplate="Krok: %{y:.2f} m<extra></extra>"
                     ))
                     
+                    # Convert time to hh:mm:ss format for x-axis
+                    time_vals_stride = df_stride[time_col].values if hasattr(df_stride[time_col], 'values') else np.array(df_stride[time_col])
+                    tick_step_stride = 5
+                    tick_vals_stride = np.arange(0, time_vals_stride.max() + tick_step_stride, tick_step_stride)
+                    tick_text_stride = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_stride]
+
                     fig_stride.update_layout(
                         template="plotly_dark",
                         title="Długość kroku w czasie",
-                        xaxis_title="Czas [min]",
+                        hovermode="x unified",
+                        xaxis=dict(
+                            title="Czas [hh:mm:ss]",
+                            tickmode="array",
+                            tickvals=tick_vals_stride,
+                            ticktext=tick_text_stride,
+                        ),
                         yaxis_title="Długość kroku [m]",
                         height=350,
                         margin=dict(l=10, r=10, t=40, b=10),
@@ -314,10 +350,22 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 fig_re.add_hline(y=1.0, line_dash="dash", line_color="green",
                                 annotation_text="RE = 1.0 (dobre)")
                 
+                # Convert time to hh:mm:ss format for x-axis
+                time_vals_re = df_re[time_col].values if hasattr(df_re[time_col], 'values') else np.array(df_re[time_col])
+                tick_step_re = 5
+                tick_vals_re = np.arange(0, time_vals_re.max() + tick_step_re, tick_step_re)
+                tick_text_re = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_re]
+
                 fig_re.update_layout(
                     template="plotly_dark",
                     title="Running Effectiveness w czasie",
-                    xaxis_title="Czas [min]",
+                    hovermode="x unified",
+                    xaxis=dict(
+                        title="Czas [hh:mm:ss]",
+                        tickmode="array",
+                        tickvals=tick_vals_re,
+                        ticktext=tick_text_re,
+                    ),
                     yaxis_title="RE [m/s/W/kg]",
                     height=350,
                     margin=dict(l=10, r=10, t=40, b=10),
@@ -420,11 +468,23 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
             except:
                 pass
     
+    # Convert time to hh:mm:ss format for x-axis
+    time_vals_vo = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
+    tick_step_vo = 5
+    tick_vals_vo = np.arange(0, time_vals_vo.max() + tick_step_vo, tick_step_vo)
+    tick_text_vo = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_vo]
+
     fig_vo.update_layout(
         template="plotly_dark",
         title="Vertical Oscillation w czasie",
+        hovermode="x unified",
         yaxis_title="VO [cm]",
-        xaxis_title="Czas [min]",
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals_vo,
+            ticktext=tick_text_vo,
+        ),
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1.1, x=0)
