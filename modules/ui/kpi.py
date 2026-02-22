@@ -31,47 +31,77 @@ def render_kpi_tab(df_plot, df_plot_resampled, metrics, rider_weight, decoupling
     c12.metric("Oddechy (RR)", f"{metrics.get('avg_rr', 0):.1f} /min")
 
     st.subheader("Wizualizacja Dryfu i Zmienności")
-    if 'watts_smooth' in df_plot.columns:
+    if 'pace_smooth' in df_plot.columns:
         fig_dec = go.Figure()
-        fig_dec.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['watts_smooth'], name='Moc', line=dict(color=Config.COLOR_POWER, width=1.5), hovertemplate="Moc: %{y:.0f} W<extra></extra>"))
+        
+        # Convert pace from sec/km to min/km for display
+        pace_display = df_plot_resampled['pace_smooth'] / 60.0
+        
+        # Format pace for hover (mm:ss)
+        pace_customdata = []
+        for p in pace_display:
+            minutes = int(p)
+            seconds = int((p - minutes) * 60)
+            pace_customdata.append(f"{minutes}:{seconds:02d}")
+        
+        fig_dec.add_trace(go.Scatter(
+            x=df_plot_resampled['time_min'], 
+            y=pace_display, 
+            name='Tempo', 
+            line=dict(color=Config.COLOR_POWER, width=1.5), 
+            hovertemplate="Tempo: %{customdata} min/km<extra></extra>",
+            customdata=[pace_customdata]
+        ))
         
         if 'heartrate_smooth' in df_plot.columns:
             fig_dec.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['heartrate_smooth'], name='HR', yaxis='y2', line=dict(color=Config.COLOR_HR, width=1.5), hovertemplate="HR: %{y:.0f} BPM<extra></extra>"))
         if 'smo2_smooth' in df_plot.columns:
             fig_dec.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['smo2_smooth'], name='SmO2', yaxis='y3', line=dict(color=Config.COLOR_SMO2, dash='dot', width=1.5), hovertemplate="SmO2: %{y:.1f}%<extra></extra>"))
         
-        fig_dec.update_layout(template="plotly_dark", title="Dryf Mocy, Tętna i SmO2 w Czasie", hovermode="x unified",
-            yaxis=dict(title="Moc [W]"),
+        # Convert time_min to hh:mm:ss format for x-axis
+        time_vals = df_plot_resampled['time_min'].values if hasattr(df_plot_resampled['time_min'], 'values') else np.array(df_plot_resampled['time_min'])
+        tick_step = 5  # every 5 minutes
+        tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+        tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
+        fig_dec.update_layout(template="plotly_dark", title="Dryf Tempa, Tętna i SmO2 w Czasie", hovermode="x unified",
+            xaxis=dict(
+                title="Czas [hh:mm:ss]",
+                tickmode="array",
+                tickvals=tick_vals,
+                ticktext=tick_text,
+            ),
+            yaxis=dict(title="Tempo [min/km]", autorange="reversed"),
             yaxis2=dict(title="HR [bpm]", overlaying='y', side='right', showgrid=False),
             yaxis3=dict(title="SmO2 [%]", overlaying='y', side='right', showgrid=False, showticklabels=False, range=[0, 100]),
             legend=dict(orientation="h", y=1.1, x=0))
         st.plotly_chart(fig_dec, use_container_width=True)
         
         st.info("""
-        **💡 Interpretacja: Fizjologia Zmęczenia (Triada: Moc - HR - SmO2)**
+        **💡 Interpretacja: Fizjologia Zmęczenia (Triada: Tempo - HR - SmO2)**
 
-        Ten wykres pokazuje "koszt fizjologiczny" utrzymania zadanej mocy w czasie.
+        Ten wykres pokazuje "koszt fizjologiczny" utrzymania zadanego tempa w czasie.
 
         **1. Stan Idealny (Brak Dryfu):**
-        * **Moc (Zielony):** Linia płaska (stałe obciążenie).
-        * **Tętno (Czerwony):** Linia płaska (równoległa do mocy).
+        * **Tempo (Zielony):** Linia płaska (stałe obciążenie).
+        * **Tętno (Czerwony):** Linia płaska (równoległa do tempa).
         * **SmO2 (Fiolet):** Stabilne.
-        * **Wniosek:** Jesteś w pełnej równowadze tlenowej. Możesz tak jechać godzinami.
+        * **Wniosek:** Jesteś w pełnej równowadze tlenowej. Możesz tak biec godzinami.
 
         **2. Dryf Sercowo-Naczyniowy (Cardiac Drift):**
-        * **Moc:** Stała.
-        * **Tętno:** Powoli rośnie (rozjeżdża się z linią mocy).
+        * **Tempo:** Stałe.
+        * **Tętno:** Powoli rośnie (rozjeżdża się z linią tempa).
         * **SmO2:** Stabilne.
         * **Przyczyna:** Odwodnienie (spadek objętości osocza) lub przegrzanie (krew ucieka do skóry). Serce musi bić szybciej, by pompować tę samą ilość tlenu.
 
         **3. Zmęczenie Metaboliczne (Metabolic Fatigue):**
-        * **Moc:** Stała.
+        * **Tempo:** Stałe.
         * **Tętno:** Stabilne lub lekko rośnie.
         * **SmO2:** **Zaczyna spadać.**
         * **Przyczyna:** Mięśnie tracą wydajność (rekrutacja włókien szybkokurczliwych II typu, które zużywają więcej tlenu). To pierwszy sygnał nadchodzącego "odcięcia".
 
         **4. "Zgon" (Bonking/Failure):**
-        * **Moc:** Zaczyna spadać (nie jesteś w stanie jej utrzymać).
+        * **Tempo:** Zaczyna spadać (nie jesteś w stanie go utrzymać).
         * **Tętno:** Może paradoksalnie spadać (zmęczenie układu nerwowego) lub rosnąć (panika organizmu).
         * **SmO2:** Gwałtowny spadek lub chaotyczne skoki.
         """)
@@ -93,7 +123,22 @@ def render_kpi_tab(df_plot, df_plot_resampled, metrics, rider_weight, decoupling
             if trend_y is not None:
                 fig_s.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=trend_y, name='Trend', line=dict(color='white', dash='dash', width=1.5), hovertemplate="Trend: %{y:.1f}%<extra></extra>"))
             
-            fig_s.update_layout(template="plotly_dark", title="Lokalna Oksydacja (SmO2)", hovermode="x unified", yaxis=dict(title="SmO2 [%]", range=[0, 100]), legend=dict(orientation="h", y=1.1, x=0), margin=dict(l=10, r=10, t=40, b=10), height=400)
+            # Convert time_min to hh:mm:ss format for x-axis
+            time_vals_s = df_plot_resampled['time_min'].values if hasattr(df_plot_resampled['time_min'], 'values') else np.array(df_plot_resampled['time_min'])
+            tick_vals_s = np.arange(0, time_vals_s.max() + tick_step, tick_step)
+            tick_text_s = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_s]
+
+            fig_s.update_layout(template="plotly_dark", title="Lokalna Oksydacja (SmO2)", hovermode="x unified", 
+                xaxis=dict(
+                    title="Czas [hh:mm:ss]",
+                    tickmode="array",
+                    tickvals=tick_vals_s,
+                    ticktext=tick_text_s,
+                ),
+                yaxis=dict(title="SmO2 [%]", range=[0, 100]), 
+                legend=dict(orientation="h", y=1.1, x=0), 
+                margin=dict(l=10, r=10, t=40, b=10), 
+                height=400)
             st.plotly_chart(fig_s, use_container_width=True)
             
             st.info("""
@@ -112,7 +157,21 @@ def render_kpi_tab(df_plot, df_plot_resampled, metrics, rider_weight, decoupling
         st.subheader("Tętno")
         fig_h = go.Figure()
         fig_h.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['heartrate_smooth'], name='HR', fill='tozeroy', line=dict(color='#ef553b', width=2), hovertemplate="HR: %{y:.0f} BPM<extra></extra>"))
-        fig_h.update_layout(template="plotly_dark", title="Odpowiedź Sercowa (HR)", hovermode="x unified", yaxis=dict(title="HR [bpm]"), margin=dict(l=10, r=10, t=40, b=10), height=400)
+        # Convert time_min to hh:mm:ss format for x-axis
+        time_vals_h = df_plot_resampled['time_min'].values if hasattr(df_plot_resampled['time_min'], 'values') else np.array(df_plot_resampled['time_min'])
+        tick_vals_h = np.arange(0, time_vals_h.max() + tick_step, tick_step)
+        tick_text_h = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_h]
+
+        fig_h.update_layout(template="plotly_dark", title="Odpowiedź Sercowa (HR)", hovermode="x unified", 
+            xaxis=dict(
+                title="Czas [hh:mm:ss]",
+                tickmode="array",
+                tickvals=tick_vals_h,
+                ticktext=tick_text_h,
+            ),
+            yaxis=dict(title="HR [bpm]"), 
+            margin=dict(l=10, r=10, t=40, b=10), 
+            height=400)
         st.plotly_chart(fig_h, use_container_width=True)
         
         st.info("""
@@ -166,11 +225,25 @@ def render_kpi_tab(df_plot, df_plot_resampled, metrics, rider_weight, decoupling
     fig_v.add_hline(y=vt1_vent, line_dash="dot", line_color="green", annotation_text="VT1", annotation_position="bottom right")
     fig_v.add_hline(y=vt2_vent, line_dash="dot", line_color="red", annotation_text="VT2", annotation_position="bottom right")
 
+    # Convert time_min to hh:mm:ss format for x-axis
+    time_vals_v = df_plot_resampled['time_min'].values if hasattr(df_plot_resampled['time_min'], 'values') else np.array(df_plot_resampled['time_min'])
+    tick_step_v = 5  # every 5 minutes
+    tick_vals_v = np.arange(0, time_vals_v.max() + tick_step_v, tick_step_v)
+    tick_text_v = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_v]
+
     # LAYOUT (Unified Hover)
     fig_v.update_layout(
         template="plotly_dark",
         title="Mechanika Oddechu (Wydajność vs Częstość)",
         hovermode="x unified",
+        
+        # X-axis with hh:mm:ss format
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals_v,
+            ticktext=tick_text_v,
+        ),
         
         # Oś Lewa
         yaxis=dict(title="Wentylacja [L/min]"),

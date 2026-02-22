@@ -417,12 +417,12 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                             colorbar=dict(title="Czas (s)"),
                         ),
                         name="SmO2 vs Power",
-                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
+                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Tempo:</b> %{x:.2f} min/km<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
                     )
                 )
                 fig_scatter.update_layout(
-                    title="Korelacja: SmO2 vs Moc",
-                    xaxis_title="Power (W)",
+                    title="Korelacja: SmO2 vs Tempo",
+                    xaxis_title="Tempo [min/km]",
                     yaxis_title="SmO2 (%)",
                     height=400,
                     hovermode="closest",

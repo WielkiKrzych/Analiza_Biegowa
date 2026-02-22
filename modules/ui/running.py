@@ -344,7 +344,7 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         fig_z.update_layout(
             template="plotly_dark",
             showlegend=False,
-            xaxis_title="Czas [min]",
+            xaxis_title="Czas [hh:mm:ss]",
             height=300,
             margin=dict(l=10, r=10, t=20, b=10),
         )
@@ -468,7 +468,7 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             fig_pdc.update_layout(
                 template="plotly_dark",
                 title="Pace Duration Curve",
-                xaxis=dict(title="Czas [min]", type="log"),
+                xaxis=dict(title="Czas [hh:mm:ss]", type="log"),
                 yaxis=dict(
                     title="Tempo [min/km]",
                     autorange="reversed",

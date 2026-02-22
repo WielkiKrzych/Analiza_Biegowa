@@ -47,17 +47,17 @@ def render_hemo_tab(target_df):
             df_hemo,
             x=col_smo2,
             y=thb_val,
-            color="watts" if "watts" in df_hemo.columns else None,
+            color="pace" if "pace" in df_hemo.columns else None,
             title="Hemo-Scatter: SmO2 (Oś X) vs THb (Oś Y)",
             labels={
                 col_smo2: "SmO2 (Saturacja) [%]",
                 thb_val: "THb (Objętość Krwi) [a.u.]",
-                "watts": "Moc [W]",
+                "pace": "Tempo [min/km]",
             },
             hover_data={
                 col_smo2: ":.1f",
                 thb_val: ":.1f",
-                "watts": ":.0f" if "watts" in df_hemo.columns else False,
+                "pace": ":.2f" if "pace" in df_hemo.columns else False,
             },
             template="plotly_dark",
             color_continuous_scale="Turbo",
@@ -139,13 +139,13 @@ def render_hemo_tab(target_df):
             )
         )
 
-        # Tło - Moc (dla kontekstu)
-        if "watts_smooth_30s" in target_df:
+        # Tło - Tempo (dla kontekstu)
+        if "pace_smooth" in target_df:
             fig_trend.add_trace(
                 go.Scatter(
                     x=target_df["time_min"],
-                    y=target_df["watts_smooth_30s"],
-                    name="Moc",
+                    y=target_df["pace_smooth"] / 60.0,  # Convert to min/km
+                    name="Tempo",
                     line=dict(color="rgba(255,255,255,0.1)", width=1),
                     fill="tozeroy",
                     fillcolor="rgba(255,255,255,0.05)",
@@ -158,7 +158,7 @@ def render_hemo_tab(target_df):
         fig_trend.update_layout(
             template="plotly_dark",
             title="SmO2 vs THb w Czasie",
-            xaxis=dict(title="Czas [min]", tickformat=".0f", hoverformat=".0f"),
+            xaxis=dict(title="Czas [hh:mm:ss]", tickformat=".0f", hoverformat=".0f"),
             hovermode="x unified",
             yaxis=dict(title=dict(text="SmO2 [%]", font=dict(color="#ab63fa"))),
             yaxis2=dict(
@@ -167,7 +167,7 @@ def render_hemo_tab(target_df):
                 side="right",
             ),
             yaxis3=dict(
-                title="Moc", overlaying="y", side="right", showgrid=False, showticklabels=False
+                title="Tempo", overlaying="y", side="right", showgrid=False, showticklabels=False
             ),
             height=450,
         )

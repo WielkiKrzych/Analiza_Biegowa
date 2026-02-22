@@ -720,12 +720,12 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
                             colorbar=dict(title="Czas (s)"),
                         ),
                         name="VE vs Power",
-                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>VE:</b> %{y:.1f} L/min<extra></extra>",
+                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Tempo:</b> %{x:.2f} min/km<br><b>VE:</b> %{y:.1f} L/min<extra></extra>",
                     )
                 )
                 fig_scatter.update_layout(
-                    title="Korelacja: VE vs Moc",
-                    xaxis_title="Power (W)",
+                    title="Korelacja: VE vs Tempo",
+                    xaxis_title="Tempo [min/km]",
                     yaxis_title="VE (L/min)",
                     height=400,
                     hovermode="closest",
