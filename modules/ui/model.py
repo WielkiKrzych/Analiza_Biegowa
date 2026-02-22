@@ -96,7 +96,7 @@ def render_model_tab(df_plot, cp_input, w_prime_input):
                 fig_model.update_layout(
                     template="plotly_dark",
                     title="Pace Duration Curve: Rzeczywistość vs Model",
-                    xaxis_title="Czas trwania [min]",
+                    xaxis_title="Czas trwania [mm:ss]",
                     yaxis_title="Tempo [s/km]",
                     yaxis=dict(autorange="reversed"),
                     hovermode="x unified",
