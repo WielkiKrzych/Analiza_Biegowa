@@ -203,99 +203,39 @@ def render_report_tab(
     st.plotly_chart(fig_exec, use_container_width=True)
 
     st.markdown("---")
-    col_dist1, col_dist2 = st.columns(2)
+    
+    # Rozkład tętna - pozostawiony
+    st.subheader("Rozkład Tętna")
+    if "heartrate" in df_plot.columns:
+        # OPTIMIZATION: Use numpy for faster binning
+        hr_valid = df_plot["heartrate"].dropna()
+        if len(hr_valid) > 0:
+            # Round and count using numpy (faster than pandas for this)
+            hr_rounded = np.round(hr_valid).astype(int)
+            hr_min, hr_max = hr_rounded.min(), hr_rounded.max()
+            bins = np.arange(hr_min, hr_max + 2)
+            counts, edges = np.histogram(hr_rounded, bins=bins)
 
-    with col_dist1:
-        st.subheader("Czas w Strefach (Moc)")
-        if "watts" in df_plot.columns:
-            # OPTIMIZATION: Pass only Series, not full DataFrame
-            pcts = _calculate_zone_distribution(df_plot["watts"], cp_input)
+            # Filter out zero counts for cleaner display
+            mask = counts > 0
 
-            # OPTIMIZATION: O(1) dict lookup instead of O(k) list.index()
-            bar_colors = [ZONE_COLOR_MAP[z] for z in pcts.index]
-
-            fig_hist = go.Figure(
+            fig_hr = go.Figure(
                 go.Bar(
-                    x=pcts.values,
-                    y=pcts.index.astype(str),
-                    orientation="h",
-                    marker_color=bar_colors,
-                    # OPTIMIZATION: Let Plotly format text instead of list comprehension
-                    text=pcts.values,
-                    texttemplate="%{text:.1f}%",
-                    textposition="auto",
+                    x=edges[:-1][mask],
+                    y=counts[mask],
+                    marker_color=Config.COLOR_HR,
+                    hovertemplate="<b>%{x} BPM</b><br>Czas: %{y} s<extra></extra>",
                 )
             )
-            fig_hist.update_layout(
+            fig_hr.update_layout(
                 template="plotly_dark",
                 height=250,
-                xaxis=dict(visible=False),
-                yaxis=dict(showgrid=False),
+                xaxis_title="BPM",
+                yaxis=dict(visible=False),
+                bargap=0.1,
                 margin=dict(t=20, b=20),
             )
-            st.plotly_chart(fig_hist, use_container_width=True)
-
-    with col_dist2:
-        st.subheader("Rozkład Tętna")
-        if "heartrate" in df_plot.columns:
-            # OPTIMIZATION: Use numpy for faster binning
-            hr_valid = df_plot["heartrate"].dropna()
-            if len(hr_valid) > 0:
-                # Round and count using numpy (faster than pandas for this)
-                hr_rounded = np.round(hr_valid).astype(int)
-                hr_min, hr_max = hr_rounded.min(), hr_rounded.max()
-                bins = np.arange(hr_min, hr_max + 2)
-                counts, edges = np.histogram(hr_rounded, bins=bins)
-
-                # Filter out zero counts for cleaner display
-                mask = counts > 0
-
-                fig_hr = go.Figure(
-                    go.Bar(
-                        x=edges[:-1][mask],
-                        y=counts[mask],
-                        marker_color=Config.COLOR_HR,
-                        hovertemplate="<b>%{x} BPM</b><br>Czas: %{y} s<extra></extra>",
-                    )
-                )
-                fig_hr.update_layout(
-                    template="plotly_dark",
-                    height=250,
-                    xaxis_title="BPM",
-                    yaxis=dict(visible=False),
-                    bargap=0.1,
-                    margin=dict(t=20, b=20),
-                )
-                st.plotly_chart(fig_hr, use_container_width=True)
-
-    st.markdown("---")
-    c_bot1, c_bot2 = st.columns(2)
-
-    with c_bot1:
-        st.subheader("🏆 Peak Power")
-        if "watts" in df_plot.columns:
-            # OPTIMIZATION: Cached MMP calculation (computed once per session)
-            mmp_values = _calculate_mmp_peaks(df_plot["watts"], MMP_WINDOWS)
-
-            cols = st.columns(5)
-            for col, (label, window) in zip(cols, MMP_WINDOWS.items()):
-                val = mmp_values.get(label)
-                with col:
-                    if val is not None:
-                        w_per_kg = val / rider_weight if rider_weight > 0 else 0
-                        st.metric(label, f"{val:.0f} W", f"{w_per_kg:.1f} W/kg")
-                    else:
-                        st.metric(label, "--")
-
-    with c_bot2:
-        st.subheader("🎯 Strefy (wg CP)")
-        # OPTIMIZATION: Single f-string, already efficient O(1)
-        z2_l, z2_h = int(0.56 * cp_input), int(0.75 * cp_input)
-        z3_l, z3_h = int(0.76 * cp_input), int(0.90 * cp_input)
-        z4_l, z4_h = int(0.91 * cp_input), int(1.05 * cp_input)
-        st.info(
-            f"**Z2 (Baza):** {z2_l}-{z2_h} W | **Z3 (Tempo):** {z3_l}-{z3_h} W | **Z4 (Próg):** {z4_l}-{z4_h} W"
-        )
+            st.plotly_chart(fig_hr, use_container_width=True)
 
     # ============================================================
     # SEKCJA WIZUALIZACJI DRYFU I ZMIENNOŚCI (z kpi.py)

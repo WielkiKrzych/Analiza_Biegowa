@@ -44,14 +44,22 @@ def _build_thermal_chart(df_plot) -> Optional[go.Figure]:
     fig.add_hline(y=38.5, line_dash="dash", line_color="red", opacity=0.5, annotation_text="Krytyczna (38.5°C)", annotation_position="top left")
     fig.add_hline(y=37.5, line_dash="dot", line_color="green", opacity=0.5, annotation_text="Optymalna (37.5°C)", annotation_position="bottom left")
 
+    # Convert time_min to hh:mm:ss format for x-axis
+    import numpy as np
+    time_vals = df_plot['time_min'].values if hasattr(df_plot['time_min'], 'values') else np.array(df_plot['time_min'])
+    tick_step = 5  # every 5 minutes
+    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
     fig.update_layout(
         template="plotly_dark",
         title="Termoregulacja: Temperatura Głęboka vs Indeks Zmęczenia (HSI)",
         hovermode="x unified",
         xaxis=dict(
-            title="Czas [min]",
-            tickformat=".0f",
-            hoverformat=".0f"
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals,
+            ticktext=tick_text,
         ),
         yaxis=dict(title="Core Temp [°C]"),
         yaxis2=dict(title="HSI [0-10]", overlaying="y", side="right", showgrid=False, range=[0, 12]),
@@ -168,243 +176,3 @@ def render_thermal_tab(df_plot):
             st.warning("Zbyt mało danych do analizy dryfu.")
     else:
         st.error("Brak danych (Moc, HR lub Core Temp) do pełnej analizy.")
-
-    # =========================================================================
-    # PREDYKCJA STRAT MOCY W CIEPLE
-    # =========================================================================
-    st.divider()
-    st.header("🌡️ Predykcja Strat Mocy w Cieple")
-    
-    _render_thermal_prediction_section(df_plot, decay_res)
-
-
-def _render_thermal_prediction_section(df_plot, decay_result):
-    """
-    Renderuje sekcję predykcji strat mocy w cieple.
-    
-    Na podstawie dEF/dT, dHR/dT, HSI.
-    """
-    import numpy as np
-    from modules.calculations.thermal import predict_thermal_performance
-    
-    st.markdown("""
-    Model predykcji strat wydajnościowych na podstawie:
-    - **dEF/dT** — spadek wydajności (W/bpm) na °C
-    - **dHR/dT** — wzrost kosztu sercowego na °C
-    - **HSI** — Heat Strain Index
-    """)
-    
-    # === PARAMETRY WEJŚCIOWE ===
-    st.subheader("📊 Parametry Symulacji")
-    
-    c1, c2, c3, c4 = st.columns(4)
-    cp_input = c1.number_input("CP [W]", min_value=150, max_value=500, value=280, step=10)
-    ftp_input = c2.number_input("FTP [W]", min_value=150, max_value=500, value=275, step=10)
-    w_prime_input = c3.number_input("W' [kJ]", min_value=10.0, max_value=40.0, value=20.0, step=1.0)
-    hr_threshold = c4.number_input("HR @ próg [bpm]", min_value=120, max_value=200, value=165, step=5)
-    
-    c5, c6 = st.columns(2)
-    # Use detected decay if available, otherwise default
-    default_decay = decay_result.get('decay_pct_per_c', -3.0) if decay_result.get('is_significant', False) else -3.0
-    decay_pct = c5.slider("Spadek wydajności [%/°C]", min_value=-10.0, max_value=0.0, value=float(default_decay), step=0.5)
-    hr_increase = c6.slider("Wzrost HR [bpm/°C]", min_value=1.0, max_value=10.0, value=3.0, step=0.5)
-    
-    # === TEMPERATURA DOCELOWA ===
-    st.subheader("🎯 Temperatura Startu / Scenariusz")
-    target_temp = st.slider("Temperatura rdzenia [°C]", min_value=37.0, max_value=41.0, value=39.0, step=0.1)
-    
-    # Oblicz predykcję
-    prediction = predict_thermal_performance(
-        cp=cp_input,
-        ftp=ftp_input,
-        w_prime=w_prime_input,
-        baseline_hr=hr_threshold,
-        target_temp=target_temp,
-        decay_pct_per_c=decay_pct,
-        hr_increase_per_c=hr_increase
-    )
-    
-    # === WYNIKI ===
-    st.subheader("📉 Prognoza Degradacji Wydajności")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid {prediction['risk_color']}; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">Critical Power</p>
-            <h2 style="margin:5px 0;">{prediction['cp_degraded']:.0f} W</h2>
-            <p style="margin:0; color:{prediction['risk_color']};">↓ {prediction['cp_loss_pct']:.1f}%</p>
-            <p style="margin:0; color:#666; font-size:0.75em;">(baseline: {prediction['cp_baseline']} W)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid {prediction['risk_color']}; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">FTP</p>
-            <h2 style="margin:5px 0;">{prediction['ftp_degraded']:.0f} W</h2>
-            <p style="margin:0; color:{prediction['risk_color']};">↓ {prediction['ftp_loss_pct']:.1f}%</p>
-            <p style="margin:0; color:#666; font-size:0.75em;">(baseline: {prediction['ftp_baseline']} W)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid {prediction['risk_color']}; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">W' (Anaerobic)</p>
-            <h2 style="margin:5px 0;">{prediction['w_prime_degraded']:.1f} kJ</h2>
-            <p style="margin:0; color:{prediction['risk_color']};">↓ {prediction['w_prime_loss_pct']:.1f}%</p>
-            <p style="margin:0; color:#666; font-size:0.75em;">(baseline: {prediction['w_prime_baseline']} kJ)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # HR Cost & TTE
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid #ff7f0e; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">Koszt HR (przy tej samej mocy)</p>
-            <h2 style="margin:5px 0; color:#ff7f0e;">+{prediction['hr_cost_increase']:.0f} bpm</h2>
-            <p style="margin:0; color:#888;">{prediction['hr_baseline']:.0f} → {prediction['hr_at_threshold']:.0f} bpm</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid #d62728; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">Skrócenie TTE @ FTP</p>
-            <h2 style="margin:5px 0; color:#d62728;">-{prediction['tte_reduction_pct']:.0f}%</h2>
-            <p style="margin:0; color:#888;">{prediction['tte_baseline_min']:.0f} → {prediction['tte_degraded_min']:.0f} min</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid {prediction['risk_color']}; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.85em;">Heat Strain Index (HSI)</p>
-            <h2 style="margin:5px 0; color:{prediction['risk_color']};">{prediction['hsi_estimated']:.1f} / 10</h2>
-            <p style="margin:0; color:{prediction['risk_color']};">Ryzyko: {prediction['risk_label']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # === WYKRES: CP vs TEMPERATURA ===
-    st.markdown("### 📊 Krzywa Degradacji CP vs Temperatura")
-    
-    temps = np.arange(37.0, 41.1, 0.2)
-    cp_values = []
-    ftp_values = []
-    
-    for t in temps:
-        pred = predict_thermal_performance(
-            cp=cp_input,
-            ftp=ftp_input,
-            w_prime=w_prime_input,
-            baseline_hr=hr_threshold,
-            target_temp=t,
-            decay_pct_per_c=decay_pct,
-            hr_increase_per_c=hr_increase
-        )
-        cp_values.append(pred['cp_degraded'])
-        ftp_values.append(pred['ftp_degraded'])
-    
-    fig_cp = go.Figure()
-    
-    fig_cp.add_trace(go.Scatter(
-        x=temps,
-        y=cp_values,
-        mode='lines',
-        name='CP [W]',
-        line=dict(color='#1f77b4', width=3),
-        hovertemplate="Temp: %{x:.1f}°C<br>CP: %{y:.0f} W<extra></extra>"
-    ))
-    
-    fig_cp.add_trace(go.Scatter(
-        x=temps,
-        y=ftp_values,
-        mode='lines',
-        name='FTP [W]',
-        line=dict(color='#ff7f0e', width=2, dash='dash'),
-        hovertemplate="Temp: %{x:.1f}°C<br>FTP: %{y:.0f} W<extra></extra>"
-    ))
-    
-    # Marker for target temp
-    fig_cp.add_vline(x=target_temp, line_dash="dot", line_color="red", 
-                     annotation_text=f"{target_temp}°C", annotation_position="top")
-    
-    fig_cp.update_layout(
-        template="plotly_dark",
-        title="Degradacja Mocy Krytycznej i FTP w Funkcji Temperatury",
-        xaxis=dict(title="Temperatura Rdzenia [°C]"),
-        yaxis=dict(title="Moc [W]"),
-        height=400,
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", y=1.1, x=0)
-    )
-    
-    st.plotly_chart(fig_cp, use_container_width=True)
-    
-    # Wnioski
-    if prediction['temp_delta'] > 1.5:
-        st.error(f"""
-        🔴 **Wysoki koszt termiczny** przy {target_temp}°C:
-        
-        - CP spada o **{prediction['cp_loss_pct']:.0f}%** (z {prediction['cp_baseline']} do {prediction['cp_degraded']:.0f} W)
-        - HR rośnie o **+{prediction['hr_cost_increase']:.0f} bpm** przy tej samej mocy
-        - Czas do wyczerpania skraca się o **{prediction['tte_reduction_pct']:.0f}%**
-        
-        **Rekomendacja:** Pre-cooling, aktywne chłodzenie, redukcja tempa o {prediction['cp_loss_pct']:.0f}%
-        """)
-    elif prediction['temp_delta'] > 0.5:
-        st.warning(f"""
-        ⚠️ **Umiarkowany koszt termiczny** przy {target_temp}°C:
-        
-        - Spadek mocy: {prediction['cp_loss_pct']:.1f}%
-        - Wzrost HR: +{prediction['hr_cost_increase']:.0f} bpm
-        
-        **Rekomendacja:** Nawadnianie, chłodzenie nadgarstków, monitorowanie HSI
-        """)
-    else:
-        st.success(f"""
-        ✅ **Niski koszt termiczny** przy {target_temp}°C — wydajność zbliżona do optymalnej.
-        """)
-    
-    # Teoria
-    with st.expander("📖 Model i Metodologia", expanded=False):
-        st.markdown(f"""
-        ### Wzory Modelu
-        
-        **Degradacja CP/FTP:**
-        ```
-        CP_degraded = CP × (1 + dEF/dT × ΔT)
-        
-        gdzie:
-        - dEF/dT = {decay_pct:.1f}% / °C (wykryty: {decay_result.get('decay_pct_per_c', 'N/A')})
-        - ΔT = {prediction['temp_delta']:.1f}°C
-        ```
-        
-        **Degradacja W':**
-        ```
-        W'_degraded = W' × (1 + dEF/dT × 1.5 × ΔT)
-        ```
-        W' degraduje szybciej, ponieważ ciepło zwiększa koszt glikolityczny.
-        
-        **Wzrost HR:**
-        ```
-        HR_at_threshold = HR_baseline + {hr_increase:.1f} × ΔT
-        ```
-        
-        **Redukcja TTE:**
-        ```
-        TTE_reduction = 5% × ΔT
-        ```
-        
-        ---
-        
-        ### Źródła
-        - WKO5 Thermal Decay Model
-        - INSCYD VLaMax × Temperature interaction
-        - Periard et al. (2015) — Heat stress and performance
-        """)

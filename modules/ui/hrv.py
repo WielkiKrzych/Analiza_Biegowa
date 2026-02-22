@@ -148,11 +148,22 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
             annotation_position="bottom left",
         )
 
+        # Convert time_min to hh:mm:ss format for x-axis
+        time_vals = df_dfa["time_min"].values if hasattr(df_dfa["time_min"], 'values') else np.array(df_dfa["time_min"])
+        tick_step = 5  # every 5 minutes
+        tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+        tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
         fig_dfa.update_layout(
             template="plotly_dark",
             title="Indeks Zmienności HRV (DFA Alpha-1) vs Czas",
             hovermode="x unified",
-            xaxis=dict(title="Czas [min]"),
+            xaxis=dict(
+                title="Czas [hh:mm:ss]",
+                tickmode="array",
+                tickvals=tick_vals,
+                ticktext=tick_text,
+            ),
             yaxis=dict(title="Indeks HRV (Alpha-1)", range=[0.2, 1.4]),
             yaxis2=dict(title="Moc [W]", overlaying="y", side="right", showgrid=False),
             height=500,
@@ -187,11 +198,21 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                     hovertemplate="Moc: %{y:.0f} W<extra></extra>",
                 )
             )
+            # Convert time_min to hh:mm:ss format for x-axis
+            time_vals_rmssd = df_dfa["time_min"].values if hasattr(df_dfa["time_min"], 'values') else np.array(df_dfa["time_min"])
+            tick_vals_rmssd = np.arange(0, time_vals_rmssd.max() + tick_step, tick_step)
+            tick_text_rmssd = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_rmssd]
+
             fig_rmssd.update_layout(
                 template="plotly_dark",
                 title="RMSSD (Root Mean Square of Successive Differences)",
                 hovermode="x unified",
-                xaxis=dict(title="Czas [min]"),
+                xaxis=dict(
+                    title="Czas [hh:mm:ss]",
+                    tickmode="array",
+                    tickvals=tick_vals_rmssd,
+                    ticktext=tick_text_rmssd,
+                ),
                 yaxis=dict(title="RMSSD [ms]"),
                 yaxis2=dict(title="Moc [W]", overlaying="y", side="right", showgrid=False),
                 height=400,

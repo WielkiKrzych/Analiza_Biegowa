@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
-def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
+def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
     st.header("⚡ Kalkulator Spalania Glikogenu (The Bonk Prediction)")
     
     # --- DETEKCJA TYPU SPORTU ---
@@ -91,7 +91,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         # Research shows:
         # - FatMax occurs around 55-65% FTP
         # - Above threshold, almost all energy from CHO
-        intensity = df_plot['watts'] / cp_input if cp_input > 0 else df_plot['watts'] / 280
+        intensity = df_plot['watts'] / critical_pace if critical_pace > 0 else df_plot['watts'] / 280
         
         # Piecewise linear CHO fraction model
         # Z1 (<55% FTP): ~30% CHO (fat dominant - recovery)
@@ -116,7 +116,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         glycogen_balance = initial_glycogen - cumulative_burn + cumulative_intake
         
         df_nutri = pd.DataFrame({
-            'Czas [min]': df_plot['time_min'],
+            'Czas [hh:mm:ss]': df_plot['time_min'],
             'Bilans Glikogenu [g]': glycogen_balance,
             'Spalone [g]': cumulative_burn,
             'Spożyte [g]': cumulative_intake,
@@ -131,7 +131,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         line_color = '#00cc96' if df_nutri['Bilans Glikogenu [g]'].min() > 0 else '#ef553b'
         
         fig_nutri.add_trace(go.Scatter(
-            x=df_nutri['Czas [min]'], 
+            x=df_nutri['Czas [hh:mm:ss]'], 
             y=df_nutri['Bilans Glikogenu [g]'], 
             name='Zapas Glikogenu', 
             fill='tozeroy', 
@@ -147,7 +147,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
             title=f"Symulacja Baku Paliwa (Start: {initial_glycogen}g, Intake: {carb_intake}g/h)",
             hovermode="x unified",
             yaxis=dict(title="Glikogen [g]"),
-            xaxis=dict(title="Czas [min]", tickformat=".0f"),
+            xaxis=dict(title="Czas [hh:mm:ss]", tickformat=".0f"),
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
             showlegend=False
@@ -161,7 +161,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         burn_rate_smooth = df_nutri['Burn Rate [g/h]'].rolling(window=60, center=True, min_periods=1).mean()
         
         fig_burn.add_trace(go.Scatter(
-            x=df_nutri['Czas [min]'], 
+            x=df_nutri['Czas [hh:mm:ss]'], 
             y=burn_rate_smooth, 
             name='Spalanie', 
             line=dict(color='#ff7f0e', width=2), 
@@ -180,7 +180,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
             title="Zapotrzebowanie na Węglowodany",
             hovermode="x unified",
             yaxis=dict(title="Burn Rate [g/h]"),
-            xaxis=dict(title="Czas [min]", tickformat=".0f"),
+            xaxis=dict(title="Czas [hh:mm:ss]", tickformat=".0f"),
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
             showlegend=False
@@ -201,7 +201,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         
         if final_balance < 0:
             bonk_mask = df_nutri['Bilans Glikogenu [g]'] < 0
-            bonk_time = df_nutri.loc[bonk_mask, 'Czas [min]'].iloc[0]
+            bonk_time = df_nutri.loc[bonk_mask, 'Czas [hh:mm:ss]'].iloc[0]
             st.error(f"⚠️ **UWAGA:** Według symulacji, Twoje zapasy glikogenu wyczerpały się w okolicach {bonk_time:.0f} minuty! To oznacza ryzyko 'odcięcia' (bonk).")
         else:
             st.success(f"✅ **OK:** Zakończyłeś trening z zapasem {final_balance:.0f}g glikogenu. Strategia żywieniowa wystarczająca dla tej intensywności.")
@@ -268,7 +268,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
     
     elif 'pace' in df_plot.columns:
         runner_weight = st.session_state.get('runner_weight', 75.0)
-        threshold_pace = cp_input
+        threshold_pace = critical_pace
         
         # Poprawiony wzór dla biegu: energia [kcal/h] = masa [kg] × prędkość [km/h] × 1.05
         # Standardowy koszt metaboliczny biegu to około 1.0-1.05 kcal/kg/km
@@ -293,7 +293,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         glycogen_balance = initial_glycogen - cumulative_burn + cumulative_intake
         
         df_nutri = pd.DataFrame({
-            'Czas [min]': df_plot['time_min'],
+            'Czas [hh:mm:ss]': df_plot['time_min'],
             'Bilans Glikogenu [g]': glycogen_balance,
             'Spalone [g]': cumulative_burn,
             'Spożyte [g]': cumulative_intake,
@@ -305,7 +305,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         line_color = '#00cc96' if df_nutri['Bilans Glikogenu [g]'].min() > 0 else '#ef553b'
         
         fig_nutri.add_trace(go.Scatter(
-            x=df_nutri['Czas [min]'], 
+            x=df_nutri['Czas [hh:mm:ss]'], 
             y=df_nutri['Bilans Glikogenu [g]'], 
             name='Zapas Glikogenu', 
             fill='tozeroy', 
@@ -320,7 +320,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
             title=f"Symulacja Baku Paliwa - Bieg (Start: {initial_glycogen}g, Intake: {carb_intake}g/h)",
             hovermode="x unified",
             yaxis=dict(title="Glikogen [g]"),
-            xaxis=dict(title="Czas [min]", tickformat=".0f"),
+            xaxis=dict(title="Czas [hh:mm:ss]", tickformat=".0f"),
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
             showlegend=False
@@ -333,7 +333,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         burn_rate_smooth = df_nutri['Burn Rate [g/h]'].rolling(window=60, center=True, min_periods=1).mean()
         
         fig_burn.add_trace(go.Scatter(
-            x=df_nutri['Czas [min]'], 
+            x=df_nutri['Czas [hh:mm:ss]'], 
             y=burn_rate_smooth, 
             name='Spalanie', 
             line=dict(color='#ff7f0e', width=2), 
@@ -349,7 +349,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
             title="Zapotrzebowanie na Węglowodany",
             hovermode="x unified",
             yaxis=dict(title="Burn Rate [g/h]"),
-            xaxis=dict(title="Czas [min]", tickformat=".0f"),
+            xaxis=dict(title="Czas [hh:mm:ss]", tickformat=".0f"),
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
             showlegend=False
@@ -369,7 +369,7 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         
         if final_balance < 0:
             bonk_mask = df_nutri['Bilans Glikogenu [g]'] < 0
-            bonk_time = df_nutri.loc[bonk_mask, 'Czas [min]'].iloc[0]
+            bonk_time = df_nutri.loc[bonk_mask, 'Czas [hh:mm:ss]'].iloc[0]
             st.error(f"⚠️ **UWAGA:** Według symulacji, Twoje zapasy glikogenu wyczerpały się w okolicach {bonk_time:.0f} minuty! To oznacza ryzyko 'odcięcia' (bonk).")
         else:
             st.success(f"✅ **OK:** Zakończyłeś bieg z zapasem {final_balance:.0f}g glikogenu. Strategia żywieniowa wystarczająca dla tej intensywności.")

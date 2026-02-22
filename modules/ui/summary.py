@@ -28,7 +28,7 @@ def _hash_dataframe(df: pd.DataFrame) -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
-    """Build training timeline chart with power, HR, SmO2, VE (cached)."""
+    """Build training timeline chart with pace, HR, SmO2, VE (cached)."""
     fig = go.Figure()
     time_x = (
         df_plot["time_min"]
@@ -41,26 +41,31 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     if time_x is None:
         return None
 
-    if "watts_smooth" in df_plot.columns:
+    # Use pace instead of power for running
+    if "pace_smooth" in df_plot.columns:
+        pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
         fig.add_trace(
             go.Scatter(
                 x=time_x,
-                y=df_plot["watts_smooth"],
-                name="Moc",
+                y=pace_display,
+                name="Tempo",
                 fill="tozeroy",
                 line=dict(color=Config.COLOR_POWER, width=1),
-                hovertemplate="Moc: %{y:.0f} W<extra></extra>",
+                hovertemplate="Tempo: %{customdata}<extra></extra>",
+                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" for p in pace_display],
             )
         )
-    elif "watts" in df_plot.columns:
+    elif "pace" in df_plot.columns:
+        pace_display = df_plot["pace"].rolling(5, center=True).mean() / 60.0
         fig.add_trace(
             go.Scatter(
                 x=time_x,
-                y=df_plot["watts"].rolling(5, center=True).mean(),
-                name="Moc",
+                y=pace_display,
+                name="Tempo",
                 fill="tozeroy",
                 line=dict(color=Config.COLOR_POWER, width=1),
-                hovertemplate="Moc: %{y:.0f} W<extra></extra>",
+                hovertemplate="Tempo: %{customdata}<extra></extra>",
+                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" for p in pace_display],
             )
         )
 
@@ -133,12 +138,23 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             )
         )
 
+    # Convert time_min to hh:mm:ss format for x-axis
+    time_vals = time_x.values if hasattr(time_x, 'values') else np.array(time_x)
+    tick_step = 5  # every 5 minutes
+    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
     fig.update_layout(
         template="plotly_dark",
-        title="Przebieg Treningu (Moc, HR, SmO2, VE)",
+        title="Przebieg Treningu (Tempo, HR, SmO2, VE)",
         hovermode="x unified",
-        xaxis=dict(title="Czas [min]"),
-        yaxis=dict(title="Moc [W]", side="left"),
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals,
+            ticktext=tick_text,
+        ),
+        yaxis=dict(title="Tempo [min/km]", side="left", autorange="reversed"),
         yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
         yaxis3=dict(title="SmO2 [%]", overlaying="y", side="right", position=0.95, showgrid=False),
         yaxis4=dict(title="VE [L/min]", overlaying="y", side="right", position=0.98, showgrid=False),
@@ -348,17 +364,9 @@ def render_summary_tab(
     st.markdown("---")
 
     # =========================================================================
-    # 4. THRESHOLD DISCORDANCE INDEX (TDI)
+    # 4. VO2max UNCERTAINTY ESTIMATION (CI95%)
     # =========================================================================
-    st.subheader("4️⃣ Threshold Discordance Index (TDI)")
-    _render_tdi_analysis(eff_vt1, eff_lt1)
-
-    st.markdown("---")
-
-    # =========================================================================
-    # 5. VO2max UNCERTAINTY ESTIMATION (CI95%)
-    # =========================================================================
-    st.subheader("5️⃣ Estymacja VO2max z Niepewnością (CI95%)")
+    st.subheader("4️⃣ Estymacja VO2max z Niepewnością (CI95%)")
     _render_vo2max_uncertainty(df_plot, rider_weight)
 
 
@@ -489,7 +497,6 @@ def _estimate_cp_wprime(df_plot):
         return 0, 0
 
 
-
 def _render_smo2_thb_chart(df_plot):
     """Renderowanie wykresu SmO2 vs THb w czasie."""
     if "smo2" not in df_plot.columns:
@@ -582,148 +589,6 @@ def _render_smo2_thb_chart(df_plot):
                 """,
                     unsafe_allow_html=True,
                 )
-
-
-
-
-def _render_tdi_analysis(vt1_watts: int, lt1_watts: int):
-    """
-    Renderowanie analizy TDI porównującej VT1 (wentylacyjny) z LT1 (SmO2).
-
-    TDI = |VT1_VE - LT1_SmO2| / VT1_VE * 100 [%]
-
-    Klasyfikacja:
-    - <5% = system zgodny
-    - 5-10% = heterogeniczna adaptacja
-    - >10% = konflikt centralno-obwodowy / okluzja / perfuzja
-    """
-
-    # Walidacja danych z bardziej szczegółowymi komunikatami
-    if not vt1_watts or vt1_watts <= 0:
-        st.warning("""
-        ⚠️ **Brak danych VT1 (wentylacyjny)**
-        
-        Aby obliczyć TDI (Threshold Discordance Index), potrzebujesz:
-        1. **VT1** - Próg wentylacyjny (z czujnika wentylacji lub testu progowego)
-        2. **LT1** - Próg metaboliczny (z czujnika SmO2)
-        
-        **Brakuje:** Dane wentylacyjne (VE)
-        
-        💡 **Rozwiązanie:** Upewnij się, że:
-        - Twój plik CSV zawiera kolumnę `tymeventilation`
-        - Lub wprowadź wartość VT1 ręcznie w ustawieniach (zakładka VT1/VT2)
-        """)
-        return
-
-    if not lt1_watts or lt1_watts <= 0:
-        st.warning("""
-        ⚠️ **Brak danych LT1 (SmO2)**
-        
-        Aby obliczyć TDI, potrzebujesz progu metabolicznego z czujnika SmO2 (NIRS).
-        
-        **Brakuje:** Dane oksymetrii mięśniowej
-        
-        💡 TDI porównuje zgodność progu wentylacyjnego (centralny) 
-        z progiem metabolicznym (obwodowy).
-        """)
-        return
-
-    # Obliczenie TDI
-    tdi = abs(vt1_watts - lt1_watts) / vt1_watts * 100
-    delta = lt1_watts - vt1_watts  # Dodatnia = SmO2 wyżej niż VE
-
-    # Klasyfikacja
-    if tdi < 5:
-        classification = "ZGODNY"
-        color = "#00cc96"  # Green
-        alert_type = "success"
-        interpretation = "System tlenowy i obwodowy są zsynchronizowane. Optymalna koordynacja między wentylacją a perfuzją mięśniową."
-        recommendation = "✅ **Trening:** Możesz trenować w pełnym zakresie intensywności. System transportu tlenu działa harmonijnie."
-    elif tdi <= 10:
-        classification = "HETEROGENICZNY"
-        color = "#ffa15a"  # Orange
-        alert_type = "warning"
-        interpretation = "Wykryto niewielką rozbieżność między progiem wentylacyjnym a progiem SmO2. Może wskazywać na różne tempo adaptacji systemów centralnego i obwodowego."
-        if delta > 0:
-            recommendation = "⚡ **Trening:** Skup się na treningach tempo (Sweet Spot) aby wyrównać adaptację obwodową. SmO2 wskazuje wyższy próg niż VE — mięśnie adaptują się szybciej niż układ oddechowy."
-        else:
-            recommendation = "🫁 **Trening:** Zwiększ udział treningów Z2 i długich wyjazdów. VE wskazuje wyższy próg niż SmO2 — układ oddechowy wyprzedza adaptację mięśniową."
-    else:
-        classification = "KONFLIKT"
-        color = "#ef553b"  # Red
-        alert_type = "error"
-        interpretation = "Znacząca rozbieżność między systemem centralnym (wentylacja) a obwodowym (perfuzja mięśniowa). Możliwe przyczyny: okluzja naczyniowa, zaburzenia mikrokrążenia, lub błąd pomiaru sensora NIRS."
-        if delta > 0:
-            recommendation = "🔴 **Uwaga:** SmO2 znacząco wyżej niż VE. Sprawdź: (1) pozycję sensora NIRS, (2) grubość tkanki tłuszczowej, (3) okluzję podczas pedałowania. Rozważ konsultację z fizjologiem."
-        else:
-            recommendation = "🔴 **Uwaga:** VE znacząco wyżej niż SmO2. Sprawdź: (1) kalibrację sensora wentylacyjnego, (2) możliwą hiperperfuzję centralną, (3) ograniczenia mikrokrążenia obwodowego."
-
-    # Wyświetlanie
-    st.markdown(
-        f"""
-    <div style="padding:20px; border-radius:12px; border:3px solid {color}; background-color: #1a1a1a; text-align:center;">
-        <h2 style="margin:0; color: {color};">TDI: {tdi:.1f}%</h2>
-        <p style="margin:5px 0; font-size:1.2em; color: {color}; font-weight:bold;">{classification}</p>
-        <p style="margin:10px 0 0 0; color:#888; font-size:0.85em;">
-            VT1 (VE): <b>{vt1_watts:.0f} W</b> | LT1 (SmO2): <b>{lt1_watts:.0f} W</b> | Δ = {delta:+.0f} W
-        </p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    # Alert
-    if alert_type == "success":
-        st.success(f"✅ **Interpretacja:** {interpretation}")
-    elif alert_type == "warning":
-        st.warning(f"⚠️ **Interpretacja:** {interpretation}")
-    else:
-        st.error(f"🔴 **Interpretacja:** {interpretation}")
-
-    # Rekomendacja treningowa
-    st.info(recommendation)
-
-    # Teoria
-    with st.expander("📖 Co to jest TDI?", expanded=False):
-        st.markdown("""
-        ### Threshold Discordance Index (TDI)
-        
-        TDI mierzy **rozbieżność** między dwoma kluczowymi progami metabolicznymi:
-        
-        | Próg | Źródło | Mechanizm |
-        |------|--------|-----------|
-        | **VT1 (Ventilatory)** | Wentylacja (VE) | Punkt, w którym układ oddechowy zaczyna kompensować narastającą kwasicę |
-        | **LT1 (SmO2)** | Oksygenacja mięśniowa | Punkt, w którym ekstrakcja tlenu w mięśniu zaczyna przewyższać dostawę |
-        
-        ---
-        
-        #### Wzór
-        ```
-        TDI = |VT1 - LT1| / VT1 × 100%
-        ```
-        
-        #### Interpretacja kliniczna
-        
-        | TDI | Stan | Znaczenie |
-        |-----|------|-----------|
-        | **< 5%** | Zgodny | Systemy centralny i obwodowy doskonale zsynchronizowane |
-        | **5–10%** | Heterogeniczny | Różny tempo adaptacji — centralny vs obwodowy |
-        | **> 10%** | Konflikt | Potencjalny problem z transportem O2 lub błąd pomiaru |
-        
-        #### Przyczyny rozbieżności
-        
-        1. **LT1 > VT1** (SmO2 wyżej):
-           - Mięśnie dobrze ukrwione, ale wentylacja za wolna
-           - Częste u osób z wysokim VO2max ale niską wydolnością oddechową
-        
-        2. **VT1 > LT1** (VE wyżej):
-           - Układ oddechowy sprawny, ale perfuzja mięśniowa ograniczona
-           - Może wskazywać na problemy z mikrokrążeniem lub niedopasowanie kadencji
-        
-        ---
-        
-        *Źródło: Adaptacja modelu NIRS-CPET integration (Feldmann et al., 2020)*
-        """)
 
 
 def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):
