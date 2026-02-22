@@ -59,6 +59,22 @@ streamlit run app.py
 - 🎯 Bezpośrednie odniesienie do doświadczenia z treningu
 - ⚡ Format: `m:ss` (np. `4:30` zamiast `4.5`)
 
+### 🕐 Format Czasu: hh:mm:ss
+
+Wszystkie wykresy czasowe wyświetlają teraz oś X w formacie **hh:mm:ss** (godziny:minuty:sekundy) zamiast minut dziesiętnych.
+
+```
+PRZED:                    PO:
+0, 5, 10, 15 min         00:00:00, 00:05:00, 00:10:00
+
+5.5 min                  00:05:30
+```
+
+**Korzyści:**
+- ✅ Czytelniejszy format dla długich treningów (>1h)
+- ✅ Łatwiejsze śledzenie interwałów
+- ✅ Zgodność z konwencjami sportowymi
+
 ---
 
 ## 🏗️ Architektura Systemu
