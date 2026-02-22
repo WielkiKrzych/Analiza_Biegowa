@@ -270,8 +270,11 @@ def render_nutrition_tab(df_plot, cp_input, vt1_watts, vt2_watts):
         runner_weight = st.session_state.get('runner_weight', 75.0)
         threshold_pace = cp_input
         
-        speed_m_s = 1000.0 / df_plot['pace']
-        energy_kcal_per_hour = runner_weight * speed_m_s * 3.6 * 0.001
+        # Poprawiony wzór dla biegu: energia [kcal/h] = masa [kg] × prędkość [km/h] × 1.05
+        # Standardowy koszt metaboliczny biegu to około 1.0-1.05 kcal/kg/km
+        # prędkość [km/h] = 3600 / tempo [s/km] = 1000 / tempo [s/km] × 3.6
+        speed_km_h = 3600.0 / df_plot['pace']
+        energy_kcal_per_hour = runner_weight * speed_km_h * 1.05
         
         intensity = threshold_pace / df_plot['pace'] if threshold_pace > 0 else 0.7
         cho_fraction = np.where(intensity < 0.60, 0.50,
