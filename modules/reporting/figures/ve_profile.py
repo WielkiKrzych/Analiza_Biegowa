@@ -12,6 +12,7 @@ Chart shows:
 - Footer with test_id and method version
 """
 import matplotlib.pyplot as plt
+import numpy as np
 from typing import Dict, Any, Optional
 import pandas as pd
 
@@ -104,37 +105,51 @@ def generate_ve_profile_chart(
                 vt2_time = t
                 break
 
+    # Convert time to minutes for x-axis
+    time_min = [t / 60 for t in time_data]
+    vt1_time_min = vt1_time / 60 if vt1_time else None
+    vt2_time_min = vt2_time / 60 if vt2_time else None
+
     # Create figure
     fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
     
     # Plot Pace on Right Axis (Background)
     ax2 = ax1.twinx()
     if pace_data:
-        ax2.plot(time_data, pace_data, color=get_color("pace"), alpha=0.3, linewidth=1, label="Tempo")
-        ax2.fill_between(time_data, pace_data, color=get_color("pace"), alpha=0.05)
+        ax2.plot(time_min, pace_data, color=get_color("pace"), alpha=0.3, linewidth=1, label="Tempo")
+        ax2.fill_between(time_min, pace_data, color=get_color("pace"), alpha=0.05)
         ax2.set_ylabel("Tempo [min/km]", color=get_color("pace"), fontsize=font_size)
         ax2.tick_params(axis='y', labelcolor=get_color("pace"))
         # Invert Y-axis (lower pace = faster)
         ax2.invert_yaxis()
     
     # Plot VE on Left Axis (Foreground)
-    ax1.plot(time_data, ve_data, color=get_color("ve"), linewidth=2, label="VE (Wentylacja)")
-    ax1.set_xlabel("Czas [s]", fontsize=font_size)
+    ax1.plot(time_min, ve_data, color=get_color("ve"), linewidth=2, label="VE (Wentylacja)")
+    
+    # Set x-axis ticks to hh:mm:ss format
+    time_max = max(time_min)
+    tick_step = 5  # 5 minute intervals
+    tick_vals = np.arange(0, time_max + tick_step, tick_step)
+    tick_labels = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    ax1.set_xticks(tick_vals)
+    ax1.set_xticklabels(tick_labels)
+    
+    ax1.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size)
     ax1.set_ylabel("VE [L/min]", color=get_color("ve"), fontsize=font_size, fontweight='bold')
     ax1.tick_params(axis='y', labelcolor=get_color("ve"))
     
     # Vertical Lines for VT1/VT2
-    if vt1_time and vt1_pace_min:
-        ax1.axvline(x=vt1_time, color=get_color("vt1"), linestyle='--', alpha=0.9, linewidth=1.5,
+    if vt1_time_min and vt1_pace_min:
+        ax1.axvline(x=vt1_time_min, color=get_color("vt1"), linestyle='--', alpha=0.9, linewidth=1.5,
                    label=f"VT1: {vt1_pace_min:.2f} min/km")
-        ax1.text(vt1_time, max(ve_data)*0.95, f"VT1\n{vt1_pace_min:.2f}", 
+        ax1.text(vt1_time_min, max(ve_data)*0.95, f"VT1\n{vt1_pace_min:.2f}", 
                  color=get_color("vt1"), ha='center', va='top', fontweight='bold', 
                  bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
                   
-    if vt2_time and vt2_pace_min:
-        ax1.axvline(x=vt2_time, color=get_color("vt2"), linestyle='--', alpha=0.9, linewidth=1.5,
+    if vt2_time_min and vt2_pace_min:
+        ax1.axvline(x=vt2_time_min, color=get_color("vt2"), linestyle='--', alpha=0.9, linewidth=1.5,
                    label=f"VT2: {vt2_pace_min:.2f} min/km")
-        ax1.text(vt2_time, max(ve_data)*0.95, f"VT2\n{vt2_pace_min:.2f}", 
+        ax1.text(vt2_time_min, max(ve_data)*0.95, f"VT2\n{vt2_pace_min:.2f}", 
                  color=get_color("vt2"), ha='center', va='top', fontweight='bold',
                  bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
 

@@ -103,7 +103,15 @@ def generate_biomech_chart(
     # Torque (Primary Y-axis) - Magenta/Pink style
     color_torque = "#e377c2"
     ax1.plot(df_plot['time_min'], df_plot['torque_smooth'], color=color_torque, label='Moment (Torque)', linewidth=1.5)
-    ax1.set_xlabel('Czas [min]')
+    
+    # Set x-axis ticks to hh:mm:ss format
+    time_max = df_plot['time_min'].max()
+    tick_step = 5  # 5 minute intervals
+    tick_vals = np.arange(0, time_max + tick_step, tick_step)
+    tick_labels = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    ax1.set_xticks(tick_vals)
+    ax1.set_xticklabels(tick_labels)
+    ax1.set_xlabel('Czas [hh:mm:ss]')
     ax1.set_ylabel('Moment Obrotowy [Nm]', color=color_torque)
     ax1.tick_params(axis='y', labelcolor=color_torque)
     

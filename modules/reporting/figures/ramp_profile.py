@@ -12,6 +12,7 @@ Chart shows:
 - Footer with test_id and method version
 """
 import matplotlib.pyplot as plt
+import numpy as np
 from typing import Dict, Any, Optional
 
 from .common import (
@@ -152,8 +153,16 @@ def generate_ramp_profile_chart(
         ax.axhline(y=vt2_watts, color=get_color("vt2"), 
                    linewidth=1, linestyle=':', alpha=0.7, zorder=2)
     
+    # Set x-axis ticks to hh:mm:ss format
+    time_max = max(time_min)
+    tick_step = 5  # 5 minute intervals
+    tick_vals = np.arange(0, time_max + tick_step, tick_step)
+    tick_labels = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    ax.set_xticks(tick_vals)
+    ax.set_xticklabels(tick_labels)
+    
     # Axis labels
-    ax.set_xlabel("Czas [min]", fontsize=font_size, fontweight='medium')
+    ax.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size, fontweight='medium')
     ax.set_ylabel("Moc [W]", fontsize=font_size, fontweight='medium')
     
     # Title

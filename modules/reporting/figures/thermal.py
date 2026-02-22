@@ -75,7 +75,15 @@ def generate_thermal_chart(
     
     # Core Temp (Left Axis)
     l1, = ax1.plot(time_vals, df[temp_col], color='#ff7f0e', label="Temp. rdzenia", linewidth=2)
-    ax1.set_xlabel("Czas [min]", fontsize=font_size)
+    
+    # Set x-axis ticks to hh:mm:ss format
+    time_max = time_vals.max()
+    tick_step = 5  # 5 minute intervals
+    tick_vals = np.arange(0, time_max + tick_step, tick_step)
+    tick_labels = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    ax1.set_xticks(tick_vals)
+    ax1.set_xticklabels(tick_labels)
+    ax1.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size)
     ax1.set_ylabel("Temperatura [°C]", fontsize=font_size, color='#ff7f0e')
     ax1.tick_params(axis='y', labelcolor='#ff7f0e')
     

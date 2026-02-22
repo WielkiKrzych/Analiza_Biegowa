@@ -173,17 +173,26 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     if time_x is None:
         return None
     
-    # Moc
-    if "watts_smooth" in df_plot.columns:
+    # Convert time_min to hh:mm:ss format for x-axis
+    import numpy as np
+    time_vals = time_x.values if hasattr(time_x, 'values') else np.array(time_x)
+    tick_step = 5  # every 5 minutes
+    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    
+    # Tempo (zamiast Mocy dla biegania)
+    if "pace_smooth" in df_plot.columns:
+        pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
         fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["watts_smooth"],
-            name="Moc", fill="tozeroy",
+            x=time_x, y=pace_display,
+            name="Tempo", fill="tozeroy",
             line=dict(color=Config.COLOR_POWER, width=1),
         ))
-    elif "watts" in df_plot.columns:
+    elif "pace" in df_plot.columns:
+        pace_display = df_plot["pace"].rolling(5, center=True).mean() / 60.0
         fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["watts"].rolling(5, center=True).mean(),
-            name="Moc", fill="tozeroy",
+            x=time_x, y=pace_display,
+            name="Tempo", fill="tozeroy",
             line=dict(color=Config.COLOR_POWER, width=1),
         ))
     
@@ -231,10 +240,15 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     
     fig.update_layout(
         template="plotly_dark",
-        title="Przebieg Treningu (Moc, HR, SmO2, VE)",
+        title="Przebieg Treningu (Tempo, HR, SmO2, VE)",
         hovermode="x unified",
-        xaxis=dict(title="Czas [min]"),
-        yaxis=dict(title="Moc [W]", side="left"),
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals,
+            ticktext=tick_text,
+        ),
+        yaxis=dict(title="Tempo [min/km]", side="left", autorange="reversed"),
         yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
         yaxis3=dict(title="SmO2 [%]", overlaying="y", side="right", position=0.95, showgrid=False),
         yaxis4=dict(title="VE [L/min]", overlaying="y", side="right", position=0.98, showgrid=False),

@@ -8,6 +8,7 @@ Generates:
 """
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from typing import Dict, Any, Optional
 
 from .common import (
@@ -73,7 +74,15 @@ def generate_full_vent_chart(
     
     # VE (Left Axis - Primary)
     l1, = ax1.plot(time_vals, df[ve_col], color=get_color("vt1"), label="VE (L/min)", linewidth=2)
-    ax1.set_xlabel("Czas [min]", fontsize=font_size)
+    
+    # Set x-axis ticks to hh:mm:ss format
+    time_max = time_vals.max()
+    tick_step = 5  # 5 minute intervals
+    tick_vals = np.arange(0, time_max + tick_step, tick_step)
+    tick_labels = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    ax1.set_xticks(tick_vals)
+    ax1.set_xticklabels(tick_labels)
+    ax1.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size)
     ax1.set_ylabel("Wentylacja [L/min]", fontsize=font_size, color=get_color("vt1"))
     ax1.tick_params(axis='y', labelcolor=get_color("vt1"))
     
