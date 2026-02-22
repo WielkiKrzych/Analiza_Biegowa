@@ -29,9 +29,11 @@ def analyze_step_test(
 ) -> StepTestResult:
     """High-level orchestration of step test analysis."""
     result = StepTestResult()
-    df.columns = df.columns.str.lower().str.strip()
+    # Work on renamed copy to avoid mutating caller's DataFrame
+    cols_lower = {c: c.lower().strip() for c in df.columns}
+    df_work = df.rename(columns=cols_lower)
     
-    has_ve = ve_column in df.columns
+    has_ve = ve_column in df_work.columns
     has_smo2 = smo2_column in df.columns
     has_power = power_column in df.columns
     has_time = time_column in df.columns

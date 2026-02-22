@@ -6,6 +6,7 @@ Provides centralized access to all available tabs.
 """
 import importlib
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 import pandas as pd
@@ -17,27 +18,32 @@ logger = logging.getLogger(__name__)
 
 class PluginRegistry:
     """Central registry for UI tab plugins.
-    
+
     Handles discovery, registration, and retrieval of UI modules.
-    
+    Thread-safe singleton implementation.
+
     Usage:
         registry = PluginRegistry()
         registry.discover()  # Auto-find all plugins
-        
+
         for group, tabs in registry.get_grouped_tabs():
             # Create tab group
             for tab in tabs:
                 tab.render(df, **context)
     """
-    
+
     _instance: Optional['PluginRegistry'] = None
-    
+    _lock = threading.Lock()
+
     def __new__(cls):
-        """Singleton pattern for global registry access."""
+        """Thread-safe singleton pattern for global registry access."""
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._plugins: Dict[str, UITabPlugin] = {}
-            cls._instance._initialized = False
+            with cls._lock:
+                # Double-check pattern
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._plugins: Dict[str, UITabPlugin] = {}
+                    cls._instance._initialized = False
         return cls._instance
     
     @property

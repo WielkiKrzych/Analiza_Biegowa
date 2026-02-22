@@ -205,26 +205,12 @@ def count_match_burns(
     if "watts" not in df.columns or cp <= 0:
         return 0
 
-    above_cp = (df["watts"] > cp).astype(int)
-    # Detect contiguous blocks
-    blocks = above_cp.diff().fillna(above_cp.iloc[0] if len(above_cp) > 0 else 0)
-    starts = blocks[blocks == 1].index.tolist()
-
-    count = 0
-    for start_idx in starts:
-        # Find end of this block
-        remaining = above_cp.loc[start_idx:]
-        end_mask = remaining == 0
-        if end_mask.any():
-            end_idx = end_mask.idxmax()
-            duration = end_idx - start_idx
-        else:
-            duration = len(remaining)
-
-        if duration >= min_duration:
-            count += 1
-
-    return count
+    above = (df["watts"].values > cp).astype(np.int32)
+    diffs = np.diff(above, prepend=0, append=0)
+    starts = np.where(diffs == 1)[0]
+    ends = np.where(diffs == -1)[0]
+    durations = ends - starts
+    return int((durations >= min_duration).sum())
 
 
 # ── Power Zones ───────────────────────────────────────────────

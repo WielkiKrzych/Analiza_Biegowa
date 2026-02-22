@@ -7,13 +7,12 @@ to keep the UI responsive during heavy computations.
 
 import asyncio
 import functools
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TypeVar, Optional
 import pandas as pd
 from pathlib import Path
 
-# Global thread pool for CPU-bound operations
-_executor = ThreadPoolExecutor(max_workers=4)
+# Use shared executor from async_runner to avoid duplication
+from modules.calculations.async_runner import get_executor
 
 T = TypeVar("T")
 
@@ -32,8 +31,10 @@ def run_in_thread(func: Callable[..., T]) -> Callable[..., asyncio.Future[T]]:
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs) -> T:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_executor, functools.partial(func, *args, **kwargs))
+        loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
+        return await loop.run_in_executor(
+            get_executor(), functools.partial(func, *args, **kwargs)
+        )
 
     return wrapper
 
@@ -46,8 +47,8 @@ async def load_data_async(file, chunk_size: Optional[int] = None) -> pd.DataFram
     """
     from modules.utils import load_data
 
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_executor, load_data, file, chunk_size)
+    loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
+    return await loop.run_in_executor(get_executor(), load_data, file, chunk_size)
 
 
 async def analyze_ramp_test_async(df: pd.DataFrame, **kwargs) -> dict:
@@ -58,8 +59,10 @@ async def analyze_ramp_test_async(df: pd.DataFrame, **kwargs) -> dict:
     """
     from modules.calculations.thresholds import analyze_step_test
 
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_executor, functools.partial(analyze_step_test, df, **kwargs))
+    loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
+    return await loop.run_in_executor(
+        get_executor(), functools.partial(analyze_step_test, df, **kwargs)
+    )
 
 
 async def detect_smo2_thresholds_async(df: pd.DataFrame, **kwargs) -> Any:
@@ -68,9 +71,9 @@ async def detect_smo2_thresholds_async(df: pd.DataFrame, **kwargs) -> Any:
     """
     from modules.calculations.smo2_advanced import detect_smo2_thresholds_moxy
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
     return await loop.run_in_executor(
-        _executor, functools.partial(detect_smo2_thresholds_moxy, df, **kwargs)
+        get_executor(), functools.partial(detect_smo2_thresholds_moxy, df, **kwargs)
     )
 
 
@@ -82,9 +85,9 @@ async def generate_pdf_async(*args, **kwargs) -> bytes:
     """
     from modules.reporting.pdf.summary_pdf import generate_summary_pdf
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
     return await loop.run_in_executor(
-        _executor, functools.partial(generate_summary_pdf, *args, **kwargs)
+        get_executor(), functools.partial(generate_summary_pdf, *args, **kwargs)
     )
 
 

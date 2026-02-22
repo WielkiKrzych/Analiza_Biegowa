@@ -1,10 +1,6 @@
 
 import pandas as pd
 import numpy as np
-import sys
-
-# Add project root to path
-sys.path.append('/Users/wielkikrzych/Desktop/Tri_Dashboard')
 
 from modules.calculations.kinetics import normalize_smo2_series, detect_smo2_trend
 

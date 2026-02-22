@@ -1,10 +1,6 @@
 
 import pandas as pd
 import numpy as np
-import sys
-
-# Add project root to path
-sys.path.append('/Users/wielkikrzych/Desktop/Tri_Dashboard')
 
 from modules.calculations.kinetics import calculate_resaturation_metrics
 

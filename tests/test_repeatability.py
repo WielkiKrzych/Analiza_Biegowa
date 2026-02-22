@@ -1,9 +1,4 @@
 
-import sys
-
-# Add project root to path
-sys.path.append('/Users/wielkikrzych/Desktop/Tri_Dashboard')
-
 from modules.calculations.repeatability import (
     calculate_repeatability_metrics,
     compare_session_to_baseline

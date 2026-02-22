@@ -66,11 +66,12 @@ def validate_test(
     result = TestValidity(validity=ValidityLevel.VALID)
     issues = []
 
-    # Check required columns
-    df.columns = df.columns.str.lower().str.strip()
-    has_power = power_column in df.columns
-    has_hr = hr_column in df.columns
-    has_time = time_column in df.columns
+    # Check required columns - work on renamed copy to avoid mutating caller's DataFrame
+    cols_lower = {c: c.lower().strip() for c in df.columns}
+    df_work = df.rename(columns=cols_lower)
+    has_power = power_column in df_work.columns
+    has_hr = hr_column in df_work.columns
+    has_time = time_column in df_work.columns
 
     if not has_time or not has_power:
         result.validity = ValidityLevel.INVALID
@@ -78,8 +79,8 @@ def validate_test(
         result.issues = issues
         return result
 
-    # Calculate ramp duration
-    time_range = df[time_column].max() - df[time_column].min()
+    # Calculate ramp duration - use the renamed copy
+    time_range = df_work[time_column].max() - df_work[time_column].min()
     result.ramp_duration_sec = int(time_range)
 
     if time_range < 360:  # < 6 min = INVALID
@@ -92,8 +93,8 @@ def validate_test(
         issues.append(f"Rampa krótka: {int(time_range / 60)} min (zalecane: ≥8 min)")
         result.ramp_duration_sufficient = False
 
-    # Calculate power range
-    power_range = df[power_column].max() - df[power_column].min()
+    # Calculate power range - use the renamed copy
+    power_range = df_work[power_column].max() - df_work[power_column].min()
     result.power_range_watts = float(power_range)
 
     if power_range < min_power_range_watts:

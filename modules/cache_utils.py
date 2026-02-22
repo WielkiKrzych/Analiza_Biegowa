@@ -75,9 +75,11 @@ def cache_result(ttl: int = 3600, key_func: Optional[Callable] = None):
                 cache_key = _generate_cache_key(func.__name__, args, kwargs)
 
             # Try to get from cache
+            # Use sentinel pattern to distinguish between cache miss and cached None
+            _SENTINEL = object()
             try:
-                result = cache.get(cache_key)
-                if result is not None:
+                result = cache.get(cache_key, default=_SENTINEL)
+                if result is not _SENTINEL:
                     return result
             except Exception:
                 pass
@@ -118,14 +120,19 @@ def _generate_cache_key(func_name: str, args: tuple, kwargs: dict) -> str:
 
 def _hash_arg(arg: Any) -> str:
     """Convert argument to hashable string representation."""
+    import io
+
     if isinstance(arg, pd.DataFrame):
-        # Hash based on column names and shape (not full data for performance)
-        cols = ",".join(sorted(arg.columns))
-        return f"DF:{cols}:{len(arg)}"
+        # Hash actual data content using parquet serialization
+        buf = io.BytesIO()
+        arg.to_parquet(buf, index=False)
+        content_hash = hashlib.md5(buf.getvalue()).hexdigest()[:16]
+        return f"DF:{len(arg)}:{content_hash}"
     elif isinstance(arg, pd.Series):
-        return f"SER:{arg.name}:{len(arg)}"
+        # Hash series content
+        return f"SER:{arg.name}:{len(arg)}:{hashlib.md5(arg.to_numpy().tobytes()).hexdigest()[:16]}"
     elif isinstance(arg, np.ndarray):
-        return f"ARR:{arg.shape}:{arg.dtype}"
+        return f"ARR:{arg.shape}:{hashlib.md5(arg.tobytes()).hexdigest()[:16]}"
     elif isinstance(arg, (list, tuple)):
         return f"LIST:{len(arg)}"
     elif isinstance(arg, dict):

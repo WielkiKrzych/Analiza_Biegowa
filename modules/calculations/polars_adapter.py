@@ -298,39 +298,33 @@ def fast_power_duration_curve(
     """
     results = {}
     
-    if POLARS_AVAILABLE:
-        try:
+    # Get numpy array once - single conversion regardless of Polars/Pandas
+    try:
+        if POLARS_AVAILABLE:
             pl_df = to_polars(df)
             watts = pl_df.select(pl.col(power_column)).to_numpy().flatten()
-            
-            for duration in durations:
-                if len(watts) < duration:
-                    results[duration] = None
-                    continue
-                
-                # Use Polars rolling max for efficiency
-                rolling = pl_df.select(
-                    pl.col(power_column).rolling_mean(window_size=duration, min_periods=duration)
-                ).to_numpy().flatten()
-                
-                max_power = np.nanmax(rolling)
-                results[duration] = float(max_power) if not np.isnan(max_power) else None
-            
-            return results
-        except Exception:
-            pass
+        else:
+            pd_df = to_pandas(df)
+            watts = pd_df[power_column].to_numpy()
+        
+        # Handle NaN values - fill with 0 for rolling mean calculation
+        watts = np.nan_to_num(watts, nan=0.0).astype(np.float64)
+    except Exception:
+        # Return empty results if data extraction fails
+        return {dur: None for dur in durations}
     
-    # Pandas fallback
-    pd_df = to_pandas(df)
-    watts = pd_df[power_column]
-    
+    # Cumsum-based sliding window: O(n) per duration instead of O(n×window)
     for duration in durations:
-        if len(watts) < duration:
+        if len(watts) < duration or duration <= 0:
             results[duration] = None
             continue
         
-        rolling = watts.rolling(window=duration, min_periods=duration).mean()
-        max_power = rolling.max()
-        results[duration] = float(max_power) if pd.notna(max_power) else None
+        # Compute rolling mean via cumsum difference
+        # cs[dur:] - cs[:-dur] gives sum of each window of size 'duration'
+        cs = np.concatenate(([0], np.cumsum(watts)))
+        rolling_mean = (cs[duration:] - cs[:-duration]) / duration
+        
+        best = rolling_mean.max()
+        results[duration] = float(best) if not np.isnan(best) else None
     
     return results

@@ -36,18 +36,21 @@ except ImportError:
 @njit(cache=True)
 def rolling_mean_numba(arr: np.ndarray, window: int) -> np.ndarray:
     """
-    Fast rolling mean using Numba.
+    Fast rolling mean using Numba - O(n) optimized with running sum.
 
     10-50x faster than Pandas rolling().mean()
     """
     n = len(arr)
     result = np.empty(n)
-
+    running_sum = 0.0
+    count = 0
     for i in range(n):
-        start = max(0, i - window + 1)
-        end = i + 1
-        result[i] = np.mean(arr[start:end])
-
+        running_sum += arr[i]
+        count += 1
+        if i >= window:
+            running_sum -= arr[i - window]
+            count -= 1
+        result[i] = running_sum / count
     return result
 
 

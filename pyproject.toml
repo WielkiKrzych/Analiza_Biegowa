@@ -39,7 +39,8 @@ dependencies = [
 dev = [
     "black",
     "ruff",
-    "mypy"
+    "mypy",
+    "pytest-cov"
 ]
 
 [tool.setuptools.packages.find]
