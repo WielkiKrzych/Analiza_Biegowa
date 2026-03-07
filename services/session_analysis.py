@@ -41,7 +41,7 @@ def calculate_header_metrics(df: pd.DataFrame, cp: float) -> Tuple[float, float,
     if "watts" not in df.columns or len(df) < Config.MIN_RECORDS_FOR_ROLLING:
         return 0.0, 0.0, 0.0
 
-    rolling_30s = df["watts"].rolling(window=Config.ROLLING_WINDOW_30S, min_periods=1).mean()
+    rolling_30s = df["watts"].rolling(window=Config.ROLLING_WINDOW_30S, min_periods=Config.ROLLING_WINDOW_30S).mean()
     np_val = np.power(np.mean(np.power(rolling_30s, 4)), 0.25)
 
     if pd.isna(np_val):
@@ -94,20 +94,24 @@ def calculate_extended_metrics(
         metrics["work_kj"] = df["watts"].sum() / 1000
         metrics["carbs_total"] = estimate_carbs_burned(df, vt1_watts, vt2_watts)
 
-        # Power Duration Curve & VLamax estimation
+        # Power Duration Curve (running context - no VLamax estimation)
         pdc = calculate_power_duration_curve(df)
-        metrics["vlamax_est"] = (
-            estimate_vlamax_from_pdc(pdc, rider_weight) if pdc and rider_weight > 0 else 0
-        )
+        # VLamax estimation removed - cycling model not applicable to running
+        metrics["vlamax_est"] = 0  # Not applicable for running analysis
 
-        # VO2max estimation
-        mmp_5m = df["watts"].rolling(Config.ROLLING_WINDOW_5MIN).mean().max()
-        if not pd.isna(mmp_5m) and rider_weight > 0:
-            power_per_kg = mmp_5m / rider_weight
-            metrics["vo2_max_est"] = 16.61 + 8.87 * power_per_kg
+        # VO2max estimation from pace (Daniels formula - running-specific)
+        # Using 5-minute mean max pace (MMP 5-min) converted to speed
+        from modules.calculations.pace import estimate_vo2max_from_pace
+        mmp_5min_pace = df["pace"].rolling(Config.ROLLING_WINDOW_5MIN).mean().min() if "pace" in df.columns else None
+        # For running, use pace-based VO2max estimation
+        if "pace" in df.columns:
+            best_5min_pace = df["pace"].rolling(Config.ROLLING_WINDOW_5MIN).mean().min()
+            if not pd.isna(best_5min_pace) and best_5min_pace > 0 and rider_weight > 0:
+                metrics["vo2_max_est"] = estimate_vo2max_from_pace(best_5min_pace, rider_weight)
+            else:
+                metrics["vo2_max_est"] = 0
         else:
             metrics["vo2_max_est"] = 0
-
     if "hsi" in df.columns:
         metrics["max_hsi"] = df["hsi"].max()
 
@@ -158,9 +162,8 @@ def apply_smo2_smoothing(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with 'smo2_smooth_ultra' column added if smo2 exists
     """
     if "smo2" in df.columns:
+        df = df.copy()  # Avoid SettingWithCopyWarning
         df["smo2_smooth_ultra"] = (
-            df["smo2"].rolling(window=Config.ROLLING_WINDOW_60S, center=True, min_periods=1).mean()
-        )
     return df
 
 

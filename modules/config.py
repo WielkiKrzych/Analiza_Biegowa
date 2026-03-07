@@ -39,7 +39,7 @@ class Config:
     VALIDATION_MAX_HR = int(os.getenv("VALIDATION_MAX_HR", "250"))
     VALIDATION_MAX_CADENCE = int(os.getenv("VALIDATION_MAX_CADENCE", "250"))
     VALIDATION_REQUIRED_COLS = ["time"]
-    VALIDATION_DATA_COLS = ["watts", "heartrate", "cadence", "smo2", "power"]
+    VALIDATION_DATA_COLS = ["watts", "heartrate", "cadence", "smo2", "power", "pace", "speed"]
 
     # --- ML Settings ---
     MODEL_FILE = os.getenv("MODEL_FILE", "cycling_brain_weights.npz")

@@ -67,6 +67,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     if "watts" in cols:
         if not pd.api.types.is_numeric_dtype(df["watts"]):
             try:
+                df = df.copy()  # Avoid SettingWithCopyWarning
                 df["watts"] = pd.to_numeric(df["watts"], errors="coerce")
                 if df["watts"].isna().all():
                     return False, "Kolumna 'watts' zawiera nieprawidłowe dane (nie-liczbowe)."
@@ -81,6 +82,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     if "heartrate" in cols:
         if not pd.api.types.is_numeric_dtype(df["heartrate"]):
             try:
+                df = df.copy()  # Avoid SettingWithCopyWarning
                 df["heartrate"] = pd.to_numeric(df["heartrate"], errors="coerce")
                 if df["heartrate"].isna().all():
                     return False, "Kolumna 'heartrate' zawiera nieprawidłowe dane (nie-liczbowe)."
@@ -95,6 +97,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     if "cadence" in cols:
         if not pd.api.types.is_numeric_dtype(df["cadence"]):
             try:
+                df = df.copy()  # Avoid SettingWithCopyWarning
                 df["cadence"] = pd.to_numeric(df["cadence"], errors="coerce")
                 if df["cadence"].isna().all():
                     return False, "Kolumna 'cadence' zawiera nieprawidłowe dane (nie-liczbowe)."

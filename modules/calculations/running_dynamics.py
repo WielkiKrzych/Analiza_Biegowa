@@ -17,7 +17,8 @@ from .pace_utils import pace_to_speed, pace_array_to_speed_array
 
 def calculate_cadence_stats(cadence_spm: np.ndarray) -> Dict:
     """Calculate cadence statistics."""
-    valid_cadence = cadence_spm[(cadence_spm > 50) & (cadence_spm < 300)]
+    # Running cadence filter: 120-300 SPM (running minimum ~120 vs cycling ~50)
+    valid_cadence = cadence_spm[(cadence_spm > 120) & (cadence_spm < 300)]
     
     if len(valid_cadence) == 0:
         return {"mean_spm": 0.0, "std_spm": 0.0, "zone": "unknown"}
@@ -80,7 +81,7 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
     if "cadence" not in df.columns or "pace" not in df.columns:
         return {}
     
-    valid = df[(df["cadence"] > 50) & (df["cadence"] < 300) & (df["pace"] > 0)]
+    valid = df[(df["cadence"] > 120) & (df["cadence"] < 300) & (df["pace"] > 0)]
     
     if len(valid) == 0:
         return {}
@@ -88,7 +89,10 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
     speed_m_s = pace_array_to_speed_array(valid["pace"].values)
     cadence_spm = valid["cadence"].values
     
-    # Stride length = speed / (cadence / 60) * 2
+    # Stride length = speed / (cadence / 60)
+    # Note: Garmin SPM already counts both feet, so no *2 needed
+    # Each step at cadence SPM covers (speed / steps_per_second) meters
+    stride_length_m = speed_m_s / (cadence_spm / 60)
     stride_length_m = speed_m_s / (cadence_spm / 60) * 2
     
     mean_stride = float(np.mean(stride_length_m))
@@ -104,7 +108,8 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
 
 def analyze_cadence_drift(cadence_spm: np.ndarray, min_samples: int = 100) -> Dict:
     """Analyze cadence drift over workout."""
-    valid = cadence_spm[(cadence_spm > 50) & (cadence_spm < 300)]
+    # Running cadence filter: 120-300 SPM
+    valid = cadence_spm[(cadence_spm > 120) & (cadence_spm < 300)]
     
     if len(valid) < min_samples:
         return {"drift_spm": 0.0, "classification": "insufficient-data"}

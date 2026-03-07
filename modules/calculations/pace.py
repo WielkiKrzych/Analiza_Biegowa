@@ -180,12 +180,12 @@ def classify_running_phenotype(pdc: dict, weight: float) -> str:
     if not pdc or weight <= 0:
         return "unknown"
     
-    # Get key pace values
-    p1k = pdc.get(60)      # 1 km
-    p5k = pdc.get(300)     # 5 km
-    p10k = pdc.get(600)    # 10 km
-    p21k = pdc.get(1200)   # Half marathon pace (if available)
-    p42k = pdc.get(3600)   # Marathon pace
+    # Get key pace values - PDC durations are in SECONDS (time-based)
+    p60s = pdc.get(60)    # 60-second effort
+    p5min = pdc.get(300)  # 5-minute effort
+    p10min = pdc.get(600) # 10-minute effort
+    p20min = pdc.get(1200) # 20-minute effort (if available)
+    p60min = pdc.get(3600) # 60-minute effort
     
     if not any([p1k, p5k, p10k]):
         return "unknown"
@@ -339,8 +339,9 @@ def calculate_fatigue_resistance_index_pace(
     Returns:
         FRI ratio (typically 1.02-1.15)
     """
-    p5k = pdc.get(300)   # 5K pace
-    p10k = pdc.get(600)  # 10K pace
+    # FRI uses time-based PDC: 300s (5-min) and 600s (10-min) efforts
+    p5min = pdc.get(300)  # 5-min effort pace
+    p10min = pdc.get(600) # 10-min effort pace
     
     if p5k is None or p10k is None or p5k <= 0:
         return 0.0

@@ -1,4 +1,29 @@
-# 🏃‍♂️ Analiza Biegowa
+## 📋 Changelog
+
+### 2026-03-07 - Poprawki z code review
+
+**Naprawione błędy (CRITICAL):**
+- 🐛 `pace.py`: Poprawione komentarze PDC - czas trwania (60s, 300s) ≠ dystans
+- 🐛 `session_analysis.py`: VO2max teraz używa formuły Danielsa (bieganie) zamiast cycling
+- 🐛 `gap.py`: Wektoryzacja dla numpy arrays - naprawiony crash przy `if grade >= 0`
+- 🐛 `running_dynamics.py`: Usunięty błąd `*2` w obliczaniu długości kroku
+- 🐛 `power.py`: `min_periods=window` zamiast `min_periods=1` (NP nie był zawyżony)
+
+**Naprawione problemy (SERIOUS):**
+- 🔧 `config.py`: Dodano `pace` i `speed` do `VALIDATION_DATA_COLS`
+- 🔧 `app.py`: Poprawione obliczanie dystansu z tempa
+- 🔧 `session_analysis.py`: Usunięta estymacja VLamax (model kolarski)
+- 🔧 `running_dynamics.py`: Filtr kadencji >120 SPM (bieganie vs kolarstwo)
+
+**Naprawione problemy (MEDIUM):**
+- 🔧 `data_validation.py`: Dodano `.copy()` unikając `SettingWithCopyWarning`
+- 🔧 `thermal.py`: Dodano `.copy()` dla HSI calculation
+- 🔧 `session_analysis.py`: Dodano `.copy()` dla SmO2 smooth
+- 🔧 `hrv.py`: Dodano LRU cache z limitem (naprawiony memory leak)
+- 🔧 `hrv.py`: Zamieniono `print()` na `logger.debug()`
+- 🔧 `cardiac_drift.py`: Zmieniona nazwa loggera na `__name__`
+
+---
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python">

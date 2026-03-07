@@ -211,9 +211,22 @@ def validate_dfa_quality(
     return is_uncertain, reasons, quality_grade
 
 
-# Cache for DFA results to avoid recomputation
-dfa_cache = {}
+# Cache for DFA results with max size to prevent memory leak
+from collections import OrderedDict
+class LRUCache(OrderedDict):
+    """LRU Cache with max size limit."""
+    def __init__(self, maxsize: int = 10):
+        super().__init__()
+        self.maxsize = maxsize
+    
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self.maxsize:
+            self.popitem(last=False)
 
+dfa_cache = LRUCache(maxsize=10)
 
 def _generate_cache_key(
     df_pl, window_sec: int, step_sec: int, min_samples_hrv: int, alpha1_clip_range: tuple
@@ -257,10 +270,10 @@ def calculate_dynamic_dfa_v2(
     # Check cache first
     cache_key = _generate_cache_key(df_pl, window_sec, step_sec, min_samples_hrv, alpha1_clip_range)
     if cache_key in dfa_cache:
-        print(f"[DEBUG] Using cached DFA results for key: {cache_key[:16]}...")
+        logger.debug(f"Using cached DFA results for key: {cache_key[:16]}...")
         return dfa_cache[cache_key]
 
-    print(f"[DEBUG] Executing calculate_dynamic_dfa_v2 logic...")
+    logger.debug("Executing calculate_dynamic_dfa_v2 logic...")
     df = ensure_pandas(df_pl)
 
     # Robust column detection (case-insensitive)

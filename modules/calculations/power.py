@@ -42,7 +42,7 @@ def calculate_normalized_power(
     if "watts" not in df.columns or len(df) < window:
         return 0.0
 
-    rolling = df["watts"].rolling(window=window, min_periods=1).mean()
+    rolling = df["watts"].rolling(window=window, min_periods=window).mean()
     np_val = np.power(np.nanmean(np.power(rolling, 4)), 0.25)
 
     return float(np_val) if not np.isnan(np_val) else 0.0

@@ -32,6 +32,8 @@ def calculate_heat_strain_index(df_pl: Union[pd.DataFrame, Any]) -> pd.DataFrame
     # HSI formula: weighted combination of temperature and HR deviation from baseline
     # Temperature contribution: (CoreTemp - 37.0) / 2.5 * 5 (max 5 points)
     # HR contribution: (HR - 60) / 120 * 5 (max 5 points)
+    # Avoid SettingWithCopyWarning
+    df = df.copy()
     df['hsi'] = (
         (5 * (df[core_col] - 37.0) / 2.5) + 
         (5 * (df['heartrate_smooth'] - 60.0) / 120.0)

@@ -223,11 +223,11 @@ if uploaded_file is not None:
     if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
         distance_km = float(df_plot["distance"].max()) / 1000.0
     elif "pace" in df_plot.columns and df_plot["pace"].mean() > 0:
-        distance_km = duration_sec / df_plot["pace"].mean()
+        # Convert mean pace (sec/km) to speed (m/s), then calculate distance
+        # distance = speed * time = (1000/pace) * duration_sec / 1000
+        mean_pace = df_plot["pace"].mean()
+        distance_km = (duration_sec / mean_pace)  # km = (sec * km/sec) 
     else:
-        distance_km = 0
-    
-    m1, m2, m3 = st.columns(3)
     m1.metric("Tempo Normalizowane", format_pace(np_header))
     m2.metric("RSS", f"{rss_header:.0f}", help=f"IF: {intensity_factor:.2f}")
     m3.metric("Dystans", f"{distance_km:.2f} km")

@@ -18,7 +18,7 @@ import numpy as np
 from scipy import stats
 import logging
 
-logger = logging.getLogger("Tri_Dashboard.CardiacDrift")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
