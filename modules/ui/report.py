@@ -171,7 +171,6 @@ def render_report_tab(
                     hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
                 )
             )
-        if "tymeventilation_smooth" in df_plot.columns:
             fig_exec.add_trace(
                 go.Scatter(
                     x=time_x,
@@ -180,6 +179,27 @@ def render_report_tab(
                     line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
                     yaxis="y4",
                     hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
+                )
+            )
+
+        # TEMPO - Add pace with mm:ss format
+        if "pace" in df_plot.columns or "pace_smooth" in df_plot.columns:
+            pace_col = "pace_smooth" if "pace_smooth" in df_plot.columns else "pace"
+            pace_data = df_plot[pace_col] / 60.0  # Convert s/km to min/km
+            # Format mm:ss/km for hover
+            pace_hover = [
+                f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
+                for p in pace_data
+            ]
+            fig_exec.add_trace(
+                go.Scatter(
+                    x=time_x,
+                    y=pace_data,
+                    name="Tempo",
+                    line=dict(color="#00d4aa", width=2, dash="dot"),
+                    yaxis="y5",
+                    hovertemplate="Tempo: %{customdata}<extra></extra>",
+                    customdata=pace_hover,
                 )
             )
 
@@ -197,6 +217,7 @@ def render_report_tab(
             range=[0, 100],
         ),
         yaxis4=dict(title="VE", overlaying="y", side="right", showgrid=False, showticklabels=False),
+        yaxis5=dict(title="Tempo [min/km]", overlaying="y", side="right", showgrid=False, autorange="reversed"),
         legend=dict(orientation="h", y=1.05, x=0),
         hovermode="x unified",
     )
@@ -278,6 +299,26 @@ def render_report_tab(
                 )
             )
 
+        # TEMPO - Add pace with mm:ss format
+        if "pace" in df_plot_resampled.columns or "pace_smooth" in df_plot_resampled.columns:
+            pace_col = "pace_smooth" if "pace_smooth" in df_plot_resampled.columns else "pace"
+            pace_data = df_plot_resampled[pace_col] / 60.0  # Convert s/km to min/km
+            # Format mm:ss/km for hover
+            pace_hover = [
+                f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
+                for p in pace_data
+            ]
+            fig_dec.add_trace(
+                go.Scatter(
+                    x=df_plot_resampled["time_min"],
+                    y=pace_data,
+                    name="Tempo",
+                    yaxis="y4",
+                    line=dict(color="#00d4aa", width=1.5, dash="dot"),
+                    hovertemplate="Tempo: %{customdata}<extra></extra>",
+                    customdata=pace_hover,
+                )
+            )
         fig_dec.update_layout(
             template="plotly_dark",
             title="Dryf Mocy, Tętna i SmO2 w Czasie",
@@ -291,6 +332,13 @@ def render_report_tab(
                 showgrid=False,
                 showticklabels=False,
                 range=[0, 100],
+            ),
+            yaxis4=dict(
+                title="Tempo [min/km]",
+                overlaying="y",
+                side="right",
+                showgrid=False,
+                autorange="reversed",
             ),
             legend=dict(orientation="h", y=1.1, x=0),
         )
