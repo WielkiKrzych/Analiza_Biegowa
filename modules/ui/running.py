@@ -331,24 +331,43 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         times_min = [zones_time[z] / 60 for z in zones_list]
         colors = ["#3498db", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c", "#9b59b6"]
         
+        # FIX: Format time as mm:ss
+        def format_time_mmss(minutes: float) -> str:
+            total_sec = int(minutes * 60)
+            mins = total_sec // 60
+            secs = total_sec % 60
+            return f"{mins}:{secs:02d}"
+        
+        time_labels = [format_time_mmss(t) for t in times_min]
+        
         fig_z = go.Figure(data=[
             go.Bar(
                 x=[t for t in times_min],
                 y=zones_list,
                 orientation="h",
-                text=[f"{t:.0f} min" for t in times_min],
+                text=time_labels,  # FIX: Show mm:ss format
                 textposition="auto",
                 marker_color=colors[:len(zones_list)],
             )
         ])
+        
+        # FIX: Convert x-axis tick values to mm:ss labels
+        x_max = max(times_min) if times_min else 10
+        x_tickvals = list(range(0, int(x_max) + 5, 5))
+        x_ticktext = [format_time_mmss(t) for t in x_tickvals]
+        
         fig_z.update_layout(
             template="plotly_dark",
+            title="Czas w Strefach Tempa",  # FIX: Add title (was undefined)
             showlegend=False,
-            xaxis_title="Czas [hh:mm:ss]",
+            xaxis=dict(
+                title="Czas [mm:ss]",
+                tickvals=x_tickvals,
+                ticktext=x_ticktext,
+            ),
             height=300,
-            margin=dict(l=10, r=10, t=20, b=10),
+            margin=dict(l=10, r=10, t=40, b=10),
         )
-        st.plotly_chart(apply_chart_style(fig_z), use_container_width=True)
         
         st.info("""
         **💡 Interpretacja Stref Tempa:**
