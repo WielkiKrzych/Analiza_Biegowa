@@ -44,6 +44,8 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     # Use pace instead of power for running
     if "pace_smooth" in df_plot.columns:
         pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
+        # FIX: Handle NaN values in pace conversion
+        pace_clean = pace_display.dropna()
         fig.add_trace(
             go.Scatter(
                 x=time_x,
@@ -52,7 +54,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
                 fill="tozeroy",
                 line=dict(color=Config.COLOR_POWER, width=1),
                 hovertemplate="Tempo: %{customdata}<extra></extra>",
-                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" for p in pace_display],
+                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" if pd.notna(p) else "--:--" for p in pace_display],
             )
         )
     elif "pace" in df_plot.columns:
@@ -65,7 +67,8 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
                 fill="tozeroy",
                 line=dict(color=Config.COLOR_POWER, width=1),
                 hovertemplate="Tempo: %{customdata}<extra></extra>",
-                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" for p in pace_display],
+                # FIX: Handle NaN values in pace conversion
+                customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" if pd.notna(p) else "--:--" for p in pace_display],
             )
         )
 
@@ -141,8 +144,14 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     # Convert time_min to hh:mm:ss format for x-axis
     time_vals = time_x.values if hasattr(time_x, 'values') else np.array(time_x)
     tick_step = 5  # every 5 minutes
-    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
-    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    # FIX: Handle case where time_vals is NaN or empty
+    if len(time_vals) > 0:
+        tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+    else:
+        tick_vals = np.arange(0, tick_step, tick_step)
+    # FIX: Handle NaN values in tick conversion
+    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" if pd.notna(m) else "--:--" for m in tick_vals]
+
 
     fig.update_layout(
         template="plotly_dark",
