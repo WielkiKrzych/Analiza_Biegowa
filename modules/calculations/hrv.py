@@ -5,10 +5,13 @@ SRP: Moduł odpowiedzialny za analizę HRV i DFA Alpha-1.
 from typing import Optional, Tuple, List
 import numpy as np
 import pandas as pd
+import logging
 from numba import jit
 
 from .common import ensure_pandas
 
+# FIX: Add logger to avoid NameError on lines 273, 276
+logger = logging.getLogger(__name__)
 
 @jit(nopython=True)
 def _calc_alpha1_numba(rr_values: np.ndarray) -> float:
@@ -77,9 +80,9 @@ def _fast_dfa_loop(time_values, rr_values, window_sec, step_sec):
     results_time = []
     results_alpha = []
     results_rmssd = []
+    results_pnn50 = []  # FIX: Add pNN50 results
     results_sdnn = []
     results_mean_rr = []
-
     start_t = time_values[0]
     end_t = time_values[-1]
 
@@ -118,6 +121,13 @@ def _fast_dfa_loop(time_values, rr_values, window_sec, step_sec):
                     diffs_sq_sum += d * d
                 rmssd = np.sqrt(diffs_sq_sum / (len(clean_rr) - 1))
 
+                # FIX: pNN50 - percentage of RR intervals differing by >50ms
+                nn50_count = 0
+                for k in range(len(clean_rr) - 1):
+                    if abs(clean_rr[k + 1] - clean_rr[k]) > 50:
+                        nn50_count += 1
+                pnn50 = (nn50_count / (len(clean_rr) - 1)) * 100 if len(clean_rr) > 1 else 0.0
+
                 # SDNN
                 sdnn = np.std(clean_rr)
                 mean_rr = np.mean(clean_rr)
@@ -132,11 +142,12 @@ def _fast_dfa_loop(time_values, rr_values, window_sec, step_sec):
                     results_time.append(curr_t)
                     results_alpha.append(alpha1)
                     results_rmssd.append(rmssd)
+                    results_pnn50.append(pnn50)
                     results_sdnn.append(sdnn)
                     results_mean_rr.append(mean_rr)
 
         curr_t += step_sec
-    return results_time, results_alpha, results_rmssd, results_sdnn, results_mean_rr
+    return results_time, results_alpha, results_rmssd, results_pnn50, results_sdnn, results_mean_rr
 
 
 # ============================================================
@@ -253,9 +264,10 @@ def calculate_dynamic_dfa_v2(
     alpha1_clip_range: Tuple[float, float] = (0.2, 1.8),
 ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
-    Calculate HRV metrics (RMSSD, SDNN, Alpha-1) in a sliding window.
+    Calculate HRV metrics (RMSSD, pNN50, SDNN, Alpha-1) in a sliding window.
     Optimized version with Numba and caching.
     V2: Robust column detection, cache-busting, and data cleaning.
+    FIX: Added pNN50 (percentage of NN intervals >50ms different).
 
     Args:
         df_pl: DataFrame with RR data
@@ -373,7 +385,7 @@ def calculate_dynamic_dfa_v2(
     time_values = rr_data["time"].values.astype(np.float64)
 
     try:
-        r_time, r_alpha, r_rmssd, r_sdnn, r_mean_rr = _fast_dfa_loop(
+        r_time, r_alpha, r_rmssd, r_pnn50, r_sdnn, r_mean_rr = _fast_dfa_loop(
             time_values, rr_values, float(window_sec), float(step_sec)
         )
 
@@ -385,6 +397,7 @@ def calculate_dynamic_dfa_v2(
                 "time": r_time,
                 "alpha1": r_alpha,
                 "rmssd": r_rmssd,
+                "pnn50": r_pnn50,  # FIX: Add pNN50 column
                 "sdnn": r_sdnn,
                 "mean_rr": r_mean_rr,
             }

@@ -55,8 +55,9 @@ def calculate_pace_zones_time(
     if zones is None:
         # Zones as % of threshold pace
         # Lower pace % = faster = higher zone
+        # FIX: Z1 upper limit is infinity to catch ALL slow paces (walk/jog)
         zones = {
-            "Z1 Recovery": (1.15, 2.0),    # >15% slower than threshold
+            "Z1 Recovery": (1.15, float('inf')),  # >15% slower than threshold (all slow paces)
             "Z2 Aerobic": (1.05, 1.15),    # 5-15% slower
             "Z3 Tempo": (0.95, 1.05),      # Within 5%
             "Z4 Threshold": (0.88, 0.95),  # 5-12% faster
@@ -181,28 +182,29 @@ def classify_running_phenotype(pdc: dict, weight: float) -> str:
         return "unknown"
     
     # Get key pace values - PDC durations are in SECONDS (time-based)
-    p60s = pdc.get(60)    # 60-second effort
-    p5min = pdc.get(300)  # 5-minute effort
-    p10min = pdc.get(600) # 10-minute effort
-    p20min = pdc.get(1200) # 20-minute effort (if available)
-    p60min = pdc.get(3600) # 60-minute effort
-    
-    if not any([p1k, p5k, p10k]):
+    # These represent best pace sustained for a given duration, NOT distance
+    p60s = pdc.get(60)      # best pace over 60-second effort
+    p5min = pdc.get(300)    # best pace over 5-minute effort
+    p10min = pdc.get(600)   # best pace over 10-minute effort
+    p20min = pdc.get(1200)  # best pace over 20-minute effort
+    p60min = pdc.get(3600)  # best pace over 60-minute effort
+
+    if not any([p60s, p5min, p10min]):
         return "unknown"
-    
-    # Need at least 5K and 10K data for classification
-    if p5k is None or p10k is None:
+
+    # Need at least 5min and 10min data for classification
+    if p5min is None or p10min is None:
         return "unknown"
-    
-    # Calculate pace drop from 5K to 10K
-    # Marathoners maintain pace better (smaller drop)
-    pace_drop_5k_10k = (p10k - p5k) / p5k if p5k > 0 else 0
-    
-    # Calculate pace drop from 1K to 5K (if available)
-    pace_drop_1k_5k = None
-    if p1k:
-        pace_drop_1k_5k = (p5k - p1k) / p1k if p1k > 0 else 0
-    
+
+    # Calculate pace drop from 5min to 10min effort
+    # Endurance runners maintain pace better (smaller drop)
+    pace_drop_5_10 = (p10min - p5min) / p5min if p5min > 0 else 0
+
+    # Calculate pace drop from 60s to 5min (if available)
+    pace_drop_short_mid = None
+    if p60s:
+        pace_drop_short_mid = (p5min - p60s) / p60s if p60s > 0 else 0
+
     # Phenotype scoring
     scores = {
         "sprinter": 0,
@@ -211,30 +213,30 @@ def classify_running_phenotype(pdc: dict, weight: float) -> str:
         "ultra_runner": 0,
         "all_rounder": 0
     }
-    
-    # Sprinter: High drop from 1K to 5K (fast short, slow long)
-    if pace_drop_1k_5k and pace_drop_1k_5k > 0.15:
+
+    # Sprinter: High drop from short to mid effort (fast short, slow long)
+    if pace_drop_short_mid and pace_drop_short_mid > 0.15:
         scores["sprinter"] += 2
-    
-    # Marathoner: Small drop from 5K to 10K, has marathon data
-    if pace_drop_5k_10k < 0.05:
+
+    # Marathoner: Small drop from 5min to 10min, has long effort data
+    if pace_drop_5_10 < 0.05:
         scores["marathoner"] += 2
-    if p42k:
+    if p60min:
         scores["marathoner"] += 1
-    
-    # Ultra runner: Has half marathon and marathon data, very small drop
-    if p21k and p42k:
-        pace_drop_21k_42k = (p42k - p21k) / p21k if p21k > 0 else 1
-        if pace_drop_21k_42k < 0.10:
+
+    # Ultra runner: Has 20min and 60min data, very small drop
+    if p20min and p60min:
+        pace_drop_20_60 = (p60min - p20min) / p20min if p20min > 0 else 1
+        if pace_drop_20_60 < 0.10:
             scores["ultra_runner"] += 2
-    
-    # Middle distance: Balanced 5K-10K, moderate drop
-    if 0.03 <= pace_drop_5k_10k <= 0.08:
+
+    # Middle distance: Balanced 5-10min, moderate drop
+    if 0.03 <= pace_drop_5_10 <= 0.08:
         scores["middle_distance"] += 2
-    
-    # All-rounder: Has data across all distances, balanced
-    available_distances = sum(1 for p in [p1k, p5k, p10k, p21k, p42k] if p is not None)
-    if available_distances >= 3 and max(scores.values()) <= 2:
+
+    # All-rounder: Has data across multiple durations, balanced
+    available_durations = sum(1 for p in [p60s, p5min, p10min, p20min, p60min] if p is not None)
+    if available_durations >= 3 and max(scores.values()) <= 2:
         scores["all_rounder"] += 2
     
     # Find highest scoring phenotype
@@ -340,13 +342,13 @@ def calculate_fatigue_resistance_index_pace(
         FRI ratio (typically 1.02-1.15)
     """
     # FRI uses time-based PDC: 300s (5-min) and 600s (10-min) efforts
-    p5min = pdc.get(300)  # 5-min effort pace
-    p10min = pdc.get(600) # 10-min effort pace
-    
-    if p5k is None or p10k is None or p5k <= 0:
+    p5min = pdc.get(300)   # 5-min effort pace
+    p10min = pdc.get(600)  # 10-min effort pace
+
+    if p5min is None or p10min is None or p5min <= 0:
         return 0.0
-    
-    return p10k / p5k
+
+    return p10min / p5min
 
 
 def get_fri_interpretation_pace(fri: float) -> str:

@@ -164,6 +164,8 @@ def apply_smo2_smoothing(df: pd.DataFrame) -> pd.DataFrame:
     if "smo2" in df.columns:
         df = df.copy()  # Avoid SettingWithCopyWarning
         df["smo2_smooth_ultra"] = (
+            df["smo2"].rolling(window=Config.ROLLING_WINDOW_60S, center=True, min_periods=1).mean()
+        )
     return df
 
 

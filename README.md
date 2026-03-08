@@ -1,27 +1,40 @@
 ## 📋 Changelog
 
-### 2026-03-07 - Poprawki z code review
+### 2026-03-08 - Audit Code Review (P0-P3 Fixes)
 
-**Naprawione błędy (CRITICAL):**
-- 🐛 `pace.py`: Poprawione komentarze PDC - czas trwania (60s, 300s) ≠ dystans
-- 🐛 `session_analysis.py`: VO2max teraz używa formuły Danielsa (bieganie) zamiast cycling
-- 🐛 `gap.py`: Wektoryzacja dla numpy arrays - naprawiony crash przy `if grade >= 0`
-- 🐛 `running_dynamics.py`: Usunięty błąd `*2` w obliczaniu długości kroku
-- 🐛 `power.py`: `min_periods=window` zamiast `min_periods=1` (NP nie był zawyżony)
+**Naprawione błędy P0 (CRITICAL):**
+- 🐛 `session_orchestrator.py`: Deserializacja `_df_clean_pl_bytes` → `_df_clean_pl` w ścieżce cache
+- 🐛 `threshold_analysis_ui.py`: Analiza VT teraz działa bez miernika mocy (pace-based branch)
+- ✅ `hr_zones.py`: Nowy moduł stref HR (Karvonen + LTHR models)
 
-**Naprawione problemy (SERIOUS):**
-- 🔧 `config.py`: Dodano `pace` i `speed` do `VALIDATION_DATA_COLS`
-- 🔧 `app.py`: Poprawione obliczanie dystansu z tempa
-- 🔧 `session_analysis.py`: Usunięta estymacja VLamax (model kolarski)
-- 🔧 `running_dynamics.py`: Filtr kadencji >120 SPM (bieganie vs kolarstwo)
+**Naprawione błędy P1 (IMPORTANT):**
+- 🐛 `cardio_advanced.py`: HR Recovery używa HR peak zamiast power peak
+- 🐛 `heart_rate.py`: Usunięte `inplace=True` - unikanie mutacji DataFrame
+- 🐛 `smo2.py`: Zmienione wygładzanie z 5s mean na 15s median (bardziej odporne na outliery)
+- 🐛 `smo2.py`, `vent.py`: Poprawione etykiety wykresów "Tempo" → "Moc" (Watts)
 
-**Naprawione problemy (MEDIUM):**
-- 🔧 `data_validation.py`: Dodano `.copy()` unikając `SettingWithCopyWarning`
-- 🔧 `thermal.py`: Dodano `.copy()` dla HSI calculation
-- 🔧 `session_analysis.py`: Dodano `.copy()` dla SmO2 smooth
-- 🔧 `hrv.py`: Dodano LRU cache z limitem (naprawiony memory leak)
-- 🔧 `hrv.py`: Zamieniono `print()` na `logger.debug()`
-- 🔧 `cardiac_drift.py`: Zmieniona nazwa loggera na `__name__`
+**Naprawione błędy P2 (MEDIUM):**
+- ✅ `hrv.py`: Dodany pNN50 (% RR intervals >50ms different)
+- ✅ `metrics.py`: Dodane TRIMP i hrTSS (training load bez power meter)
+
+**Naprawione błędy P3 (LOW):**
+- 🐛 `report.py`, `kpi.py`: Kadencja "RPM" → "SPM" (steps/min dla biegania)
+
+**Already Fixed (z poprzedniego audit):**
+- 🐛 `pace.py` via `data_processing.py`: Resampling tempa przez konwersję speed→mean→pace
+- 🐛 `data_processing.py`: GAP (Grade-Adjusted Pace) calculation aktywowany
+- 🐛 `metrics.py`: Pace:HR Decoupling dla biegaczy (speed/HR efficiency factor)
+- 🐛 `pace.py`: Z1 upper limit = infinity (catches all ultra-slow)
+- 🐛 `dual_mode.py`: NP division by zero protection
+- 🐛 `running_dynamics.py`: Stride length bez ×2 (Garmin SPM is dual-step)
+- 🐛 `app.py`: MD5 hash dla plików zamiast name+size
+- 🐛 `app.py`: `metrics.get()` zamiast `metrics.pop()` (cache mutation)
+- 🐛 `app.py`: Duration z kolumny time, nie len(df)
+- 🐛 `app.py`: Cumulative distance z time×speed
+- 🐛 `dual_mode.py`: IF capped at 2.0
+- 🐛 `metrics.py`: Durability index harmonic mean dla pace
+- 🐛 `hrv.py`: Logger import dodany
+- 🐛 `cardiac_drift.py`: Efficiency Factor formula fixed
 
 ---
 

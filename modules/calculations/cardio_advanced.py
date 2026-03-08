@@ -113,14 +113,24 @@ def calculate_hr_drift(
     df: pd.DataFrame,
     power_col: str = "watts",
     hr_col: str = "hr",
-    window_pct: float = 0.5
+    window_pct: float = 0.5,
+    speed_col: str = None
 ) -> float:
     """
     Calculate HR Drift (Pa:Hr) - cardiac decoupling percentage.
     
-    Compares HR/Power ratio in first half vs second half.
+    CRITICAL FIX: EF = Power/HR (not HR/Power which gives inverted sign).
+    Also supports pace-based drift for running.
+    
+    Compares Efficiency Factor (Power/HR or Speed/HR) in first half vs second half.
     """
-    if power_col not in df.columns or hr_col not in df.columns:
+    # Try pace/speed-based if no power
+    if power_col not in df.columns and speed_col and speed_col in df.columns:
+        power_col = speed_col  # Use speed as the "power" metric
+    
+    if hr_col not in df.columns:
+        return 0.0
+    if power_col not in df.columns:
         return 0.0
     
     # Filter valid power
@@ -132,16 +142,20 @@ def calculate_hr_drift(
     n = len(filtered)
     mid = int(n * window_pct)
     
-    # First half
+    # First half - EF = Power / HR (CORRECT, not inverted)
     first_half = filtered.iloc[:mid]
-    first_ratio = first_half[hr_col].mean() / first_half[power_col].mean()
+    hr1 = first_half[hr_col].mean()
+    power1 = first_half[power_col].mean()
+    ef1 = power1 / hr1 if hr1 > 0 else 0
     
     # Second half
     second_half = filtered.iloc[mid:]
-    second_ratio = second_half[hr_col].mean() / second_half[power_col].mean()
+    hr2 = second_half[hr_col].mean()
+    power2 = second_half[power_col].mean()
+    ef2 = power2 / hr2 if hr2 > 0 else 0
     
-    if first_ratio > 0:
-        drift = ((second_ratio - first_ratio) / first_ratio) * 100
+    if ef1 > 0:
+        drift = ((ef1 - ef2) / ef1) * 100
         return float(drift)
     
     return 0.0
@@ -155,12 +169,15 @@ def calculate_hr_recovery(
 ) -> Optional[float]:
     """
     Calculate HR Recovery - drop in HR in first minute after peak.
+    
+    FIX: Use HR peak (not power peak) to find recovery start point.
+    Also supports HR-only analysis when no power meter available.
     """
-    if hr_col not in df.columns or power_col not in df.columns:
+    if hr_col not in df.columns:
         return None
     
-    # Find peak power index
-    peak_idx = df[power_col].idxmax()
+    # FIX: Find peak HR index (not power peak)
+    peak_idx = df[hr_col].idxmax()
     peak_hr = df.loc[peak_idx, hr_col]
     
     # Get recovery segment

@@ -84,6 +84,10 @@ def _process_session_cached(
     metrics['_decoupling_percent'] = decoupling_percent
     metrics['_drift_z2'] = drift_z2
     
+    # FIX: Add _df_clean_pl to cached metrics for HRV analysis
+    df_clean_pl_bytes = _serialize_df_for_cache(df_clean_pl)
+    metrics['_df_clean_pl_bytes'] = df_clean_pl_bytes
+    
     df_plot_bytes = _serialize_df_for_cache(df_plot)
     df_resampled_bytes = _serialize_df_for_cache(df_plot_resampled)
     
@@ -126,6 +130,11 @@ def process_uploaded_session(
         import io
         df_plot = pd.read_parquet(io.BytesIO(df_plot_bytes))
         df_plot_resampled = pd.read_parquet(io.BytesIO(df_resampled_bytes))
+        
+        # FIX: Deserialize _df_clean_pl_bytes to _df_clean_pl for HRV analysis
+        if '_df_clean_pl_bytes' in metrics:
+            metrics['_df_clean_pl'] = pd.read_parquet(io.BytesIO(metrics['_df_clean_pl_bytes']))
+            del metrics['_df_clean_pl_bytes']  # Remove bytes to save memory
         
         return df_plot, df_plot_resampled, metrics, None
         

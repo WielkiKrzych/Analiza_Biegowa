@@ -41,13 +41,13 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
         """)
         return
 
-    # Wygładzanie
+    # FIX: Use 15s median (more robust to outliers than 5s mean)
     if "pace_smooth" not in target_df.columns and "pace" in target_df.columns:
-        target_df["pace_smooth"] = target_df["pace"].rolling(window=5, center=True).mean()
+        target_df["pace_smooth"] = target_df["pace"].rolling(window=15, center=True).median()
     if "ve_smooth" not in target_df.columns:
-        target_df["ve_smooth"] = target_df["tymeventilation"].rolling(window=10, center=True).mean()
+        target_df["ve_smooth"] = target_df["tymeventilation"].rolling(window=15, center=True).median()
     if "tymebreathrate" in target_df.columns and "rr_smooth" not in target_df.columns:
-        target_df["rr_smooth"] = target_df["tymebreathrate"].rolling(window=10, center=True).mean()
+        target_df["rr_smooth"] = target_df["tymebreathrate"].rolling(window=15, center=True).median()
     # Tidal Volume = VE / BR (objętość oddechowa)
     if "tymebreathrate" in target_df.columns and "tymeventilation" in target_df.columns:
         # Avoid division by zero
@@ -720,12 +720,12 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
                             colorbar=dict(title="Czas (s)"),
                         ),
                         name="VE vs Power",
-                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Tempo:</b> %{x:.2f} min/km<br><b>VE:</b> %{y:.1f} L/min<extra></extra>",
+                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>VE:</b> %{y:.1f} L/min<extra></extra>",
                     )
                 )
                 fig_scatter.update_layout(
-                    title="Korelacja: VE vs Tempo",
-                    xaxis_title="Tempo [min/km]",
+                    title="Korelacja: VE vs Moc",
+                    xaxis_title="Moc [W]",
                     yaxis_title="VE (L/min)",
                     height=400,
                     hovermode="closest",

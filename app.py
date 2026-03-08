@@ -3,7 +3,7 @@ import os
 import logging
 import json
 import time
-
+import numpy as np  # FIX: Added for distance calculation
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s'
@@ -126,9 +126,13 @@ if uploaded_file is not None:
 
             # --- SESSION TYPE CLASSIFICATION (MUST run first) ---
             from modules.domain import SessionType, classify_session_type, classify_ramp_test
+            import hashlib
 
-            # Check if we already processed this file
-            current_file_hash = hash(uploaded_file.name + str(uploaded_file.size))
+            # FIX: Use MD5 hash of file content instead of name+size to avoid collisions
+            uploaded_file.seek(0)
+            file_content = uploaded_file.read()
+            uploaded_file.seek(0)  # Reset for later use
+            current_file_hash = hashlib.md5(file_content).hexdigest()
             cached_hash = st.session_state.get("current_file_hash")
             
             if cached_hash != current_file_hash:
@@ -136,7 +140,6 @@ if uploaded_file is not None:
                 session_type = classify_session_type(df_raw, uploaded_file.name)
                 st.session_state["session_type"] = session_type
                 st.session_state["current_file_hash"] = current_file_hash
-                
                 # Store detailed ramp classification for gating decisions
                 ramp_classification = None
                 if "watts" in df_raw.columns or "power" in df_raw.columns:
@@ -172,9 +175,14 @@ if uploaded_file is not None:
                 st.stop()
 
             # Extract intermediate results from metrics (DIP: metrics acts as a container here)
-            decoupling_percent = metrics.pop("_decoupling_percent", 0.0)
-            drift_z2 = metrics.pop("_drift_z2", 0.0)
-            df_clean_pl = metrics.pop("_df_clean_pl", df_raw)
+            # FIX: Use .get() instead of .pop() to avoid mutating cached data
+            decoupling_percent = metrics.get("_decoupling_percent", 0.0)
+            drift_z2 = metrics.get("_drift_z2", 0.0)
+            df_clean_pl = metrics.get("_df_clean_pl", df_raw)
+            
+            # If _df_clean_pl is in metrics, use it; otherwise use df_raw for HRV
+            if df_clean_pl is None or (hasattr(df_clean_pl, 'empty') and df_clean_pl.empty):
+                df_clean_pl = df_raw
 
             state.set_data_loaded()
 
@@ -216,18 +224,33 @@ if uploaded_file is not None:
     from modules.calculations.dual_mode import calculate_running_stress_score
     from modules.calculations.pace_utils import format_pace
     
-    duration_sec = len(df_plot)
+    # FIX: Calculate duration from time column, not len(df_plot) which assumes 1Hz
+    if "time" in df_plot.columns:
+        duration_sec = float(df_plot["time"].max() - df_plot["time"].min())
+    else:
+        duration_sec = len(df_plot)  # Fallback assumption of 1Hz
+    
     rss_header = calculate_running_stress_score(df_plot, threshold_pace_input, duration_sec)
     intensity_factor = threshold_pace_input / np_header if np_header > 0 else 0
     
+    # FIX: Calculate distance cumulatively from pace (speed integration)
     if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
         distance_km = float(df_plot["distance"].max()) / 1000.0
-    elif "pace" in df_plot.columns and df_plot["pace"].mean() > 0:
-        # Convert mean pace (sec/km) to speed (m/s), then calculate distance
-        # distance = speed * time = (1000/pace) * duration_sec / 1000
-        mean_pace = df_plot["pace"].mean()
-        distance_km = (duration_sec / mean_pace)  # km = (sec * km/sec) 
+    elif "pace" in df_plot.columns:
+        # FIX: Use cumulative distance (sum of speed*dt), not mean_pace * duration
+        # This correctly accounts for variable pace during the activity
+        pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
+        if len(pace_valid) > 0:
+            # Speed = 1000 / pace (m/s), assume 1s per sample after resampling
+            speed_ms = 1000.0 / pace_valid
+            distance_m = speed_ms.sum()  # Cumulative distance = sum(speed * 1s)
+            distance_km = distance_m / 1000.0
+        else:
+            distance_km = 0
     else:
+        distance_km = 0
+
+    m1, m2, m3 = st.columns(3)
     m1.metric("Tempo Normalizowane", format_pace(np_header))
     m2.metric("RSS", f"{rss_header:.0f}", help=f"IF: {intensity_factor:.2f}")
     m3.metric("Dystans", f"{distance_km:.2f} km")

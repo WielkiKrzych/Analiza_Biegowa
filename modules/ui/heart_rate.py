@@ -19,7 +19,8 @@ def render_hr_tab(df):
     if 'hr' not in df_chart.columns:
         for alias in ['heart_rate', 'heart rate', 'bpm', 'tętno', 'heartrate', 'heart_rate_bpm']:
             if alias in df_chart.columns:
-                df_chart.rename(columns={alias: 'hr'}, inplace=True)
+                # FIX: Avoid inplace=True - use assignment instead
+                df_chart = df_chart.rename(columns={alias: 'hr'})
                 break
                 
     if 'hr' not in df_chart.columns:

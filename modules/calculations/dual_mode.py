@@ -54,7 +54,10 @@ def get_metric_column(df: pd.DataFrame, metric_type: str) -> Optional[str]:
 
 
 def calculate_normalized_pace(df: Union[pd.DataFrame, Any], rolling_window_sec: int = 30) -> float:
-    """Calculate Normalized Pace (NP equivalent for running)."""
+    """Calculate Normalized Pace (NP equivalent for running).
+    
+    CRITICAL FIX: Handles pace=0 to avoid division by zero.
+    """
     from modules.calculations.common import ensure_pandas
     
     df = ensure_pandas(df)
@@ -63,7 +66,10 @@ def calculate_normalized_pace(df: Union[pd.DataFrame, Any], rolling_window_sec: 
     if col is None:
         return 0.0
     
-    pace = df[col].ffill()
+    # CRITICAL FIX: Filter out invalid pace values (0, NaN, negative)
+    # Minimum pace = 60 sec/km (1:00/km = sprint) for safety
+    pace = df[col].replace(0, np.nan).replace(-np.inf, np.nan)
+    pace = pace.ffill().bfill().clip(lower=60, upper=3600)  # 1:00 to 60:00 min/km
     
     # Convert to speed for calculation
     speed = 1000.0 / pace
@@ -74,6 +80,9 @@ def calculate_normalized_pace(df: Union[pd.DataFrame, Any], rolling_window_sec: 
     # 4th power (like NP)
     rolling_pow4 = np.power(rolling, 4)
     avg_pow4 = np.nanmean(rolling_pow4)
+    
+    if np.isnan(avg_pow4) or avg_pow4 <= 0:
+        return 0.0
     
     # 4th root
     normalized_speed = np.power(avg_pow4, 0.25)
@@ -92,6 +101,8 @@ def calculate_running_stress_score(
     """
     Calculate Running Stress Score (RSS) - running equivalent of TSS.
     RSS = (Normalized Pace / Threshold Pace)^2 * Duration (hours) * 100
+    
+    CRITICAL FIX: Cap Intensity Factor at 2.0 to prevent extreme values.
     """
     np_pace = calculate_normalized_pace(df)
     
@@ -103,6 +114,10 @@ def calculate_running_stress_score(
     
     # Intensity factor (pace ratio - note: lower pace = higher intensity)
     intensity_factor = threshold_pace / np_pace
+    
+    # CRITICAL FIX: Cap IF at 2.0 to prevent absurd RSS values
+    intensity_factor = min(intensity_factor, 2.0)
+    
     duration_hours = duration_sec / 3600
     
     rss = intensity_factor**2 * duration_hours * 100

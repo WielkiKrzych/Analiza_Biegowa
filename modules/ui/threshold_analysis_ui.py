@@ -35,12 +35,23 @@ def render_threshold_analysis_tab(
     has_ve = "tymeventilation" in target_df.columns
     has_smo2 = "smo2" in target_df.columns
     has_watts = "watts" in target_df.columns
+    has_pace = "pace" in target_df.columns or "pace_s" in target_df.columns
     has_hr = "hr" in target_df.columns or "heartrate" in target_df.columns
     hr_col = "hr" if "hr" in target_df.columns else "heartrate"
-
-    if not has_watts:
-        st.error("Brak danych mocy (kolumna 'watts'). Analiza niemożliwa.")
+    pace_col = "pace" if "pace" in target_df.columns else "pace_s" if "pace_s" in target_df.columns else None
+    
+    # FIX: Allow pace-based analysis when no power meter available
+    if not has_watts and not has_pace:
+        st.error("Brak danych mocy (kolumna 'watts') ani tempa (kolumna 'pace'). Analiza niemożliwa.")
         return
+    
+    # Determine primary metric for analysis
+    if has_watts:
+        intensity_col = "watts"
+        intensity_label = "Moc (W)"
+    else:
+        intensity_col = pace_col
+        intensity_label = "Tempo (s/km)"
 
     # Calculate time in minutes for easier UI
     if "time" in target_df.columns:
@@ -61,7 +72,7 @@ def render_threshold_analysis_tab(
     # Create power preview chart
     fig = go.Figure()
 
-    # Power trace
+    # Intensity trace (power or pace)
     if "time" in target_df.columns:
         x_data = target_df["time"] / 60  # Convert to minutes
     else:
@@ -71,8 +82,8 @@ def render_threshold_analysis_tab(
     fig.add_trace(
         go.Scatter(
             x=x_data,
-            y=target_df["watts"],
-            name="Moc",
+            y=target_df[intensity_col],
+            name=intensity_label,
             fill="tozeroy",
             line=dict(color="#00d4aa", width=1),
             fillcolor="rgba(0, 212, 170, 0.3)",
@@ -94,7 +105,7 @@ def render_threshold_analysis_tab(
         height=200,
         margin=dict(l=0, r=0, t=10, b=0),
         xaxis=dict(title="Czas (min)", showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
-        yaxis=dict(title="Moc (W)", showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
+        yaxis=dict(title=intensity_label, showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
         yaxis2=dict(title="HR (bpm)", overlaying="y", side="right"),
         showlegend=True,
         legend=dict(orientation="h", yanchor="top", y=1.15),

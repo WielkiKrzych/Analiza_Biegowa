@@ -90,10 +90,10 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
     cadence_spm = valid["cadence"].values
     
     # Stride length = speed / (cadence / 60)
-    # Note: Garmin SPM already counts both feet, so no *2 needed
+    # Note: Garmin SPM already counts both feet (dual-step), so no *2 needed
     # Each step at cadence SPM covers (speed / steps_per_second) meters
+    # Formula: stride_length = speed_m_s / (cadence_spm / 60)
     stride_length_m = speed_m_s / (cadence_spm / 60)
-    stride_length_m = speed_m_s / (cadence_spm / 60) * 2
     
     mean_stride = float(np.mean(stride_length_m))
     height_m = runner_height / 100

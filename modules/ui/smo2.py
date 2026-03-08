@@ -24,10 +24,11 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         return
 
     # Ensure smoothed columns exist
+    # FIX: Use 15s median (more robust to outliers than 5s mean)
     if "pace_smooth" not in target_df.columns and "pace" in target_df.columns:
-        target_df["pace_smooth"] = target_df["pace"].rolling(window=5, center=True).mean()
+        target_df["pace_smooth"] = target_df["pace"].rolling(window=15, center=True).median()
     if "smo2_smooth" not in target_df.columns:
-        target_df["smo2_smooth"] = target_df["smo2"].rolling(window=5, center=True).mean()
+        target_df["smo2_smooth"] = target_df["smo2"].rolling(window=15, center=True).median()
 
     target_df["time_str"] = pd.to_datetime(target_df["time"], unit="s").dt.strftime("%H:%M:%S")
 
@@ -417,12 +418,12 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                             colorbar=dict(title="Czas (s)"),
                         ),
                         name="SmO2 vs Power",
-                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Tempo:</b> %{x:.2f} min/km<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
+                        hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
                     )
                 )
                 fig_scatter.update_layout(
-                    title="Korelacja: SmO2 vs Tempo",
-                    xaxis_title="Tempo [min/km]",
+                    title="Korelacja: SmO2 vs Moc",
+                    xaxis_title="Moc [W]",
                     yaxis_title="SmO2 (%)",
                     height=400,
                     hovermode="closest",

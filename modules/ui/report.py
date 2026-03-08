@@ -94,7 +94,7 @@ def render_report_tab(
     c1.metric("Średnia Moc", f"{metrics.get('avg_watts', 0):.0f} W")
     c2.metric("Średnie Tętno", f"{metrics.get('avg_hr', 0):.0f} BPM")
     c3.metric("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f} %")
-    c4.metric("Kadencja", f"{metrics.get('avg_cadence', 0):.0f} RPM")
+    c4.metric("Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM")  # FIX: SPM (steps/min) for running, not RPM
 
     vo2max_est = calculate_vo2max(
         df_plot["watts"].rolling(window=300).mean().max() if "watts" in df_plot.columns else 0,

@@ -1,11 +1,16 @@
 """
 SRP: Moduł odpowiedzialny za przetwarzanie surowych danych treningowych.
+
+IMPORTANT: Pace is a NONLINEAR metric (sec/km = 1/speed).
+Averaging pace with .mean() gives INCORRECT results.
+Always convert to speed for averaging, then convert back.
 """
 from typing import Union, Any
 import numpy as np
 import pandas as pd
 
 from .common import ensure_pandas, WINDOW_LONG, WINDOW_SHORT
+from .gap import calculate_gap, calculate_grade
 
 
 def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
@@ -13,9 +18,10 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
     
     This function:
     1. Ensures time column exists and is numeric
-    2. Resamples to 1 second intervals
+    2. Resamples to 1 second intervals (CORRECTLY handling nonlinear pace)
     3. Interpolates missing values
     4. Creates smoothed versions of key metrics
+    5. Calculates GAP (Grade-Adjusted Pace) if elevation available
     
     Args:
         df: Raw DataFrame from CSV/file
@@ -47,12 +53,35 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
     if num_cols:
         df_pd[num_cols] = df_pd[num_cols].interpolate(method='linear').ffill().bfill()
 
+    # CRITICAL FIX: Handle pace resampling correctly
+    # Pace is NONLINEAR (sec/km = 1/speed). Must convert to speed, average, convert back.
+    pace_col = 'pace' if 'pace' in df_pd.columns else None
+    speed_backup = None
+    
+    if pace_col:
+        # Convert pace to speed (m/s) for correct averaging
+        # Filter out invalid pace values (0, NaN, negative)
+        pace_valid = df_pd[pace_col].replace(0, np.nan).replace(-np.inf, np.nan)
+        speed_backup = 1000.0 / pace_valid  # m/s = 1000m / (sec/km)
+        # Temporarily add speed for resampling
+        df_pd['_speed_ms'] = speed_backup
+
     try:
         df_numeric = df_pd.select_dtypes(include=[np.number])
         df_resampled = df_numeric.resample('1s').mean()
         df_resampled = df_resampled.interpolate(method='linear').ffill().bfill()
     except Exception:
         df_resampled = df_pd
+    
+    # CRITICAL FIX: Convert speed back to pace after resampling
+    if '_speed_ms' in df_resampled.columns:
+        speed_avg = df_resampled['_speed_ms']
+        # Filter out invalid speeds (0, inf, nan)
+        speed_avg = speed_avg.replace(0, np.nan).replace(np.inf, np.nan)
+        # Convert back to pace: pace = 1000 / speed (sec/km)
+        df_resampled['pace'] = 1000.0 / speed_avg
+        # Clean up temporary column
+        df_resampled = df_resampled.drop(columns=['_speed_ms'], errors='ignore')
     
     df_resampled['time'] = df_resampled.index.total_seconds()
     df_resampled['time_min'] = df_resampled['time'] / 60.0
@@ -71,6 +100,19 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
             df_resampled[f'{col}_smooth_5s'] = df_resampled[col].rolling(
                 window=WINDOW_SHORT, min_periods=1
             ).mean()
+
+    # FEATURE: Calculate GAP (Grade-Adjusted Pace) if elevation available
+    if 'pace' in df_resampled.columns:
+        if 'elevation' in df_resampled.columns or 'altitude' in df_resampled.columns:
+            elev_col = 'elevation' if 'elevation' in df_resampled.columns else 'altitude'
+            # Calculate grade from elevation differences
+            elev = df_resampled[elev_col].ffill().bfill()
+            elev_diff = elev.diff()
+            # Assume 1s resampling, distance = speed * time = (1000/pace) * 1
+            distance_m = (1000.0 / df_resampled['pace'].replace(0, np.nan)).fillna(0)
+            grade = calculate_grade(elev_diff.fillna(0), distance_m.fillna(0))
+            # Calculate GAP
+            df_resampled['gap'] = calculate_gap(df_resampled['pace'].values, grade)
 
     df_resampled = df_resampled.reset_index(drop=True)
 

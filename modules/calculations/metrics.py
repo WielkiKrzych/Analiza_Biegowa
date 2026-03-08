@@ -2,7 +2,7 @@
 SRP: Moduł odpowiedzialny za podstawowe metryki treningowe.
 """
 
-from typing import Union, Any, Tuple
+from typing import Union, Any, Tuple, Dict
 import numpy as np
 import pandas as pd
 
@@ -185,3 +185,256 @@ def calculate_trend(x, y):
         return p(x)
     except (ValueError, TypeError, np.linalg.LinAlgError):
         return None
+
+
+
+def calculate_pace_hr_decoupling(
+    df_pl: Union[pd.DataFrame, Any],
+    pace_col: str = "pace",
+    hr_col: str = "heartrate"
+) -> Tuple[float, float]:
+    """Calculate Pace:HR Decoupling (Efficiency Factor for running).
+    
+    This is the RUNNING version of power-based decoupling.
+    Critical for assessing aerobic fitness (Joe Friel methodology).
+    
+    EF = Speed / HR (higher = more efficient)
+    Decoupling = (EF_first_half - EF_second_half) / EF_first_half * 100
+    
+    Target: <5% = good aerobic adaptation, >5% = needs more base training
+    
+    Args:
+        df_pl: DataFrame with pace and heart rate columns
+        pace_col: Column name for pace (sec/km)
+        hr_col: Column name for heart rate (bpm)
+    
+    Returns:
+        Tuple of (decoupling_percent, efficiency_factor)
+    """
+    df = ensure_pandas(df_pl)
+    
+    if pace_col not in df.columns or hr_col not in df.columns:
+        return 0.0, 0.0
+    
+    # Filter valid data (positive pace, reasonable HR > 60 bpm)
+    df_active = df[(df[pace_col] > 0) & (df[pace_col] < 2000) & (df[hr_col] > 60)].copy()
+    
+    if len(df_active) < MIN_SAMPLES_ACTIVE:
+        return 0.0, 0.0
+    
+    # Convert pace to speed (m/s) for linear averaging
+    # Speed = 1000m / pace_sec_per_km
+    df_active['speed_ms'] = 1000.0 / df_active[pace_col]
+    
+    mid = len(df_active) // 2
+    first_half = df_active.iloc[:mid]
+    second_half = df_active.iloc[mid:]
+    
+    # Calculate EF for each half (Speed / HR)
+    # Use harmonic mean for pace (which means arithmetic mean for speed)
+    hr1 = first_half[hr_col].mean()
+    hr2 = second_half[hr_col].mean()
+    speed1 = first_half['speed_ms'].mean()
+    speed2 = second_half['speed_ms'].mean()
+    
+    if hr1 <= 0 or hr2 <= 0:
+        return 0.0, 0.0
+    
+    ef1 = speed1 / hr1  # m/s per bpm
+    ef2 = speed2 / hr2
+    
+    if ef1 <= 0:
+        return 0.0, 0.0
+    
+    # Decoupling percentage
+    decoupling_pct = ((ef1 - ef2) / ef1) * 100
+    
+    # Overall efficiency factor
+    overall_ef = df_active['speed_ms'].mean() / df_active[hr_col].mean()
+    
+    return float(decoupling_pct), float(overall_ef)
+
+
+def calculate_durability_index(
+    df_pl: Union[pd.DataFrame, Any],
+    pace_col: str = "pace"
+) -> float:
+    """Calculate Durability Index using HARMONIC mean for pace.
+    
+    Durability = (avg_pace_first_half / avg_pace_second_half) * 100
+    Uses harmonic mean because pace is nonlinear.
+    
+    Returns:
+        Durability index (100 = perfect maintenance, <100 = fade)
+    """
+    df = ensure_pandas(df_pl)
+    
+    if pace_col not in df.columns:
+        return 0.0
+    
+    df_valid = df[(df[pace_col] > 0) & (df[pace_col] < 2000)].copy()
+    
+    if len(df_valid) < 100:
+        return 0.0
+    
+    mid = len(df_valid) // 2
+    first_half = df_valid.iloc[:mid]
+    second_half = df_valid.iloc[mid:]
+    
+    # Use harmonic mean for pace: H = n / sum(1/x)
+    # Equivalent to arithmetic mean of speed
+    speed1 = 1000.0 / first_half[pace_col]
+    speed2 = 1000.0 / second_half[pace_col]
+    
+    avg_speed1 = speed1.mean()
+    avg_speed2 = speed2.mean()
+    
+    if avg_speed1 <= 0 or avg_speed2 <= 0:
+        return 0.0
+    
+    # Convert back to pace for durability ratio
+    avg_pace1 = 1000.0 / avg_speed1
+    avg_pace2 = 1000.0 / avg_speed2
+    
+    # Durability: ratio of first half to second half pace
+    # >100 means second half was faster (negative split)
+    # <100 means second half was slower (positive split/fade)
+    durability = (avg_pace1 / avg_pace2) * 100
+    
+    return float(durability)
+
+
+# =============================================================================
+# NEW: TRIMP and hrTSS for training load without power meter
+# =============================================================================
+
+def calculate_trimp(
+    df: pd.DataFrame,
+    hr_col: str = "hr",
+    duration_sec: float = None,
+    hr_max: float = 200.0,
+    hr_rest: float = 60.0,
+    gender: str = "male"
+) -> Optional[float]:
+    """
+    Calculate TRIMP (Training Impulse) - heart rate-based training load.
+    Uses exponential model based on %HRR.
+
+    Formula: TRIMP = duration_min × HRR × gender_factor
+    where HRR = %Heart Rate Reserve, gender_factor = 0.64 * e^(1.92 * HRR) for males
+
+    Args:
+        df: DataFrame with HR data
+        hr_col: Heart rate column name
+        duration_sec: Duration in seconds (if None, calculated from time column)
+        hr_max: Maximum heart rate (default: 200)
+        hr_rest: Resting heart rate (default: 60)
+        gender: "male" or "female" (affects exponent factor)
+
+    Returns:
+        TRIMP value (unitless training load score)
+    """
+    if hr_col not in df.columns:
+        return None
+
+    # Calculate duration if not provided
+    if duration_sec is None:
+        if "time" in df.columns:
+            duration_sec = df["time"].max()
+        else:
+            duration_sec = len(df)
+
+    # Calculate average HR during activity
+    avg_hr = df[hr_col].mean()
+
+    # Calculate %HRR (Heart Rate Reserve)
+    hrr = (avg_hr - hr_rest) / (hr_max - hr_rest) if hr_max > hr_rest else 0.0
+    hrr = max(0.0, min(1.0, hrr))  # Clamp to 0-1
+
+    # Gender-specific exponent factor
+    if gender.lower() == "female":
+        k = 0.86 * np.exp(1.67 * hrr)
+    else:
+        k = 0.64 * np.exp(1.92 * hrr)
+
+    # TRIMP calculation
+    duration_min = duration_sec / 60.0
+    trimp = duration_min * hrr * k
+
+    return float(trimp)
+
+
+def calculate_hrtss(
+    df: pd.DataFrame,
+    hr_col: str = "hr",
+    duration_sec: float = None,
+    lthr: float = 175.0,
+    hr_max: float = 200.0,
+    hr_rest: float = 60.0,
+    gender: str = "male"
+) -> Optional[Dict[str, float]]:
+    """
+    Calculate hrTSS (Heart Rate Training Stress Score).
+    Alternative to TSS when no power meter is available.
+
+    Formula: hrTSS = (TRIMP / TRIMP_threshold) × 100
+    where TRIMP_threshold is TRIMP at LTHR for 1 hour
+
+    Args:
+        df: DataFrame with HR data
+        hr_col: Heart rate column name
+        duration_sec: Duration in seconds (if None, calculated from time column)
+        lthr: Lactate Threshold Heart Rate (default: 175)
+        hr_max: Maximum heart rate (default: 200)
+        hr_rest: Resting heart rate (default: 60)
+        gender: "male" or "female"
+
+    Returns:
+        Dict with hrTSS, TRIMP, IF (Intensity Factor), and normalized values
+    """
+    if hr_col not in df.columns:
+        return None
+
+    # Calculate actual TRIMP
+    trimp = calculate_trimp(df, hr_col, duration_sec, hr_max, hr_rest, gender)
+    if trimp is None:
+        return None
+
+    # Calculate duration if not provided
+    if duration_sec is None:
+        if "time" in df.columns:
+            duration_sec = df["time"].max()
+        else:
+            duration_sec = len(df)
+
+    # Calculate TRIMP at LTHR for 1 hour (threshold reference)
+    # Create a synthetic 1-hour DataFrame at LTHR
+    hrr_threshold = (lthr - hr_rest) / (hr_max - hr_rest)
+    hrr_threshold = max(0.0, min(1.0, hrr_threshold))
+
+    if gender.lower() == "female":
+        k_threshold = 0.86 * np.exp(1.67 * hrr_threshold)
+    else:
+        k_threshold = 0.64 * np.exp(1.92 * hrr_threshold)
+
+    # TRIMP at LTHR for 60 minutes
+    trimp_threshold = 60.0 * hrr_threshold * k_threshold
+
+    # Calculate hrTSS
+    if trimp_threshold > 0:
+        hrtss = (trimp / trimp_threshold) * 100.0
+    else:
+        hrtss = 0.0
+
+    # Calculate Intensity Factor (IF) based on HR
+    avg_hr = df[hr_col].mean()
+    if_hrtss = avg_hr / lthr if lthr > 0 else 0.0
+
+    return {
+        "hrtss": float(hrtss),
+        "trimp": float(trimp),
+        "if_hrtss": float(if_hrtss),
+        "duration_min": float(duration_sec / 60.0),
+        "avg_hr": float(avg_hr),
+        "lthr": float(lthr),
+    }
