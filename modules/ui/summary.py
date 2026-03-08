@@ -310,6 +310,27 @@ def render_summary_tab(
                 secondary_y=True,
             )
 
+        # TEMPO - Add pace as third variable with hh:mm:ss format
+        if "pace" in df_plot.columns or "pace_smooth" in df_plot.columns:
+            pace_col = "pace_smooth" if "pace_smooth" in df_plot.columns else "pace"
+            pace_data = df_plot[pace_col].rolling(10, center=True).mean() / 60.0  # Convert to min/km
+            # Format hh:mm:ss for hover (pace is s/km, convert to mm:ss/km)
+            pace_hover = [
+                f"{int(p)}:{int((p % 1) * 60):02d}:00 /km" if pd.notna(p) else "--:--"
+                for p in pace_data
+            ]
+            fig_ve_br.add_trace(
+                go.Scatter(
+                    x=time_x_s,
+                    y=pace_data,
+                    name="Tempo (min/km)",
+                    line=dict(color="#00d4aa", width=2, dash="dot"),
+                    hovertemplate="Tempo: %{customdata}<extra></extra>",
+                    customdata=pace_hover,
+                ),
+                secondary_y=False,
+            )
+
         fig_ve_br.update_layout(
             template="plotly_dark",
             height=350,
@@ -548,6 +569,26 @@ def _render_smo2_thb_chart(df_plot):
     else:
         st.caption("ℹ️ Brak danych THb w pliku.")
 
+    # TEMPO - Add pace with hh:mm:ss format
+    if "pace" in df_plot.columns or "pace_smooth" in df_plot.columns:
+        pace_col = "pace_smooth" if "pace_smooth" in df_plot.columns else "pace"
+        pace_data = df_plot[pace_col].rolling(5, center=True).mean() / 60.0  # Convert to min/km
+        # Format mm:ss/km for hover
+        pace_hover = [
+            f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
+            for p in pace_data
+        ]
+        fig_smo2_thb.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=pace_data,
+                name="Tempo (min/km)",
+                line=dict(color="#00d4aa", width=2, dash="dot"),
+                hovertemplate="Tempo: %{customdata}<extra></extra>",
+                customdata=pace_hover,
+            ),
+            secondary_y=False,
+        )
     fig_smo2_thb.update_layout(
         template="plotly_dark",
         height=350,
