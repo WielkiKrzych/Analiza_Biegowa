@@ -42,32 +42,50 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         return None
 
     # Use pace instead of power for running
+    # With reversed Y-axis, fill="tozeroy" fills UP to 0 (top). Use invisible
+    # baseline at slow-pace cap and fill="tonexty" to shade downward correctly.
+    PACE_CAP_MIN = 10.0  # 10:00 /km cap in min/km
     if "pace_smooth" in df_plot.columns:
-        pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
-        # FIX: Handle NaN values in pace conversion
-        pace_clean = pace_display.dropna()
+        pace_display = (df_plot["pace_smooth"] / 60.0).clip(upper=PACE_CAP_MIN)
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=[PACE_CAP_MIN] * len(time_x),
+                mode="lines", line=dict(width=0),
+                showlegend=False, hoverinfo="skip",
+            )
+        )
         fig.add_trace(
             go.Scatter(
                 x=time_x,
                 y=pace_display,
                 name="Tempo",
-                fill="tozeroy",
+                fill="tonexty",
+                fillcolor="rgba(0, 204, 150, 0.25)",
                 line=dict(color=Config.COLOR_POWER, width=1),
                 hovertemplate="Tempo: %{customdata}<extra></extra>",
                 customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" if pd.notna(p) else "--:--" for p in pace_display],
             )
         )
     elif "pace" in df_plot.columns:
-        pace_display = df_plot["pace"].rolling(5, center=True).mean() / 60.0
+        pace_display = (df_plot["pace"].rolling(5, center=True).mean() / 60.0).clip(upper=PACE_CAP_MIN)
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=[PACE_CAP_MIN] * len(time_x),
+                mode="lines", line=dict(width=0),
+                showlegend=False, hoverinfo="skip",
+            )
+        )
         fig.add_trace(
             go.Scatter(
                 x=time_x,
                 y=pace_display,
                 name="Tempo",
-                fill="tozeroy",
+                fill="tonexty",
+                fillcolor="rgba(0, 204, 150, 0.25)",
                 line=dict(color=Config.COLOR_POWER, width=1),
                 hovertemplate="Tempo: %{customdata}<extra></extra>",
-                # FIX: Handle NaN values in pace conversion
                 customdata=[f"{int(p)}:{int((p % 1) * 60):02d}" if pd.notna(p) else "--:--" for p in pace_display],
             )
         )
@@ -271,7 +289,7 @@ def render_summary_tab(
     # =========================================================================
     # 2. WYKRES WENTYLACJA (VE) I ODDECHY (BR)
     # =========================================================================
-    st.subheader("2️⃣ Wentylacja (VE) i Oddechy (BR)")
+    st.subheader("2️⃣ Wentylacja (VE) i Oddechy (BR)")  # noqa: section numbering
 
     if "tymeventilation" in df_plot.columns:
         fig_ve_br = make_subplots(specs=[[{"secondary_y": True}]])
@@ -388,15 +406,30 @@ def render_summary_tab(
     # =========================================================================
     # 3. WYKRES SmO2 vs THb W CZASIE
     # =========================================================================
-    st.subheader("3️⃣ SmO2 vs THb w czasie")
+    st.subheader("3️⃣ SmO2 vs THb w czasie")  # noqa: section numbering
     _render_smo2_thb_chart(df_plot)
 
     st.markdown("---")
 
     # =========================================================================
-    # 4. VO2max UNCERTAINTY ESTIMATION (CI95%)
+    # 4. RUNNING DYNAMICS (FIT DATA)
     # =========================================================================
-    st.subheader("4️⃣ Estymacja VO2max z Niepewnością (CI95%)")
+    _render_running_dynamics_section(df_plot)
+
+    # =========================================================================
+    # 5. O2Hb / HHb (Hemoglobin from FIT)
+    # =========================================================================
+    _render_o2hb_hhb_section(df_plot)
+
+    # =========================================================================
+    # 6. HRV (from FIT)
+    # =========================================================================
+    _render_hrv_section(df_plot)
+
+    # =========================================================================
+    # 7. VO2max UNCERTAINTY ESTIMATION (CI95%)
+    # =========================================================================
+    st.subheader("7️⃣ Estymacja VO2max z Niepewnością (CI95%)")
     _render_vo2max_uncertainty(df_plot, rider_weight)
 
 
@@ -490,6 +523,90 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
     c2.metric("🧬 Est. VLamax", f"{est_vlamax:.2f} mmol/L/s" if est_vlamax else "--")
     c3.metric("⚡ Est. CP", f"{est_cp:.0f} W" if est_cp else "--")
     c4.metric("🔋 Est. W'", f"{est_w_prime:.0f} J" if est_w_prime else "--")
+
+    # Wiersz 7: Running Dynamics (FIT)
+    has_dynamics = any(
+        col in df_plot.columns
+        for col in ["stance_time", "stance_time_balance", "vertical_ratio", "step_length"]
+    )
+    if has_dynamics:
+        st.markdown("### 🦶 Running Dynamics (Garmin FIT)")
+        c1, c2, c3, c4 = st.columns(4)
+
+        if "stance_time" in df_plot.columns:
+            gct_mean = df_plot["stance_time"].mean()
+            c1.metric("⏱️ AVG GCT", f"{gct_mean:.0f} ms")
+        elif "gct" in df_plot.columns:
+            gct_mean = df_plot["gct"].mean()
+            c1.metric("⏱️ AVG GCT", f"{gct_mean:.0f} ms")
+        else:
+            c1.empty()
+
+        if "stance_time_balance" in df_plot.columns:
+            bal = df_plot["stance_time_balance"].mean()
+            imbalance = abs(bal - 50.0)
+            c2.metric("⚖️ Balans L/P", f"{bal:.1f}%",
+                      delta=f"{imbalance:.1f}% asymetrii",
+                      delta_color="inverse" if imbalance > 2.0 else "off")
+        else:
+            c2.empty()
+
+        if "vertical_ratio" in df_plot.columns:
+            vr = df_plot["vertical_ratio"].mean()
+            c3.metric("📐 Vertical Ratio", f"{vr:.1f}%")
+        else:
+            c3.empty()
+
+        if "step_length" in df_plot.columns:
+            sl = df_plot["step_length"].mean()
+            c4.metric("📏 Długość kroku", f"{sl:.3f} m")
+        else:
+            c4.empty()
+
+    # Wiersz 8: HRV, Temperature, O2Hb/HHb
+    has_extras = any(
+        col in df_plot.columns for col in ["hrv", "temperature", "o2hb", "hhb"]
+    )
+    if has_extras:
+        st.markdown("### 🔬 Dane Dodatkowe (FIT)")
+        c1, c2, c3, c4 = st.columns(4)
+
+        if "hrv" in df_plot.columns:
+            hrv_data = df_plot["hrv"].dropna()
+            if len(hrv_data) > 0:
+                c1.metric("💓 AVG HRV (RMSSD)", f"{hrv_data.mean():.1f} ms")
+            else:
+                c1.empty()
+        else:
+            c1.empty()
+
+        if "temperature" in df_plot.columns:
+            temp_data = df_plot["temperature"].dropna()
+            if len(temp_data) > 0:
+                c2.metric("🌡️ AVG Temp", f"{temp_data.mean():.1f} °C",
+                          delta=f"max {temp_data.max():.0f} °C", delta_color="off")
+            else:
+                c2.empty()
+        else:
+            c2.empty()
+
+        if "o2hb" in df_plot.columns:
+            o2hb_data = df_plot["o2hb"].dropna()
+            if len(o2hb_data) > 0:
+                c3.metric("🔴 AVG O2Hb", f"{o2hb_data.mean():.1f} a.u.")
+            else:
+                c3.empty()
+        else:
+            c3.empty()
+
+        if "hhb" in df_plot.columns:
+            hhb_data = df_plot["hhb"].dropna()
+            if len(hhb_data) > 0:
+                c4.metric("🔵 AVG HHb", f"{hhb_data.mean():.1f} a.u.")
+            else:
+                c4.empty()
+        else:
+            c4.empty()
 
 
 def _calculate_np(watts_series):
@@ -639,6 +756,264 @@ def _render_smo2_thb_chart(df_plot):
                 """,
                     unsafe_allow_html=True,
                 )
+
+
+def _render_running_dynamics_section(df_plot: pd.DataFrame):
+    """Render Running Dynamics section with GCT, balance, VR, step length charts."""
+    has_dynamics = any(
+        col in df_plot.columns
+        for col in ["stance_time", "stance_time_balance", "vertical_ratio", "step_length"]
+    )
+    if not has_dynamics:
+        return
+
+    st.subheader("4️⃣ Running Dynamics (Garmin FIT)")
+
+    time_x = df_plot["time"] if "time" in df_plot.columns else pd.Series(range(len(df_plot)))
+
+    fig_dyn = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=("GCT (ms)", "Balans L/P (%)", "Vertical Ratio (%)", "Długość Kroku (m)"),
+        vertical_spacing=0.12,
+        horizontal_spacing=0.08,
+    )
+
+    # GCT
+    gct_col = "stance_time" if "stance_time" in df_plot.columns else ("gct" if "gct" in df_plot.columns else None)
+    if gct_col:
+        gct_smooth = df_plot[gct_col].rolling(10, center=True).mean()
+        fig_dyn.add_trace(
+            go.Scatter(x=time_x, y=gct_smooth, name="GCT",
+                       line=dict(color="#FF6B6B", width=2),
+                       hovertemplate="GCT: %{y:.0f} ms<extra></extra>"),
+            row=1, col=1,
+        )
+
+    # Balance
+    if "stance_time_balance" in df_plot.columns:
+        bal_smooth = df_plot["stance_time_balance"].rolling(15, center=True).mean()
+        fig_dyn.add_trace(
+            go.Scatter(x=time_x, y=bal_smooth, name="Balans",
+                       line=dict(color="#1ABC9C", width=2),
+                       hovertemplate="Balans: %{y:.1f}%<extra></extra>"),
+            row=1, col=2,
+        )
+        fig_dyn.add_hline(y=50.0, line_dash="dash", line_color="white",
+                          row=1, col=2, annotation_text="50%")
+
+    # Vertical Ratio
+    if "vertical_ratio" in df_plot.columns:
+        vr_smooth = df_plot["vertical_ratio"].rolling(10, center=True).mean()
+        fig_dyn.add_trace(
+            go.Scatter(x=time_x, y=vr_smooth, name="VR",
+                       line=dict(color="#E67E22", width=2),
+                       hovertemplate="VR: %{y:.1f}%<extra></extra>"),
+            row=2, col=1,
+        )
+
+    # Step Length
+    if "step_length" in df_plot.columns:
+        sl_smooth = df_plot["step_length"].rolling(10, center=True).mean()
+        fig_dyn.add_trace(
+            go.Scatter(x=time_x, y=sl_smooth, name="Step Length",
+                       line=dict(color="#9B59B6", width=2),
+                       hovertemplate="Krok: %{y:.3f} m<extra></extra>"),
+            row=2, col=2,
+        )
+
+    fig_dyn.update_layout(
+        template="plotly_dark",
+        height=600,
+        showlegend=False,
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=40, b=20),
+    )
+    st.plotly_chart(fig_dyn, use_container_width=True)
+
+    # Stats boxes
+    cols = st.columns(4)
+    if gct_col and gct_col in df_plot.columns:
+        gct_data = df_plot[gct_col].dropna()
+        cols[0].markdown(
+            f"""<div style="padding:12px; border-radius:8px; border:2px solid #FF6B6B; background:#222;">
+            <h4 style="margin:0; color:#FF6B6B;">⏱️ GCT</h4>
+            <p style="margin:3px 0; color:#aaa;"><b>Śr:</b> {gct_data.mean():.0f} ms</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Min:</b> {gct_data.min():.0f} ms</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Max:</b> {gct_data.max():.0f} ms</p>
+            </div>""", unsafe_allow_html=True)
+
+    if "stance_time_balance" in df_plot.columns:
+        bal_data = df_plot["stance_time_balance"].dropna()
+        asym = abs(bal_data.mean() - 50.0)
+        cols[1].markdown(
+            f"""<div style="padding:12px; border-radius:8px; border:2px solid #1ABC9C; background:#222;">
+            <h4 style="margin:0; color:#1ABC9C;">⚖️ Balans L/P</h4>
+            <p style="margin:3px 0; color:#aaa;"><b>Śr:</b> {bal_data.mean():.1f}%</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Asymetria:</b> {asym:.1f}%</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Zakres:</b> {bal_data.min():.1f} – {bal_data.max():.1f}%</p>
+            </div>""", unsafe_allow_html=True)
+
+    if "vertical_ratio" in df_plot.columns:
+        vr_data = df_plot["vertical_ratio"].dropna()
+        cols[2].markdown(
+            f"""<div style="padding:12px; border-radius:8px; border:2px solid #E67E22; background:#222;">
+            <h4 style="margin:0; color:#E67E22;">📐 Vertical Ratio</h4>
+            <p style="margin:3px 0; color:#aaa;"><b>Śr:</b> {vr_data.mean():.1f}%</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Min:</b> {vr_data.min():.1f}%</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Max:</b> {vr_data.max():.1f}%</p>
+            </div>""", unsafe_allow_html=True)
+
+    if "step_length" in df_plot.columns:
+        sl_data = df_plot["step_length"].dropna()
+        cols[3].markdown(
+            f"""<div style="padding:12px; border-radius:8px; border:2px solid #9B59B6; background:#222;">
+            <h4 style="margin:0; color:#9B59B6;">📏 Długość Kroku</h4>
+            <p style="margin:3px 0; color:#aaa;"><b>Śr:</b> {sl_data.mean():.3f} m</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Min:</b> {sl_data.min():.3f} m</p>
+            <p style="margin:3px 0; color:#aaa;"><b>Max:</b> {sl_data.max():.3f} m</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+
+def _render_o2hb_hhb_section(df_plot: pd.DataFrame):
+    """Render O2Hb and HHb chart from FIT data."""
+    if "o2hb" not in df_plot.columns and "hhb" not in df_plot.columns:
+        return
+
+    st.subheader("5️⃣ Hemoglobina: O2Hb i HHb (FIT)")
+
+    fig_hb = make_subplots(specs=[[{"secondary_y": True}]])
+    time_x = df_plot["time"] if "time" in df_plot.columns else pd.Series(range(len(df_plot)))
+
+    if "o2hb" in df_plot.columns:
+        o2hb_smooth = df_plot["o2hb"].rolling(5, center=True).mean()
+        fig_hb.add_trace(
+            go.Scatter(x=time_x, y=o2hb_smooth, name="O2Hb",
+                       line=dict(color="#e74c3c", width=2),
+                       hovertemplate="O2Hb: %{y:.1f} a.u.<extra></extra>"),
+            secondary_y=False,
+        )
+
+    if "hhb" in df_plot.columns:
+        hhb_smooth = df_plot["hhb"].rolling(5, center=True).mean()
+        fig_hb.add_trace(
+            go.Scatter(x=time_x, y=hhb_smooth, name="HHb",
+                       line=dict(color="#3498db", width=2),
+                       hovertemplate="HHb: %{y:.1f} a.u.<extra></extra>"),
+            secondary_y=False,
+        )
+
+    # Add pace overlay
+    if "pace" in df_plot.columns or "pace_smooth" in df_plot.columns:
+        pace_col = "pace_smooth" if "pace_smooth" in df_plot.columns else "pace"
+        pace_data = df_plot[pace_col].rolling(10, center=True).mean() / 60.0
+        pace_hover = [
+            f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
+            for p in pace_data
+        ]
+        fig_hb.add_trace(
+            go.Scatter(x=time_x, y=pace_data, name="Tempo",
+                       line=dict(color="#00d4aa", width=2, dash="dot"),
+                       hovertemplate="Tempo: %{customdata}<extra></extra>",
+                       customdata=pace_hover),
+            secondary_y=True,
+        )
+
+    fig_hb.update_layout(
+        template="plotly_dark", height=350,
+        legend=dict(orientation="h", y=1.05, x=0),
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=30, b=20),
+    )
+    fig_hb.update_yaxes(title_text="Hemoglobina [a.u.]", secondary_y=False)
+    fig_hb.update_yaxes(title_text="Tempo [min/km]", autorange="reversed", secondary_y=True)
+    st.plotly_chart(fig_hb, use_container_width=True)
+
+    # Stats
+    col1, col2 = st.columns(2)
+    if "o2hb" in df_plot.columns:
+        o2hb = df_plot["o2hb"].dropna()
+        col1.markdown(
+            f"""<div style="padding:15px; border-radius:8px; border:2px solid #e74c3c; background:#222;">
+            <h3 style="margin:0; color:#e74c3c;">🔴 O2Hb (Oksyhemoglobina)</h3>
+            <p style="margin:5px 0; color:#aaa;"><b>Min:</b> {o2hb.min():.1f} a.u.</p>
+            <p style="margin:5px 0; color:#aaa;"><b>Max:</b> {o2hb.max():.1f} a.u.</p>
+            <p style="margin:5px 0; color:#aaa;"><b>Śr:</b> {o2hb.mean():.1f} a.u.</p>
+            </div>""", unsafe_allow_html=True)
+
+    if "hhb" in df_plot.columns:
+        hhb = df_plot["hhb"].dropna()
+        col2.markdown(
+            f"""<div style="padding:15px; border-radius:8px; border:2px solid #3498db; background:#222;">
+            <h3 style="margin:0; color:#3498db;">🔵 HHb (Deoksyhemoglobina)</h3>
+            <p style="margin:5px 0; color:#aaa;"><b>Min:</b> {hhb.min():.1f} a.u.</p>
+            <p style="margin:5px 0; color:#aaa;"><b>Max:</b> {hhb.max():.1f} a.u.</p>
+            <p style="margin:5px 0; color:#aaa;"><b>Śr:</b> {hhb.mean():.1f} a.u.</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+
+def _render_hrv_section(df_plot: pd.DataFrame):
+    """Render per-second HRV (RMSSD) chart from FIT data."""
+    if "hrv" not in df_plot.columns:
+        return
+
+    hrv_data = df_plot["hrv"].dropna()
+    if len(hrv_data) < 10:
+        return
+
+    st.subheader("6️⃣ HRV (RMSSD per sekundę)")
+
+    fig_hrv = make_subplots(specs=[[{"secondary_y": True}]])
+    time_x = df_plot["time"] if "time" in df_plot.columns else pd.Series(range(len(df_plot)))
+
+    hrv_smooth = df_plot["hrv"].rolling(30, center=True).mean()
+    fig_hrv.add_trace(
+        go.Scatter(x=time_x, y=hrv_smooth, name="HRV (RMSSD)",
+                   line=dict(color="#19d3f3", width=2),
+                   hovertemplate="RMSSD: %{y:.1f} ms<extra></extra>"),
+        secondary_y=False,
+    )
+
+    # Add HR overlay
+    hr_col = next((c for c in ["heartrate", "hr"] if c in df_plot.columns), None)
+    if hr_col:
+        hr_smooth = df_plot[hr_col].rolling(10, center=True).mean()
+        fig_hrv.add_trace(
+            go.Scatter(x=time_x, y=hr_smooth, name="HR",
+                       line=dict(color="#ef553b", width=2, dash="dot"),
+                       hovertemplate="HR: %{y:.0f} bpm<extra></extra>"),
+            secondary_y=True,
+        )
+
+    fig_hrv.update_layout(
+        template="plotly_dark", height=350,
+        legend=dict(orientation="h", y=1.05, x=0),
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=30, b=20),
+    )
+    fig_hrv.update_yaxes(title_text="RMSSD [ms]", secondary_y=False)
+    fig_hrv.update_yaxes(title_text="HR [bpm]", secondary_y=True)
+    st.plotly_chart(fig_hrv, use_container_width=True)
+
+    # Stats
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💓 AVG RMSSD", f"{hrv_data.mean():.1f} ms")
+    col2.metric("Min RMSSD", f"{hrv_data.min():.1f} ms")
+    col3.metric("Max RMSSD", f"{hrv_data.max():.1f} ms")
+
+    st.info("""
+    **💡 Interpretacja HRV (RMSSD) podczas biegu:**
+
+    * **Wyższe RMSSD:** Lepszy tonus parasympatyczny, bieg w strefie tlenowej
+    * **Spadek RMSSD:** Wzrost intensywności, dominacja współczulna
+    * **RMSSD < 10 ms:** Wysoka intensywność, bieg powyżej progu
+    * **Trend spadkowy:** Narastające zmęczenie podczas sesji
+    """)
+
+    st.markdown("---")
 
 
 def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):

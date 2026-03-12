@@ -8,11 +8,11 @@ from typing import Union
 import numpy as np
 
 
-def calculate_grade(elevation_change_m: float, distance_m: float) -> float:
-    """Calculate grade percentage."""
-    if distance_m <= 0:
-        return 0.0
-    return (elevation_change_m / distance_m) * 100
+def calculate_grade(elevation_change_m, distance_m):
+    """Calculate grade percentage. Supports scalars and arrays/Series."""
+    elevation_change_m = np.asarray(elevation_change_m, dtype=float)
+    distance_m = np.asarray(distance_m, dtype=float)
+    return np.where(distance_m > 0, (elevation_change_m / distance_m) * 100, 0.0)
 
 
 def pace_to_gap_factor(grade: Union[float, np.ndarray]) -> Union[float, np.ndarray]:

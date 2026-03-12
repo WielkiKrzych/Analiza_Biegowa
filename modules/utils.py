@@ -204,6 +204,16 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
         "skin_temp",
         "core_temp",
         "power",
+        # FIT running dynamics
+        "stance_time",
+        "stance_time_percent",
+        "stance_time_balance",
+        "vertical_ratio",
+        "step_length",
+        "speed_m_s",
+        "temperature",
+        "o2hb",
+        "hhb",
     ]
 
     for col in numeric_cols:
@@ -249,10 +259,16 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
         if 0 < cad_median < 120:
             df_pd["cadence"] = df_pd["cadence"] * 2
 
-    # 2c. GCT estimation from cadence (if no dedicated GCT column)
-    gct_columns = ["ground_contact", "gct", "GroundContactTime"]
+    # 2c. GCT: prefer real stance_time from FIT, then other GCT columns, then estimate
+    gct_columns = ["stance_time", "ground_contact", "gct", "groundcontacttime"]
     has_gct = any(col in df_pd.columns for col in gct_columns)
-    if not has_gct and "cadence" in df_pd.columns:
+    if has_gct:
+        # Use real GCT data — prefer stance_time from FIT file
+        for col in gct_columns:
+            if col in df_pd.columns and col != "gct":
+                df_pd["gct"] = pd.to_numeric(df_pd[col], errors="coerce")
+                break
+    elif "cadence" in df_pd.columns:
         cad = df_pd["cadence"]
         df_pd["gct"] = np.where(
             cad > 0,

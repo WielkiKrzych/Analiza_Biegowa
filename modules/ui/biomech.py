@@ -133,9 +133,11 @@ def render_biomech_tab(df_plot, df_plot_resampled):
         st.subheader("⏱️ Ground Contact Time (GCT)")
         
         gct_col = None
-        for col in ['ground_contact', 'gct', 'GroundContactTime']:
+        gct_is_real = False
+        for col in ['stance_time', 'ground_contact', 'gct', 'GroundContactTime']:
             if col in df_plot.columns:
                 gct_col = col
+                gct_is_real = col in ('stance_time', 'ground_contact')
                 break
         
         if gct_col:
@@ -209,72 +211,231 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 
                 **Krótsze GCT = lepsza sprężystość i ekonomia biegu**
                 """)
-                if gct_col == 'gct':
+                if not gct_is_real:
                     st.caption("⚠️ GCT estymowane z kadencji (duty cycle ~65%). Dla dokładnych pomiarów użyj Garmin HRM-Run lub Stryd.")
+                else:
+                    st.caption("✅ GCT z czujnika (Garmin FIT) — dane rzeczywiste.")
         else:
             st.info("ℹ️ Brak danych GCT - wymagany czujnik biegowy (np. Garmin HRM-Run, Stryd)")
         
         st.divider()
-        
+
+        # ---------------------------------------------------------------------
+        # STANCE TIME BALANCE (Balans L/P kontaktu)
+        # ---------------------------------------------------------------------
+        if "stance_time_balance" in df_plot.columns:
+            st.subheader("⚖️ Balans Kontaktu z Podłożem (L/P)")
+
+            balance_data = df_plot["stance_time_balance"].dropna()
+            if len(balance_data) > 0:
+                avg_balance = float(balance_data.mean())
+                min_balance = float(balance_data.min())
+                max_balance = float(balance_data.max())
+                imbalance = abs(avg_balance - 50.0)
+
+                b1, b2, b3, b4 = st.columns(4)
+                b1.metric("Średni Balans", f"{avg_balance:.1f}%",
+                          help="50% = idealny. >50% = prawa noga dłużej na ziemi")
+                b2.metric("Min", f"{min_balance:.1f}%")
+                b3.metric("Max", f"{max_balance:.1f}%")
+
+                if imbalance < 1.0:
+                    b4.metric("Asymetria", f"{imbalance:.1f}%", delta="Idealny")
+                elif imbalance < 2.0:
+                    b4.metric("Asymetria", f"{imbalance:.1f}%", delta="Dobry")
+                else:
+                    b4.metric("Asymetria", f"{imbalance:.1f}%", delta="Uwaga", delta_color="inverse")
+
+                time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
+                if time_col in df_plot.columns:
+                    fig_bal = go.Figure()
+                    bal_smooth = df_plot["stance_time_balance"].rolling(15, center=True).mean()
+                    fig_bal.add_trace(go.Scatter(
+                        x=df_plot[time_col], y=bal_smooth,
+                        name='Balans L/P',
+                        line=dict(color='#1ABC9C', width=2),
+                        hovertemplate="Balans: %{y:.1f}%<extra></extra>"
+                    ))
+                    fig_bal.add_hline(y=50.0, line_dash="dash", line_color="white",
+                                     annotation_text="50% (idealny)", annotation_position="right")
+                    fig_bal.add_hrect(y0=49.0, y1=51.0, fillcolor="green", opacity=0.1, line_width=0)
+
+                    time_vals = df_plot[time_col].values
+                    tick_step = 5
+                    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+                    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
+                    fig_bal.update_layout(
+                        template="plotly_dark",
+                        title="Balans kontaktu z podłożem (L/P)",
+                        hovermode="x unified",
+                        xaxis=dict(title="Czas [hh:mm:ss]", tickmode="array",
+                                   tickvals=tick_vals, ticktext=tick_text),
+                        yaxis_title="Balans [%]",
+                        height=350,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        legend=dict(orientation="h", y=1.1, x=0)
+                    )
+                    st.plotly_chart(fig_bal, use_container_width=True)
+
+                st.info("""
+                **💡 Interpretacja Balansu L/P:**
+
+                * **49-51%:** Idealny — symetryczny bieg
+                * **48-52%:** Akceptowalny — minimalna asymetria
+                * **< 48% lub > 52%:** Wymaga uwagi — ryzyko kontuzji po stronie dominującej
+
+                **Wskazówka:** Asymetria > 2% może wskazywać na kompensację bólową lub różnicę siłową.
+                """)
+
+            st.divider()
+
+        # ---------------------------------------------------------------------
+        # VERTICAL RATIO
+        # ---------------------------------------------------------------------
+        if "vertical_ratio" in df_plot.columns:
+            st.subheader("📐 Vertical Ratio (Stosunek Oscylacji do Kroku)")
+
+            vr_data = df_plot["vertical_ratio"].dropna()
+            if len(vr_data) > 0:
+                avg_vr = float(vr_data.mean())
+                min_vr = float(vr_data.min())
+                max_vr = float(vr_data.max())
+
+                v1, v2, v3, v4 = st.columns(4)
+                v1.metric("Średni VR", f"{avg_vr:.1f}%")
+                v2.metric("Min VR", f"{min_vr:.1f}%")
+                v3.metric("Max VR", f"{max_vr:.1f}%")
+
+                if avg_vr < 6.0:
+                    v4.metric("Klasyfikacja", "Excellent")
+                elif avg_vr < 8.0:
+                    v4.metric("Klasyfikacja", "Dobry")
+                elif avg_vr < 10.0:
+                    v4.metric("Klasyfikacja", "Średni")
+                else:
+                    v4.metric("Klasyfikacja", "Wymaga poprawy")
+
+                time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
+                if time_col in df_plot.columns:
+                    fig_vr = go.Figure()
+                    vr_smooth = df_plot["vertical_ratio"].rolling(10, center=True).mean()
+                    fig_vr.add_trace(go.Scatter(
+                        x=df_plot[time_col], y=vr_smooth,
+                        name='Vertical Ratio',
+                        line=dict(color='#E67E22', width=2),
+                        hovertemplate="VR: %{y:.1f}%<extra></extra>"
+                    ))
+                    fig_vr.add_hrect(y0=0, y1=6, fillcolor="green", opacity=0.08, line_width=0)
+                    fig_vr.add_hrect(y0=6, y1=8, fillcolor="yellow", opacity=0.08, line_width=0)
+                    fig_vr.add_hrect(y0=8, y1=15, fillcolor="red", opacity=0.08, line_width=0)
+
+                    time_vals = df_plot[time_col].values
+                    tick_step = 5
+                    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+                    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+
+                    fig_vr.update_layout(
+                        template="plotly_dark",
+                        title="Vertical Ratio w czasie",
+                        hovermode="x unified",
+                        xaxis=dict(title="Czas [hh:mm:ss]", tickmode="array",
+                                   tickvals=tick_vals, ticktext=tick_text),
+                        yaxis_title="VR [%]",
+                        height=350,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        legend=dict(orientation="h", y=1.1, x=0)
+                    )
+                    st.plotly_chart(fig_vr, use_container_width=True)
+
+                st.info("""
+                **💡 Interpretacja Vertical Ratio:**
+
+                Vertical Ratio = Oscylacja Pionowa / Długość Kroku × 100%
+
+                * **< 6%:** Excellent — efektywne przekazywanie energii do przodu
+                * **6-8%:** Dobry — solidna technika
+                * **8-10%:** Średni — zbyt dużo energii traconej w pionie
+                * **> 10%:** Wymaga poprawy — "bouncing" runner
+
+                **Niższy VR = więcej energii idzie do przodu zamiast w górę.**
+                """)
+
+            st.divider()
+
         # ---------------------------------------------------------------------
         # STRIDE LENGTH (Długość kroku)
         # ---------------------------------------------------------------------
         st.subheader("📏 Długość Kroku (Stride Length)")
         
-        if 'cadence' in df_plot.columns and 'pace' in df_plot.columns:
-            stride_metrics = calculate_stride_metrics(df_plot, runner_height)
-            
-            if stride_metrics:
-                s1, s2, s3 = st.columns(3)
-                s1.metric("Średnia długość kroku", f"{stride_metrics['stride_length_m']:.2f} m")
-                s2.metric("Ratio do wzrostu", f"{stride_metrics['height_ratio']:.2f}")
-                s3.metric("Próbki", stride_metrics['samples'])
-                
-                # Oblicz stride length dla każdego punktu
+        # Prefer real step_length from FIT, fall back to calculation
+        has_real_step = "step_length" in df_plot.columns and df_plot["step_length"].notna().sum() > 10
+
+        if has_real_step or ('cadence' in df_plot.columns and 'pace' in df_plot.columns):
+            if has_real_step:
+                sl_data = df_plot["step_length"].dropna()
+                avg_sl = float(sl_data.mean())
+                height_m = runner_height / 100
+                s1, s2, s3, s4 = st.columns(4)
+                s1.metric("Średnia długość kroku", f"{avg_sl:.3f} m")
+                s2.metric("Ratio do wzrostu", f"{avg_sl / height_m:.2f}")
+                s3.metric("Min / Max", f"{sl_data.min():.2f} / {sl_data.max():.2f} m")
+                s4.metric("Źródło", "Garmin FIT")
+            else:
+                stride_metrics = calculate_stride_metrics(df_plot, runner_height)
+                if stride_metrics:
+                    s1, s2, s3 = st.columns(3)
+                    s1.metric("Średnia długość kroku", f"{stride_metrics['stride_length_m']:.2f} m")
+                    s2.metric("Ratio do wzrostu", f"{stride_metrics['height_ratio']:.2f}")
+                    s3.metric("Próbki", stride_metrics['samples'])
+
+            if has_real_step:
+                valid_mask = df_plot["step_length"].notna()
+                df_stride = df_plot[valid_mask].copy()
+            else:
                 valid_mask = (df_plot['cadence'] > 50) & (df_plot['cadence'] < 300) & (df_plot['pace'] > 0)
                 df_stride = df_plot[valid_mask].copy()
-                
                 if not df_stride.empty:
                     speed_m_s = pace_array_to_speed_array(df_stride['pace'].values)
                     cadence_spm = df_stride['cadence'].values
-                    # stride_length = speed * 2 * 60 / cadence (pełny krok)
-                    df_stride['stride_length'] = speed_m_s * 2 * 60 / cadence_spm
-                    
-                    time_col = 'time_min' if 'time_min' in df_stride.columns else 'time'
-                    
-                    fig_stride = go.Figure()
-                    stride_smooth = df_stride['stride_length'].rolling(10, center=True).mean()
-                    
-                    fig_stride.add_trace(go.Scatter(
-                        x=df_stride[time_col],
-                        y=stride_smooth,
-                        name='Długość kroku',
-                        line=dict(color='#9B59B6', width=2),
-                        hovertemplate="Krok: %{y:.2f} m<extra></extra>"
-                    ))
-                    
-                    # Convert time to hh:mm:ss format for x-axis
-                    time_vals_stride = df_stride[time_col].values if hasattr(df_stride[time_col], 'values') else np.array(df_stride[time_col])
-                    tick_step_stride = 5
-                    tick_vals_stride = np.arange(0, time_vals_stride.max() + tick_step_stride, tick_step_stride)
-                    tick_text_stride = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_stride]
+                    df_stride['step_length'] = speed_m_s * 2 * 60 / cadence_spm
 
-                    fig_stride.update_layout(
-                        template="plotly_dark",
-                        title="Długość kroku w czasie",
-                        hovermode="x unified",
-                        xaxis=dict(
-                            title="Czas [hh:mm:ss]",
-                            tickmode="array",
-                            tickvals=tick_vals_stride,
-                            ticktext=tick_text_stride,
-                        ),
-                        yaxis_title="Długość kroku [m]",
-                        height=350,
-                        margin=dict(l=10, r=10, t=40, b=10),
-                        legend=dict(orientation="h", y=1.1, x=0)
-                    )
-                    st.plotly_chart(fig_stride, use_container_width=True)
+            if not df_stride.empty and 'step_length' in df_stride.columns:
+                time_col = 'time_min' if 'time_min' in df_stride.columns else 'time'
+
+                fig_stride = go.Figure()
+                stride_smooth = df_stride['step_length'].rolling(10, center=True).mean()
+
+                fig_stride.add_trace(go.Scatter(
+                    x=df_stride[time_col],
+                    y=stride_smooth,
+                    name='Długość kroku',
+                    line=dict(color='#9B59B6', width=2),
+                    hovertemplate="Krok: %{y:.2f} m<extra></extra>"
+                ))
+
+                # Convert time to hh:mm:ss format for x-axis
+                time_vals_stride = df_stride[time_col].values if hasattr(df_stride[time_col], 'values') else np.array(df_stride[time_col])
+                tick_step_stride = 5
+                tick_vals_stride = np.arange(0, time_vals_stride.max() + tick_step_stride, tick_step_stride)
+                tick_text_stride = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_stride]
+
+                fig_stride.update_layout(
+                    template="plotly_dark",
+                    title="Długość kroku w czasie",
+                    hovermode="x unified",
+                    xaxis=dict(
+                        title="Czas [hh:mm:ss]",
+                        tickmode="array",
+                        tickvals=tick_vals_stride,
+                        ticktext=tick_text_stride,
+                    ),
+                    yaxis_title="Długość kroku [m]",
+                    height=350,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    legend=dict(orientation="h", y=1.1, x=0)
+                )
+                st.plotly_chart(fig_stride, use_container_width=True)
                 
                 st.info("""
                 **💡 Interpretacja długości kroku:**
