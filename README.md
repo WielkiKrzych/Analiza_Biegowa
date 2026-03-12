@@ -1,5 +1,31 @@
 ## 📋 Changelog
 
+### 2026-03-12 - Garmin FIT Integration & Running Dynamics
+
+**Nowe źródło danych: pliki .FIT (Garmin)**
+- 🆕 Aplikacja MergeCSV obsługuje teraz pliki `.FIT` obok `.CSV` — automatycznie parsuje dane z Garmin Connect
+- 🆕 Dane z FIT doklejane jako dodatkowe kolumny w pliku wyjściowym CSV
+
+**Nowe metryki z FIT w zakładce Performance > Biomechanika:**
+- 🦶 **Stance Time Balance (L/P)** — balans kontaktu z podłożem z wykresem i klasyfikacją asymetrii
+- 📐 **Vertical Ratio** — stosunek oscylacji do długości kroku z kolorowymi strefami
+- ⏱️ **GCT** — rozpoznaje prawdziwe dane z czujnika Garmin (vs estymacja z kadencji)
+- 📏 **Step Length** — preferuje rzeczywisty pomiar z FIT zamiast obliczania z kadencji/tempa
+
+**Nowe sekcje w zakładce Podsumowanie:**
+- 🦶 **Running Dynamics** — panel metryki (GCT, Balans, VR, Krok) + wykres 4-panelowy
+- 🔴🔵 **O2Hb / HHb** — wykres oksyhemoglobiny i deoksyhemoglobiny z nakładką tempa
+- 💓 **HRV (RMSSD)** — wykres per-sekundowy z nakładką HR + interpretacja
+- 🌡️ **Temperatura** — metryka z danych FIT
+- 📊 Nowe wiersze metryk: Running Dynamics + Dane Dodatkowe (HRV, Temp, O2Hb, HHb)
+
+**Poprawki:**
+- 🐛 Fix wypełnienia wykresu tempa na odwróconej osi Y w Podsumowaniu
+- ⚡ `gap.py`: Wektoryzacja `calculate_grade` dla array/Series
+- 🔧 `utils.py`: Nowe kolumny FIT w konwersji numerycznej, preferowanie rzeczywistego GCT
+
+---
+
 ### 2026-03-08 - Audit Code Review (P0-P3 Fixes)
 
 **Naprawione błędy P0 (CRITICAL):**
@@ -235,6 +261,12 @@ PRZED:                    PO:
 | **GCT** | 🦶 | Ground Contact Time | ms |
 | **VO** | 📊 | Vertical Oscillation | cm |
 | **RE** | 💪 | Running Effectiveness | % |
+| **VR** | 📐 | Vertical Ratio | % |
+| **Balance** | ⚖️ | Stance Time Balance (L/P) | % |
+| **Step Length** | 📏 | Długość kroku (FIT) | m |
+| **HRV** | 💓 | RMSSD per sekundę | ms |
+| **O2Hb** | 🔴 | Oksyhemoglobina | a.u. |
+| **HHb** | 🔵 | Deoksyhemoglobina | a.u. |
 
 ---
 
@@ -359,12 +391,28 @@ pytest --cov=modules tests/
 
 | Kolumna | Opis | Urządzenie | Ikona |
 |---------|------|------------|-------|
-| `tymeventilation` | Wentylacja [L/min] | VO2 Master, Cosmed | 🫁 |
-| `smo2` | Saturacja mięśniowa [%] | Moxy | 🩸 |
-| `thb` | Hemoglobina [g/dL] | Moxy | 🩸 |
+| `tymeventilation` | Wentylacja [L/min] | Tymewear | 🫁 |
+| `tymebreathrate` | Częstość oddechów [/min] | Tymewear | 🌬️ |
+| `smo2` | Saturacja mięśniowa [%] | TrainRed / Moxy | 🩸 |
+| `thb` | Hemoglobina całkowita [g/dL] | TrainRed / Moxy | 🩸 |
 | `verticaloscillation` | Oscylacja pionowa [cm] | Garmin HRM-Run, Stryd | 📊 |
 | `core_temperature` | Temperatura ciała [°C] | Core | 🌡️ |
 | `skin_temperature` | Temperatura skóry [°C] | Core | 🌡️ |
+
+### Garmin FIT (automatycznie z MergeCSV)
+
+| Kolumna | Opis | Źródło |
+|---------|------|--------|
+| `stance_time` | Ground Contact Time [ms] | Garmin HRM-Run / Watch |
+| `stance_time_balance` | Balans L/P kontaktu [%] | Garmin HRM-Run |
+| `stance_time_percent` | Duty cycle [%] | Garmin HRM-Run |
+| `vertical_ratio` | Oscylacja / krok [%] | Garmin HRM-Run |
+| `step_length` | Długość kroku [m] | Garmin HRM-Run |
+| `temperature` | Temperatura [°C] | Garmin Watch |
+| `o2hb` | Oksyhemoglobina [a.u.] | TrainRed via CIQ |
+| `hhb` | Deoksyhemoglobina [a.u.] | TrainRed via CIQ |
+| `hrv` | HRV RMSSD per sekundę [ms] | Garmin Watch |
+| `speed_m_s` | Prędkość [m/s] | Garmin Watch |
 
 ---
 
