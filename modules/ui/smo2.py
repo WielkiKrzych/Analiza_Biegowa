@@ -23,7 +23,8 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         st.info("ℹ️ Brak danych SmO2 w tym pliku.")
         return
 
-    # Ensure smoothed columns exist
+    # Ensure smoothed columns exist — work on a copy to avoid mutating the caller's DataFrame
+    target_df = target_df.copy()
     # FIX: Use 15s median (more robust to outliers than 5s mean)
     if "pace_smooth" not in target_df.columns and "pace" in target_df.columns:
         target_df["pace_smooth"] = target_df["pace"].rolling(window=15, center=True).median()
@@ -177,7 +178,10 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
             m3.metric("Śr. THb", f"{avg_thb:.2f} g/dL")
         else:
             cadence = interval_data["cadence"].mean() if "cadence" in interval_data.columns else 0
-            m3.metric("Śr. Kadencja", f"{cadence:.0f} rpm")
+            # Use SPM for running, RPM for cycling
+            sport_type = st.session_state.get("sport_type", "unknown")
+            cad_unit = "SPM" if sport_type == "running" or "pace" in interval_data.columns else "rpm"
+            m3.metric("Śr. Kadencja", f"{cadence:.0f} {cad_unit}")
 
         # Kolorowanie trendu
         trend_color = "inverse" if slope_smo2 < -0.01 else "normal"

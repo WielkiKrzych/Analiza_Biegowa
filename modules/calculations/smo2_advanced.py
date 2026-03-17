@@ -73,8 +73,6 @@ else:
         grad = np.gradient(smo2_vals, power_vals)
         return np.gradient(grad, power_vals)
 
-logger = logging.getLogger("Tri_Dashboard.SmO2Advanced")
-
 
 # =============================================================================
 # DATA CLASSES
@@ -192,8 +190,16 @@ def calculate_halftime_reoxygenation(
     if len(recovery_smo2) < 30:
         return None
     
+    # Calculate baseline from first 30s of low-intensity data (not just smo2[0])
+    low_power_mask = power < power_threshold
+    if low_power_mask.any():
+        baseline_smo2 = float(np.mean(smo2[low_power_mask][:30]))
+    else:
+        # Fallback: mean of first 30 samples
+        baseline_smo2 = float(np.mean(smo2[:min(30, len(smo2))]))
+
     # Calculate 50% recovery target
-    drop = smo2[0] - smo2_min_during_ramp  # Baseline - minimum
+    drop = baseline_smo2 - smo2_min_during_ramp  # Baseline - minimum
     if drop <= 0:
         return None
     
@@ -215,29 +221,44 @@ def calculate_hr_coupling_index(
     window: int = 30
 ) -> float:
     """
-    Calculate coupling index between SmO2 and HR.
-    
-    High negative correlation = Central limiter (HR rises, SmO2 drops proportionally)
-    Low correlation = Local limiter (SmO2 drops independently of HR)
-    
+    Calculate dynamic coupling index between SmO2 and HR changes.
+
+    Uses rate-of-change (first differences) instead of absolute levels.
+    Correlating absolute SmO2 vs HR gives spurious strong negatives in ramp
+    tests (both trend monotonically) regardless of physiological mechanism.
+
+    By correlating d(SmO2)/dt vs d(HR)/dt we measure whether changes in HR
+    and SmO2 co-vary, which is the true coupling signal.
+
+    High negative correlation = Central limiter (HR rises → SmO2 drops)
+    Low/no correlation = Local limiter (SmO2 changes independently of HR)
+
     Returns:
         Pearson correlation coefficient (-1 to 1)
     """
     if hr_col not in df.columns or smo2_col not in df.columns:
         return 0.0
-    
-    # Calculate rolling changes
+
+    # Smooth first to reduce noise
     smo2_smooth = df[smo2_col].rolling(window=window, min_periods=1).mean()
     hr_smooth = df[hr_col].rolling(window=window, min_periods=1).mean()
-    
-    # Drop NaN
-    valid = pd.DataFrame({"smo2": smo2_smooth, "hr": hr_smooth}).dropna()
+
+    # Rate of change (first differences)
+    smo2_delta = smo2_smooth.diff()
+    hr_delta = hr_smooth.diff()
+
+    # Drop NaN from diff()
+    valid = pd.DataFrame({"smo2_d": smo2_delta, "hr_d": hr_delta}).dropna()
     if len(valid) < 30:
         return 0.0
-    
-    # Correlation
-    r, p = stats.pearsonr(valid["smo2"], valid["hr"])
-    
+
+    # Remove zero-change periods (standstill)
+    valid = valid[(valid["smo2_d"].abs() > 0.001) | (valid["hr_d"].abs() > 0.01)]
+    if len(valid) < 20:
+        return 0.0
+
+    r, p = stats.pearsonr(valid["smo2_d"], valid["hr_d"])
+
     return float(r)
 
 

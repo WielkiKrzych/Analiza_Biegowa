@@ -81,7 +81,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                                 line=dict(color='white', dash='dash'),
                                 hoverinfo='skip'
                             ))
-                        except:
+                        except (ValueError, TypeError):
                             pass
                     
                     # Strefy kadencji (hlines)
@@ -173,10 +173,11 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         hovertemplate="GCT: %{y:.0f} ms<extra></extra>"
                     ))
                     
-                    # Strefy GCT
+                    # Strefy GCT (matching classification labels)
                     fig_gct.add_hrect(y0=0, y1=200, fillcolor="green", opacity=0.1, line_width=0)
-                    fig_gct.add_hrect(y0=200, y1=250, fillcolor="yellow", opacity=0.1, line_width=0)
-                    fig_gct.add_hrect(y0=250, y1=400, fillcolor="red", opacity=0.1, line_width=0)
+                    fig_gct.add_hrect(y0=200, y1=220, fillcolor="limegreen", opacity=0.1, line_width=0)
+                    fig_gct.add_hrect(y0=220, y1=240, fillcolor="yellow", opacity=0.1, line_width=0)
+                    fig_gct.add_hrect(y0=240, y1=400, fillcolor="red", opacity=0.1, line_width=0)
                     
                     # Convert time to hh:mm:ss format for x-axis
                     time_vals_gct = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
@@ -205,9 +206,9 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 **💡 Interpretacja GCT:**
                 
                 * **< 200 ms:** Excellent - typowe dla elite, bardzo efektywny kontakt z podłożem
-                * **200-250 ms:** Dobry - solidny poziom amatorski
-                * **250-300 ms:** Średni - miejsce na poprawę
-                * **> 300 ms:** Wymaga poprawy - długi kontakt = utrata energii
+                * **200-220 ms:** Dobry - solidny poziom amatorski
+                * **220-240 ms:** Średni - miejsce na poprawę
+                * **> 240 ms:** Wymaga poprawy - długi kontakt = utrata energii
                 
                 **Krótsze GCT = lepsza sprężystość i ekonomia biegu**
                 """)
@@ -687,7 +688,7 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
         st.plotly_chart(fig_scatter, use_container_width=True)
     
     # Analiza efektywności biegowej (jeśli mamy pace i wzrost)
-    if 'pace' in df_plot.columns and 'pace' in df_plot.columns:
+    if 'pace' in df_plot.columns:
         st.subheader("🏃 Efektywność Biegu z VO")
         
         runner_height = st.session_state.get('runner_height', 180)

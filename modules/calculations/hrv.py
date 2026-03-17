@@ -301,7 +301,7 @@ def calculate_dynamic_dfa_v2(
     if rr_col is None:
         return None, f"Missing R-R/HRV data column. Available: {list(df.columns)}"
 
-    rr_data = df[["time", rr_col]].dropna()
+    rr_data = df[["time", rr_col]].dropna().copy()
 
     # Clean HRV data - handle Excel time format (HH:MM:SS) and other invalid formats
     def clean_rr_value(val):
@@ -366,7 +366,7 @@ def calculate_dynamic_dfa_v2(
     valid_mask = (rr_data[rr_col] >= max(300, lower_bound)) & (
         rr_data[rr_col] <= min(2000, upper_bound)
     )
-    rr_data = rr_data[valid_mask]
+    rr_data = rr_data[valid_mask].copy()
 
     if len(rr_data) < min_samples_hrv:
         return (
@@ -374,12 +374,9 @@ def calculate_dynamic_dfa_v2(
             f"Za mało danych R-R po usunięciu artefaktów ({len(rr_data)} < {min_samples_hrv})",
         )
 
-    # Automatic unit detection (already cleaned to ms)
-    mean_val = rr_data[rr_col].mean()
-    if mean_val < 2.0:  # Seconds -> ms
-        rr_data[rr_col] = rr_data[rr_col] * 1000
-    elif mean_val > 2000:  # Microseconds -> ms
-        rr_data[rr_col] = rr_data[rr_col] / 1000
+    # Data is already cleaned to ms by clean_rr_value (300-2000ms range).
+    # No secondary unit conversion needed — the cleaning step handles all
+    # unit normalization. Removed dead code that could cause latent bugs.
 
     rr_values = rr_data[rr_col].values.astype(np.float64)
     time_values = rr_data["time"].values.astype(np.float64)

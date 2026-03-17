@@ -41,6 +41,8 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
         """)
         return
 
+    # Work on a copy to avoid mutating the caller's DataFrame
+    target_df = target_df.copy()
     # FIX: Use 15s median (more robust to outliers than 5s mean)
     if "pace_smooth" not in target_df.columns and "pace" in target_df.columns:
         target_df["pace_smooth"] = target_df["pace"].rolling(window=15, center=True).median()
@@ -193,7 +195,7 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
             slope_ve, intercept_ve, _, _, _ = stats.linregress(
                 interval_data["time"], interval_data["tymeventilation"]
             )
-            trend_desc = f"{slope_ve:.4f} L/s"
+            trend_desc = f"{slope_ve:.4f} (L/min)/s"
         else:
             slope_ve = 0
             intercept_ve = 0

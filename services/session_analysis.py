@@ -100,9 +100,7 @@ def calculate_extended_metrics(
         metrics["vlamax_est"] = 0  # Not applicable for running analysis
 
         # VO2max estimation from pace (Daniels formula - running-specific)
-        # Using 5-minute mean max pace (MMP 5-min) converted to speed
         from modules.calculations.pace import estimate_vo2max_from_pace
-        mmp_5min_pace = df["pace"].rolling(Config.ROLLING_WINDOW_5MIN).mean().min() if "pace" in df.columns else None
         # For running, use pace-based VO2max estimation
         if "pace" in df.columns:
             best_5min_pace = df["pace"].rolling(Config.ROLLING_WINDOW_5MIN).mean().min()

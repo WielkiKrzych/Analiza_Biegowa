@@ -65,18 +65,21 @@ def calculate_pace_zones_time(
             "Z6 Repetition": (0.0, 0.75),  # >25% faster
         }
     
+    # NOTE: This function assumes 1Hz (1-second) sampled data.
+    # mask.sum() counts rows, which equals seconds only at 1Hz.
+    # Data MUST be resampled to 1s before calling this function.
     pace = df["pace"].fillna(threshold_pace * 2)  # NaN = very slow
     results = {}
-    
+
     for zone_name, (low_pct, high_pct) in zones.items():
         low_pace = threshold_pace * low_pct
         high_pace = threshold_pace * high_pct
-        
+
         # For pace: lower value = faster
         mask = (pace >= low_pace) & (pace < high_pace)
         seconds_in_zone = mask.sum()
         results[zone_name] = int(seconds_in_zone)
-    
+
     return results
 
 
@@ -160,7 +163,7 @@ def calculate_pace_duration_curve(
     return results
 
 
-def classify_running_phenotype(pdc: dict, weight: float) -> str:
+def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     """
     Classify runner phenotype based on Pace Duration Curve.
     
@@ -178,9 +181,9 @@ def classify_running_phenotype(pdc: dict, weight: float) -> str:
     Returns:
         Phenotype string identifier
     """
-    if not pdc or weight <= 0:
+    if not pdc:
         return "unknown"
-    
+
     # Get key pace values - PDC durations are in SECONDS (time-based)
     # These represent best pace sustained for a given duration, NOT distance
     p60s = pdc.get(60)      # best pace over 60-second effort
@@ -294,36 +297,52 @@ def get_phenotype_description(phenotype: str) -> tuple:
     return phenotypes.get(phenotype, phenotypes["unknown"])
 
 
-def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float) -> float:
+def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float = 0.0) -> float:
     """
-    Estimate VO2max from velocity at VO2max pace.
-    
-    Uses Jack Daniels approximation:
-    VO2max ≈ (vVO2max_speed / 1000 * 60) * C + 7
-    where C is the oxygen cost of running (~3.5 ml/kg/min per min/km)
-    
+    Estimate VO2max from best ~5-6 minute effort pace using Jack Daniels model.
+
+    The Daniels model has two components:
+    1. VO2 at a given speed: VO2 = -4.60 + 0.182258*v + 0.000104*v²
+    2. Fractional utilisation at a given duration:
+       %VO2max = 0.8 + 0.1894393*e^(-0.012778*t) + 0.2989558*e^(-0.1932605*t)
+       where t = duration in minutes
+
+    VO2max = VO2(speed) / fractional_utilisation(duration)
+
+    For a ~5-6 minute effort, fractional utilisation ≈ 97-99%.
+
     Args:
-        vvo2max_pace: Pace at vVO2max in sec/km (typically 6-min race pace)
-        weight: Runner weight in kg (for validation)
-        
+        vvo2max_pace: Pace of best ~5-6 min effort in sec/km
+        weight: Runner weight in kg (unused, kept for API compatibility)
+
     Returns:
         Estimated VO2max in ml/kg/min
     """
-    if vvo2max_pace <= 0 or weight <= 0:
+    if vvo2max_pace <= 0:
         return 0.0
-    
+
     # Convert pace to speed (m/min)
     speed_m_per_min = 1000.0 / vvo2max_pace * 60
-    
-    # Daniels formula: VO2 = -4.60 + 0.182258 * v + 0.000104 * v^2
-    # where v is speed in meters/min
+
+    # VO2 at this speed (Daniels oxygen cost formula)
     v = speed_m_per_min
-    vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v
-    
+    vo2_at_speed = -4.60 + 0.182258 * v + 0.000104 * v * v
+
+    # Fractional utilisation for ~5-6 min effort (t ≈ 5.5 min)
+    import math
+    t = 5.5  # minutes
+    frac_util = 0.8 + 0.1894393 * math.exp(-0.012778 * t) + 0.2989558 * math.exp(-0.1932605 * t)
+
+    # VO2max = VO2 / fractional utilisation
+    if frac_util <= 0:
+        return 0.0
+
+    vo2max = vo2_at_speed / frac_util
+
     # Clamp to reasonable range
-    vo2 = max(20, min(90, vo2))
-    
-    return round(vo2, 1)
+    vo2max = max(20, min(95, vo2max))
+
+    return round(vo2max, 1)
 
 
 def calculate_fatigue_resistance_index_pace(
