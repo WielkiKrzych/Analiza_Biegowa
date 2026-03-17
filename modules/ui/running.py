@@ -387,7 +387,11 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     # ==================== 3. RSS + KEY METRICS ====================
     st.subheader("📊 Kluczowe Metryki Biegowe")
     
-    duration_sec = len(df_plot)
+    # Use actual time column for duration (not row count, which is only valid at 1Hz)
+    if "time" in df_plot.columns and len(df_plot) > 1:
+        duration_sec = float(df_plot["time"].iloc[-1] - df_plot["time"].iloc[0])
+    else:
+        duration_sec = len(df_plot)
     np_pace = calculate_normalized_pace(df_plot)
     rss = calculate_running_stress_score(df_plot, threshold_pace, duration_sec)
     
@@ -487,7 +491,7 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             fig_pdc.update_layout(
                 template="plotly_dark",
                 title="Pace Duration Curve",
-                xaxis=dict(title="Czas [hh:mm:ss]", type="log"),
+                xaxis=dict(title="Czas [min]", type="log"),
                 yaxis=dict(
                     title="Tempo [min/km]",
                     autorange="reversed",
@@ -537,9 +541,9 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         col_d2.metric("Śr. Tempo (1. połowa)", format_pace(avg_pace_first))
         col_d3.metric("Śr. Tempo (2. połowa)", format_pace(avg_pace_second))
         
-        if durability >= 100:
+        if durability > 100:
             st.success("🟢 **Negative split!** Druga połowa szybsza — doskonałe rozłożenie tempa.")
-        elif durability >= 97:
+        elif durability >= 98:
             st.info("🟡 **Even split.** Stabilne tempo. Dobra strategia.")
         else:
             st.warning("🟠 **Positive split.** Spadek tempa w drugiej połowie — możliwe zmęczenie lub zbyt szybki start.")
@@ -566,12 +570,12 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         """, unsafe_allow_html=True)
         
         # VO2max estimation from best ~6min pace (PDC 300-360s)
-        best_pace_6min = pdc.get(300)
-        if best_pace_6min:
-            vo2max_est = estimate_vo2max_from_pace(best_pace_6min, runner_weight)
+        best_pace_5min = pdc.get(300)
+        if best_pace_5min:
+            vo2max_est = estimate_vo2max_from_pace(best_pace_5min, runner_weight)
             if vo2max_est > 0:
                 st.metric("Est. VO2max", f"{vo2max_est:.1f} ml/kg/min",
-                         help="Szacowane na podstawie tempa ~5min (formuła Danielsa)")
+                         help="Szacowane na podstawie najlepszego tempa 5-minutowego (formuła Danielsa)")
         
         with st.expander("📚 Jak interpretować fenotyp biegacza?"):
             st.markdown("""

@@ -334,7 +334,7 @@ def render_summary_tab(
             pace_data = df_plot[pace_col].rolling(10, center=True).mean() / 60.0  # Convert to min/km
             # Format hh:mm:ss for hover (pace is s/km, convert to mm:ss/km)
             pace_hover = [
-                f"{int(p)}:{int((p % 1) * 60):02d}:00 /km" if pd.notna(p) else "--:--"
+                f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
                 for p in pace_data
             ]
             fig_ve_br.add_trace(
@@ -346,7 +346,7 @@ def render_summary_tab(
                     hovertemplate="Tempo: %{customdata}<extra></extra>",
                     customdata=pace_hover,
                 ),
-                secondary_y=False,
+                secondary_y=True,  # FIX: Pace on secondary Y-axis (not same as VE)
             )
 
         fig_ve_br.update_layout(
@@ -447,7 +447,9 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
     # Power
     avg_power = df_plot["watts"].mean() if "watts" in df_plot.columns else 0
     np_power = _calculate_np(df_plot["watts"]) if "watts" in df_plot.columns else 0
-    work_kj = df_plot["watts"].sum() / 1000 if "watts" in df_plot.columns else 0
+    # Work = Power × Time. For 1Hz data: sum of watts = total joules.
+    # For non-1Hz: use time delta per row. Assume 1Hz (resampled data).
+    work_kj = df_plot["watts"].sum() / 1000.0 if "watts" in df_plot.columns else 0
 
     # HR
     hr_col = (

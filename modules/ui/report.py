@@ -171,6 +171,7 @@ def render_report_tab(
                     hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
                 )
             )
+        if "tymeventilation_smooth" in df_plot.columns:
             fig_exec.add_trace(
                 go.Scatter(
                     x=time_x,

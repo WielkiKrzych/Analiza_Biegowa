@@ -535,7 +535,11 @@ def detect_vt_cpet(
     # 2. UNIT NORMALIZATION
     # =========================================================================
     # VE: L/s → L/min
-    if data[cols["ve"]].mean() < 10:
+    # Use max value to distinguish units: L/s max is typically <5,
+    # while L/min max is typically 50-200. Mean-based check is unreliable
+    # for unfit athletes with low VE (~8 L/min mean).
+    ve_max = data[cols["ve"]].max()
+    if ve_max < 8.0:  # Max VE < 8 → must be L/s (no human breathes <8 L/min at peak)
         data["ve_lmin"] = data[cols["ve"]] * 60
     else:
         data["ve_lmin"] = data[cols["ve"]]
@@ -927,7 +931,7 @@ def detect_vt_cpet(
 
             # VT (tidal volume) derivatives
             vt_slope = np.gradient(
-                df_steps["vt_smooth"].fillna(method="ffill").values, df_steps["power"].values
+                df_steps["vt_smooth"].ffill().values, df_steps["power"].values
             )
             df_steps["vt_slope"] = vt_slope
             df_steps["vt_slope_smooth"] = (

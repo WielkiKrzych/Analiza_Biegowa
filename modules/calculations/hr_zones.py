@@ -176,37 +176,89 @@ def get_hr_zone(hr: float, config: HRZoneConfig, model: str = "auto") -> str:
     return "Unknown"
 
 
+def _resolve_model(config: HRZoneConfig, model: str) -> str:
+    """Resolve 'auto' model to a concrete model name."""
+    if model != "auto":
+        return model
+    if config.lthr and config.lthr > 0:
+        return "lthr"
+    elif config.resting_hr and config.resting_hr > 0:
+        return "karvonen"
+    else:
+        return "hrmax"
+
+
+def _get_zone_definitions(model: str) -> Dict[str, tuple]:
+    """Get zone definitions for a given model."""
+    if model == "lthr":
+        return ZONES_LTHR
+    elif model == "karvonen":
+        return ZONES_KARVONEN
+    else:
+        return ZONES_HRMAX
+
+
+def _get_absolute_boundaries(
+    config: HRZoneConfig, model: str, zone_defs: Dict[str, tuple]
+) -> Dict[str, tuple]:
+    """Convert zone percentage boundaries to absolute HR bpm values."""
+    boundaries = {}
+    if model == "hrmax":
+        for z, (lo, hi) in zone_defs.items():
+            boundaries[z] = (config.max_hr * lo, config.max_hr * hi)
+    elif model == "karvonen":
+        hrr = max(0, config.max_hr - config.resting_hr)
+        for z, (lo, hi) in zone_defs.items():
+            boundaries[z] = (config.resting_hr + hrr * lo, config.resting_hr + hrr * hi)
+    elif model == "lthr" and config.lthr:
+        for z, (lo, hi) in zone_defs.items():
+            boundaries[z] = (config.lthr * lo, config.lthr * hi)
+    else:
+        for z, (lo, hi) in zone_defs.items():
+            boundaries[z] = (config.max_hr * lo, config.max_hr * hi)
+    return boundaries
+
+
 def calculate_time_in_hr_zones(
     df_pl: Union[pd.DataFrame, Any],
     config: HRZoneConfig,
     model: str = "auto",
     hr_col: str = "heartrate"
 ) -> Dict[str, int]:
-    """Calculate time spent in each HR zone.
-    
+    """Calculate time spent in each HR zone using vectorized pd.cut.
+
+    Assumes 1Hz (1-second) sampled data — each row = 1 second.
+
     Args:
         df_pl: DataFrame with heart rate data
         config: HRZoneConfig with max_hr, resting_hr, lthr
         model: "hrmax", "karvonen", "lthr", or "auto"
         hr_col: Column name for heart rate
-    
+
     Returns:
         Dict mapping zone names to seconds spent
     """
     df = ensure_pandas(df_pl)
-    
+
     if hr_col not in df.columns:
         return {}
-    
-    hr = df[hr_col].fillna(0)
-    
-    results = {zone: 0 for zone in ZONES_HRMAX.keys()}
-    
-    for hr_val in hr:
-        zone = get_hr_zone(hr_val, config, model)
-        if zone in results:
-            results[zone] += 1
-    
+
+    hr = df[hr_col].dropna()
+    if len(hr) == 0:
+        return {}
+
+    resolved_model = _resolve_model(config, model)
+    zone_defs = _get_zone_definitions(resolved_model)
+    boundaries = _get_absolute_boundaries(config, resolved_model, zone_defs)
+
+    # Build bins for pd.cut (vectorized)
+    zone_names = list(zone_defs.keys())
+    bins = [boundaries[z][0] for z in zone_names] + [boundaries[zone_names[-1]][1]]
+
+    zones = pd.cut(hr, bins=bins, labels=zone_names, right=False, ordered=False)
+    counts = zones.value_counts()
+
+    results = {z: int(counts.get(z, 0)) for z in zone_names}
     return results
 
 

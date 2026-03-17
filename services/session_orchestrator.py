@@ -13,9 +13,12 @@ PERFORMANCE OPTIMIZATIONS:
 import streamlit as st
 import pandas as pd
 import numpy as np
+import logging
 from datetime import date
 from typing import Dict, Any, Optional, Tuple
 import hashlib
+
+logger = logging.getLogger(__name__)
 
 from .session_analysis import (
     calculate_extended_metrics,
@@ -139,6 +142,7 @@ def process_uploaded_session(
         return df_plot, df_plot_resampled, metrics, None
         
     except Exception as e:
+        logger.warning("Cached session processing failed, falling back to uncached: %s", e)
         import io
         df_raw = pd.read_parquet(io.BytesIO(df_bytes))
         is_valid, error_msg = validate_dataframe(df_raw)
@@ -171,11 +175,16 @@ def prepare_session_record(
     metrics: Dict[str, Any],
     np_header: float,
     if_header: float,
-    tss_header: float
+    tss_header: float,
+    session_date: Optional[date] = None,
 ) -> Dict[str, Any]:
-    """Prepare session data for database storage."""
+    """Prepare session data for database storage.
+
+    Args:
+        session_date: Date of the session. Defaults to today if not provided.
+    """
     return {
-        'date': date.today().isoformat(),
+        'date': (session_date or date.today()).isoformat(),
         'filename': filename,
         'duration_sec': len(df_plot),
         'tss': tss_header,

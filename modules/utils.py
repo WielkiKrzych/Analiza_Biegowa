@@ -56,8 +56,8 @@ def normalize_columns_pandas(df_pd: pd.DataFrame) -> pd.DataFrame:
     - 've' / 'ventilation' -> 'tymeventilation'
     - 'total_hemoglobin' -> 'thb'
     """
-    # Lowercase all columns first
-    df_pd.columns = [str(c).lower().strip() for c in df_pd.columns]
+    # Lowercase all columns first (create new DataFrame to avoid mutation)
+    df_pd = df_pd.rename(columns={c: str(c).lower().strip() for c in df_pd.columns})
 
     # Apply standard mappings using cached reverse index for O(m) complexity
     mapping = {}
@@ -335,7 +335,7 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
                 chunk["cadence"] = chunk["cadence"] * 2
         
         # GCT estimation from cadence (if no dedicated GCT column)
-        gct_columns = ["ground_contact", "gct", "GroundContactTime"]
+        gct_columns = ["stance_time", "ground_contact", "gct", "GroundContactTime"]
         has_gct = any(col in chunk.columns for col in gct_columns)
         if not has_gct and "cadence" in chunk.columns:
             cad = chunk["cadence"]

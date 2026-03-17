@@ -26,13 +26,14 @@ MIN_WATTS_ACTIVE = Config.MIN_WATTS_ACTIVE
 MIN_HR_ACTIVE = Config.MIN_HR_ACTIVE if hasattr(Config, 'MIN_HR_ACTIVE') else 40
 MIN_WATTS_DECOUPLING = 50
 MIN_HR_DECOUPLING = 60
-WINDOW_LONG = 30
-WINDOW_SHORT = 5
+# Use Config values to avoid divergence when changed via .env
+WINDOW_LONG = Config.SMOOTH_WINDOW
+WINDOW_SHORT = Config.SMOOTH_WINDOW_SHORT
 
-# Threshold detection constants (moved from magic numbers)
-VT1_SLOPE_THRESHOLD = 0.05
-VT2_SLOPE_THRESHOLD = 0.10
-VT1_SLOPE_SPIKE_SKIP = 0.10
+# Threshold detection constants — delegate to Config for .env overridability
+VT1_SLOPE_THRESHOLD = Config.VT1_SLOPE_THRESHOLD
+VT2_SLOPE_THRESHOLD = Config.VT2_SLOPE_THRESHOLD
+VT1_SLOPE_SPIKE_SKIP = Config.VT1_SLOPE_SPIKE_SKIP
 SMO2_SLOPE_SEVERE = -8.0
 SMO2_SLOPE_MODERATE = -4.0
 SMO2_TREND_THRESHOLD = -0.4

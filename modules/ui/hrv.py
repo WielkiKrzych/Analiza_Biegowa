@@ -3,11 +3,6 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 from typing import Any, Optional
-from modules.calculations import calculate_dynamic_dfa_v2
-import importlib
-import modules.calculations.hrv
-
-importlib.reload(modules.calculations.hrv)
 from modules.calculations.hrv import calculate_dynamic_dfa_v2
 
 
