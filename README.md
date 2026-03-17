@@ -1,5 +1,39 @@
 ## 📋 Changelog
 
+### 2026-03-17 - Comprehensive Physiological & Code Quality Audit
+
+**Korekty fizjologiczne (CRITICAL):**
+- 🏔️ **GAP**: Zastąpienie aproksymacji wielomianowej tabelą kosztów metabolicznych Minetti (2002) + wygładzanie GPS (20m okno)
+- 📈 **Normalized Pace**: 3-potęgowa normalizacja prędkości (model Skiba) zamiast 4-potęgowej (Coggan/kolarstwo)
+- ⚖️ **RSS**: Liniowy model IF (`IF × h × 100`) zamiast kwadratowego (`IF² × h × 100`)
+- 🧬 **VO2max**: Pełna formuła Jacka Danielsa z komponentem frakcji utylizacji
+- ⏱️ **GCT**: Klasyfikacja znormalizowana tempem biegu
+- 📏 **Stride vs Step**: Poprawna semantyka Garmin SPM (stride = 2 × step)
+- 🩸 **SmO2-HR coupling**: Analiza rate-of-change (pierwsze różnice) zamiast korelacji poziomów absolutnych
+- 🩸 **SmO2 reoxygenation baseline**: Średnia z pierwszych 30 próbek niskiej mocy zamiast `smo2[0]`
+
+**Poprawki jakości kodu (HIGH):**
+- 🛡️ Eliminacja mutacji DataFrame w UI (smo2.py, vent.py, utils.py) — `.copy()` przed modyfikacją
+- ⚡ Wektoryzacja obliczeń stref HR z `pd.cut` zamiast pętli po wierszach
+- 🔄 Kompatybilność pandas 2.2+: `fillna(method='ffill')` → `.ffill()`
+- 🫁 Poprawiona heurystyka jednostki VE (`max < 8` zamiast `mean < 10`)
+- 🔧 Usunięcie bare `except`, zduplikowanych warunków, martwego kodu
+- 📝 Logowanie wyjątków w fallback path session_orchestrator
+- 🧹 Usunięcie artefaktu debugowania `importlib.reload` z hrv.py
+- ⚙️ Konsolidacja stałych do referencji Config (.env override)
+
+**Poprawki wyświetlania UI (MEDIUM):**
+- 🦶 Strefy wizualne GCT dopasowane do etykiet klasyfikacji (200/220/240ms)
+- ⏱️ Format hover tempa: `5:30 /km` zamiast `5:30:00 /km`
+- 📊 Tempo na osi secondary_y w wykresach podsumowania
+- 🫁 Jednostka nachylenia VE: `(L/min)/s` zamiast `L/s`
+- 👟 Jednostka kadencji: dynamiczne SPM/rpm w zależności od sportu
+- 🏃 Running tab: rzeczywisty czas trwania, poprawne etykiety osi PDC
+
+**Testy:** 73/73 ✅
+
+---
+
 ### 2026-03-12 - Garmin FIT Integration & Running Dynamics
 
 **Nowe źródło danych: pliki .FIT (Garmin)**
@@ -67,7 +101,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python">
   <img src="https://img.shields.io/badge/Streamlit-1.30+-red?style=for-the-badge&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/Tests-31%2F31-green?style=for-the-badge" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-73%2F73-green?style=for-the-badge" alt="Tests">
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
 </p>
 
@@ -252,7 +286,7 @@ PRZED:                    PO:
 | Metryka | Ikona | Opis | Jednostka |
 |---------|-------|------|-----------|
 | **Tempo** | ⏱️ | Główny wskaźnik intensywności | min/km |
-| **Normalized Pace** | 📈 | Algorytm 4-potęgowy | min/km |
+| **Normalized Pace** | 📈 | Algorytm 3-potęgowy (Skiba) | min/km |
 | **Critical Speed** | 🎯 | Prędkość krytyczna | m/s |
 | **D'** | 🔋 | Pojemność anaerobowa | m |
 | **RSS** | ⚖️ | Running Stress Score | punkty |
@@ -358,16 +392,17 @@ pytest tests/ -v
 pytest --cov=modules tests/
 ```
 
-**Status:** `31/31 ✅`
+**Status:** `73/73 ✅`
 
 | Kategoria | Testy | Status |
 |-----------|-------|:------:|
-| 📐 Obliczenia | 18 | ✅ |
-| 🔗 Integracja | 5 | ✅ |
-| 🔄 Repeatability | 2 | ✅ |
+| 📐 Obliczenia (pace, d_prime, pipeline) | 30 | ✅ |
+| 🔗 Integracja (running pipeline) | 5 | ✅ |
+| ✅ Walidacja danych | 30 | ✅ |
+| 🔄 Repeatability | 1 | ✅ |
+| 🩸 SmO2 / Resaturation | 3 | ✅ |
 | ⚙️ Settings | 3 | ✅ |
 | 🗺️ State Machine | 1 | ✅ |
-| 🩸 SmO2 | 2 | ✅ |
 
 ---
 
