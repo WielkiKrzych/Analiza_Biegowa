@@ -5,6 +5,11 @@ import numpy as np
 from scipy import stats
 from modules.calculations.kinetics import generate_state_timeline
 from modules.calculations.quality import check_signal_quality
+from modules.calculations.smo2_phases import (
+    detect_smo2_phases,
+    classify_smo2_slope,
+    calculate_smo2_recovery_halftime,
+)
 
 
 def render_smo2_tab(target_df, training_notes, uploaded_file_name):
@@ -395,6 +400,69 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                         st.session_state.smo2_start_sec = new_start
                         st.session_state.smo2_end_sec = new_end
                         st.rerun()
+
+        # ===== SmO2 4-PHASE MODEL (Contreras-Briceno 2023) =====
+        st.markdown("---")
+        st.subheader("🔬 Model 4-fazowy SmO2 (Contreras-Briceno 2023)")
+
+        smo2_valid = target_df["smo2"].dropna()
+        if len(smo2_valid) >= 120:
+            time_s = target_df["time"].iloc[:len(smo2_valid)] if "time" in target_df.columns else None
+            phase_result = detect_smo2_phases(smo2_valid, time_s)
+
+            if phase_result.is_valid:
+                col_ph1, col_ph2, col_ph3 = st.columns(3)
+                col_ph1.metric("Desaturacja", f"{phase_result.desaturation_magnitude:.1f}%",
+                               help="Różnica między max a min SmO2")
+                col_ph2.metric("Recovery Rate", f"{phase_result.recovery_rate_pct_per_min:.2f} %/min",
+                               help="Szybkość reoxygenacji w Fazie 4")
+                col_ph3.metric("Fazy wykryte", f"{len(phase_result.phases)}/4")
+
+                # Phase table
+                phase_rows = []
+                for p in phase_result.phases:
+                    dur_min = p["duration_sec"] / 60
+                    phase_rows.append({
+                        "Faza": p["name"],
+                        "Start": f"{p['start_sec'] // 60}:{p['start_sec'] % 60:02d}",
+                        "Koniec": f"{p['end_sec'] // 60}:{p['end_sec'] % 60:02d}",
+                        "Czas": f"{dur_min:.1f} min",
+                        "Śr. SmO2": f"{p['mean_smo2']:.1f}%",
+                        "Slope": f"{p['slope_pct_per_sec']:.4f} %/s",
+                        "R²": f"{p['r_squared']:.2f}",
+                    })
+                st.dataframe(pd.DataFrame(phase_rows), use_container_width=True, hide_index=True)
+
+                # Recovery halftime
+                halftime = calculate_smo2_recovery_halftime(smo2_valid)
+                if halftime.get("is_valid"):
+                    st.info(f"**Recovery Half-time:** {halftime['halftime_sec']}s — "
+                            f"**{halftime['classification']}** "
+                            f"(nadir {halftime['nadir_pct']:.1f}% → baseline {halftime['baseline_pct']:.1f}%)")
+            else:
+                st.info("Niewystarczające dane do wykrycia 4 faz SmO2. " +
+                        "; ".join(phase_result.notes))
+
+            # Slope classification
+            st.markdown("#### Klasyfikacja nachylenia SmO2 (Rodriguez 2023)")
+            slope_class = classify_smo2_slope(smo2_valid)
+            counts = slope_class.value_counts()
+            total = len(slope_class)
+            if total > 0:
+                col_s1, col_s2, col_s3 = st.columns(3)
+                sus_pct = counts.get("sustainable", 0) / total * 100
+                thr_pct = counts.get("threshold", 0) / total * 100
+                unsus_pct = counts.get("unsustainable", 0) / total * 100
+                col_s1.metric("Sustainable", f"{sus_pct:.0f}%",
+                              help="Slope > 0: dostawa > zużycie (poniżej CS/CP)")
+                col_s2.metric("Threshold", f"{thr_pct:.0f}%",
+                              help="Slope ≈ 0: na progu")
+                col_s3.metric("Unsustainable", f"{unsus_pct:.0f}%",
+                              help="Slope < 0: zużycie > dostawa (powyżej CS/CP)")
+        else:
+            st.info("Za mało danych SmO2 do analizy 4-fazowej (min. 120 próbek).")
+
+        st.markdown("---")
 
         # ===== LEGACY TOOLS =====
         with st.expander("🔧 Szczegółowa Analiza (Legacy Tools)", expanded=False):

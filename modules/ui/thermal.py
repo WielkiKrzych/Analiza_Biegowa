@@ -4,6 +4,11 @@ import plotly.express as px
 import hashlib
 from typing import Optional
 from modules.calculations import calculate_thermal_decay
+from modules.calculations.thermal import (
+    classify_core_temp_zone,
+    calculate_core_temp_zones_time,
+    calculate_thermal_drift_rate,
+)
 
 
 def _hash_dataframe(df) -> str:
@@ -126,6 +131,62 @@ def render_thermal_tab(df_plot):
         2. **Per-cooling:** Polewaj nadgarstki i kark (duże naczynia krwionośne).
         3. **Nawadnianie:** Nie tylko woda – elektrolity (sód!) są kluczowe, by utrzymać objętość osocza i rzut serca.
         """)
+
+    # ===== CORE TEMP ZONES & DRIFT RATE =====
+    temp_col_name = None
+    for alias in ['core_temperature_smooth', 'core_temperature', 'core_temp']:
+        if alias in df_plot.columns:
+            temp_col_name = alias
+            break
+
+    if temp_col_name:
+        import pandas as pd_thermal
+        st.subheader("🌡️ Strefy Temperatury Głębokiej")
+
+        temp_series = df_plot[temp_col_name].dropna()
+        if len(temp_series) > 60:
+            zones_time = calculate_core_temp_zones_time(temp_series)
+            total_sec = sum(zones_time.values())
+
+            if total_sec > 0:
+                zone_colors = {
+                    "Optimal (<38.0°C)": "#2ecc71",
+                    "Elevated (38.0-38.5°C)": "#f1c40f",
+                    "High (38.5-39.0°C)": "#e67e22",
+                    "Critical (39.0-39.5°C)": "#e74c3c",
+                    "Dangerous (>39.5°C)": "#9b59b6",
+                }
+                zone_names = list(zones_time.keys())
+                zone_pcts = [zones_time[z] / total_sec * 100 for z in zone_names]
+                zone_cols = [zone_colors.get(z, "#808080") for z in zone_names]
+
+                fig_tz = go.Figure(data=[go.Bar(
+                    x=zone_pcts, y=zone_names, orientation="h",
+                    marker_color=zone_cols,
+                    text=[f"{p:.0f}%" for p in zone_pcts],
+                    textposition="auto",
+                )])
+                fig_tz.update_layout(
+                    template="plotly_dark",
+                    title="Czas w strefach temperatury głębokiej",
+                    xaxis_title="% czasu", height=250,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                )
+                st.plotly_chart(fig_tz, use_container_width=True)
+
+            # Thermal drift rate
+            drift = calculate_thermal_drift_rate(temp_series)
+            if drift.get("is_valid"):
+                col_dr1, col_dr2, col_dr3 = st.columns(3)
+                col_dr1.metric(
+                    "Drift Rate",
+                    f"{drift['drift_c_per_hour']:.2f} °C/h",
+                    help="Szybkość wzrostu temperatury — marker hydratacji i sprawności termoregulacyjnej",
+                )
+                col_dr2.metric("R²", f"{drift['r_squared']:.2f}")
+                col_dr3.metric("Klasyfikacja", drift["classification"])
+
+        st.divider()
 
     st.header("Cardiac Drift vs Temperatura")
     

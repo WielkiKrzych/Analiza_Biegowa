@@ -1,5 +1,31 @@
 ## 📋 Changelog
 
+### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
+
+**Nowe moduły obliczeniowe:**
+- 🏃 **Running Effectiveness** (`running_effectiveness.py`): RE = speed/specific_power (Coggan/Tredict), GCT Asymmetry Index (Seminati 2020, 3.7% metabolic cost/1% asymmetry), Leg Spring Stiffness kvert (Morin/Dalleau, Sports Med 2024)
+- 🛡️ **Durability** (`durability.py`): Pa:HR Aerobic Decoupling (Friel/TrainingPeaks), Durability Index 0-100 (Jones 2024), Cardiac Drift Rate, Decoupling Onset Detection (Smyth 2025, 82K marathoners)
+- 🫁 **BR Analysis** (`br_analysis.py`): BR zones Z1-Z5 (npj Digital Medicine 2024), VT1/VT2 detection from breathing rate alone, BR:HR ratio, BR decoupling
+- 🩸 **SmO2 Phases** (`smo2_phases.py`): 4-phase temporal model (Contreras-Briceno 2023 PMC10232742): Rise → Desaturation → Plateau → Recovery, SmO2 slope classification sustainable/threshold/unsustainable (Rodriguez 2023 PMC10108753), Recovery half-time
+
+**Rozszerzone moduły:**
+- 🏅 **Race Predictor**: VDOT (Jack Daniels), Critical Speed / D' model (Poole & Jones 2023), Individualized Riegel exponent (George 2017), Multi-model consensus prediction
+- ⏱️ **Pace**: Critical Speed fitting from PDC, W'bal/D'bal real-time (Skiba differential model adapted for running)
+- 💓 **HRV**: DDFA (Dynamic DFA trend — Frontiers 2023), HRV Threshold Detection HRVT1=0.75 / HRVT2=0.50 (Rogers 2021)
+- 🌡️ **Thermal**: Core temp zone classification (<38.0, 38.0-38.5, 38.5-39.0, 39.0-39.5, >39.5°C), Thermal drift rate (°C/h — fitness/hydration marker)
+
+**Nowe sekcje UI:**
+- 📊 **Summary tab**: 5 nowych sekcji — Durability & Decoupling, Race Prediction, BR Analysis, Thermal Analysis, Running Effectiveness & Biomechanics
+- 🏃 **Running tab**: Pa:HR decoupling z EF trend chart i onset detection marker
+- 🩸 **SmO2 tab**: 4-phase model table, recovery halftime, slope classification bar
+- 💓 **HRV tab**: DDFA trend analysis, HRVT1/HRVT2 threshold detection from DFA α1
+- 🌡️ **Thermal tab**: Core temp zone distribution chart, thermal drift rate metric
+- 🫁 **Vent tab**: BR-only analysis path (Garmin/COROS bez VE) — zones, VT detection, time series
+
+**Testy:** 73/73 ✅
+
+---
+
 ### 2026-03-22 - Garmin-only CSV Support & Data Pipeline Fixes
 
 **Naprawione problemy z brakiem danych w Podsumowaniu:**
