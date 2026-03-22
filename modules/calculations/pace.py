@@ -11,7 +11,7 @@ from typing import Union, Any, Dict, Tuple, Optional
 import numpy as np
 import pandas as pd
 
-from .pace_utils import pace_to_speed, speed_to_pace
+from .pace_utils import pace_to_speed, speed_to_pace, format_pace
 from .common import ensure_pandas
 from modules.numba_utils import is_numba_available
 
@@ -390,3 +390,112 @@ def get_fri_interpretation_pace(fri: float) -> str:
         return "🟠 Przeciętna"
     else:
         return "🔴 Niska wytrzymałość"
+
+
+# ---------------------------------------------------------------------------
+# Critical Speed / D' modelling  (Poole & Jones 2023, Exp Physiol)
+# ---------------------------------------------------------------------------
+
+_CS_DURATIONS = [120, 180, 300, 600, 900, 1200]
+
+
+def fit_critical_speed_from_pdc(
+    df: pd.DataFrame,
+    pace_col: str = "pace",
+    time_col: str = "time",
+) -> Dict[str, object]:
+    """Fit Critical Speed (CS) and D' from best efforts in activity data.
+
+    Uses the linear distance-time model: distance = CS * time + D'.
+    Reference: Poole & Jones 2023 (Experimental Physiology).
+    """
+    from scipy import stats as sp_stats
+
+    pdc = calculate_pace_duration_curve(df, durations=_CS_DURATIONS)
+
+    times = []
+    distances = []
+    for dur, best_pace in pdc.items():
+        if best_pace is None or best_pace <= 0:
+            continue
+        speed = 1000.0 / best_pace          # m/s
+        times.append(dur)
+        distances.append(speed * dur)        # meters
+
+    if len(times) < 2:
+        return {
+            "cs_m_s": 0.0, "cs_pace_s_km": 0.0, "cs_pace_str": "--:--",
+            "d_prime_m": 0.0, "r_squared": 0.0, "data_points": len(times),
+            "is_valid": False,
+        }
+
+    t_arr = np.array(times, dtype=np.float64)
+    d_arr = np.array(distances, dtype=np.float64)
+
+    slope, intercept, r_value, _p, _se = sp_stats.linregress(t_arr, d_arr)
+
+    cs = max(slope, 0.0)
+    d_prime = max(intercept, 0.0)
+    r_sq = r_value ** 2
+    cs_pace = speed_to_pace(cs) if cs > 0 else 0.0
+    cs_str = format_pace(cs_pace) + " /km" if cs > 0 else "--:-- /km"
+
+    return {
+        "cs_m_s": round(cs, 4),
+        "cs_pace_s_km": round(cs_pace, 1),
+        "cs_pace_str": cs_str,
+        "d_prime_m": round(d_prime, 1),
+        "r_squared": round(r_sq, 4),
+        "data_points": len(times),
+        "is_valid": r_sq > 0.95 and cs > 0,
+    }
+
+
+def calculate_wbal_running(
+    pace_series: pd.Series,
+    cs_pace: float,
+    d_prime_m: float,
+    time_col: Optional[pd.Series] = None,
+) -> pd.Series:
+    """W'bal equivalent for running (D'bal) using Skiba's differential model.
+
+    Depletes D' when speed exceeds CS and reconstitutes when below.
+    tau = 546 * exp(-0.01 * (CS - speed)) + 316  (Skiba 2015).
+
+    Args:
+        pace_series: Pace in s/km (1 Hz assumed).
+        cs_pace: Critical Speed expressed as pace in s/km.
+        d_prime_m: D' capacity in metres.
+        time_col: Unused, kept for API compatibility.
+
+    Returns:
+        pd.Series of D'bal values (metres remaining).
+    """
+    pace_arr = pace_series.values.astype(np.float64)
+    n = len(pace_arr)
+
+    # Convert pace (s/km) -> speed (m/s); guard against zero / nan
+    with np.errstate(divide="ignore", invalid="ignore"):
+        speed_arr = np.where((pace_arr > 0) & np.isfinite(pace_arr),
+                             1000.0 / pace_arr, 0.0)
+
+    cs_speed = 1000.0 / cs_pace if cs_pace > 0 else 0.0
+    dt = 1.0  # 1 Hz sampling
+
+    dbal = np.empty(n, dtype=np.float64)
+    dbal[0] = d_prime_m
+
+    for i in range(1, n):
+        speed = speed_arr[i]
+        prev = dbal[i - 1]
+
+        if speed > cs_speed:
+            # Depletion
+            dbal[i] = max(prev - (speed - cs_speed) * dt, 0.0)
+        else:
+            # Reconstitution (Skiba 2015 tau model)
+            diff = cs_speed - speed
+            tau = 546.0 * np.exp(-0.01 * diff) + 316.0
+            dbal[i] = prev + (d_prime_m - prev) * (1.0 - np.exp(-diff * dt / tau))
+
+    return pd.Series(dbal, index=pace_series.index, name="dbal")

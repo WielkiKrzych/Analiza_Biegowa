@@ -513,42 +513,82 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     
     st.divider()
     
-    # ==================== 5. DURABILITY INDEX ====================
-    st.subheader("🛡️ Durability Index (Biegowy)")
-    
+    # ==================== 5. DURABILITY & DECOUPLING ====================
+    st.subheader("🛡️ Wytrzymalosc i Decoupling (Pa:HR)")
+
     min_duration_min = 20
-    if duration_sec >= min_duration_min * 60 and has_pace:
+    has_hr = "heartrate" in df_plot.columns
+    if duration_sec >= min_duration_min * 60 and has_pace and has_hr:
+        from modules.calculations.durability import (
+            calculate_aerobic_decoupling,
+            detect_decoupling_onset,
+            calculate_durability_index,
+        )
+
+        decoupling = calculate_aerobic_decoupling(df_plot["pace"], df_plot["heartrate"])
+        dur_idx = calculate_durability_index(df_plot["pace"], df_plot["heartrate"])
+        onset = detect_decoupling_onset(df_plot["pace"], df_plot["heartrate"])
+
+        col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+        col_d1.metric(
+            "Pa:HR Decoupling",
+            f"{decoupling['decoupling_pct']:.1f}%",
+            delta=decoupling["classification"],
+            delta_color="off",
+            help="<5% = excellent aerobic base (Friel/TrainingPeaks)",
+        )
+        col_d2.metric(
+            "Durability Score",
+            f"{dur_idx['durability_score']:.0f}/100",
+            delta=dur_idx["classification"],
+            delta_color="off",
+            help="Jones 2024 — composite fatigue resistance metric",
+        )
+        col_d3.metric("Pace CV", f"{dur_idx['pace_cv_pct']:.1f}%")
+        onset_str = f"{onset.get('onset_time_sec', 0) // 60:.0f} min" if onset.get("onset_time_sec") else "brak"
+        col_d4.metric("Onset Driftu", onset_str, help="Smyth 2025 — moment rozpoczęcia driftu")
+
+        # EF trend chart
+        if "ef_series" in onset and onset["ef_series"] is not None:
+            ef_s = onset["ef_series"].dropna()
+            if len(ef_s) > 60:
+                fig_ef = go.Figure()
+                t_min = np.arange(len(ef_s)) / 60.0
+                fig_ef.add_trace(go.Scatter(
+                    x=t_min, y=ef_s.values,
+                    name="EF (speed/HR)", line=dict(color="#3498db", width=2),
+                ))
+                if onset.get("onset_time_sec"):
+                    fig_ef.add_vline(
+                        x=onset["onset_time_sec"] / 60,
+                        line_dash="dash", line_color="#E74C3C",
+                        annotation_text="Onset",
+                    )
+                fig_ef.update_layout(
+                    template="plotly_dark", height=250,
+                    xaxis_title="Czas [min]", yaxis_title="Efficiency Factor",
+                    margin=dict(l=20, r=20, t=30, b=20),
+                )
+                st.plotly_chart(fig_ef, use_container_width=True)
+
+        st.caption(f"{decoupling.get('interpretation', '')}")
+
+    elif duration_sec >= min_duration_min * 60 and has_pace:
+        # Fallback: simple pace split without HR
         half = len(df_plot) // 2
         avg_pace_first = df_plot["pace"].iloc[:half].mean()
         avg_pace_second = df_plot["pace"].iloc[half:].mean()
-        
-        # For pace: lower = faster, so ratio > 100% means second half was slower
         if avg_pace_first > 0:
             durability = (avg_pace_first / avg_pace_second) * 100
         else:
             durability = 100.0
-        
         col_d1, col_d2, col_d3 = st.columns(3)
-        
         delta_color = "normal" if durability >= 97 else "inverse"
-        col_d1.metric(
-            "Durability Index",
-            f"{durability:.1f}%",
-            delta=f"{durability - 100:.1f}%",
-            delta_color=delta_color,
-            help="Stosunek tempa 1. połowy do 2. połowy. >100% = negative split (szybciej w drugiej)",
-        )
-        col_d2.metric("Śr. Tempo (1. połowa)", format_pace(avg_pace_first))
-        col_d3.metric("Śr. Tempo (2. połowa)", format_pace(avg_pace_second))
-        
-        if durability > 100:
-            st.success("🟢 **Negative split!** Druga połowa szybsza — doskonałe rozłożenie tempa.")
-        elif durability >= 98:
-            st.info("🟡 **Even split.** Stabilne tempo. Dobra strategia.")
-        else:
-            st.warning("🟠 **Positive split.** Spadek tempa w drugiej połowie — możliwe zmęczenie lub zbyt szybki start.")
+        col_d1.metric("Durability", f"{durability:.1f}%", delta=f"{durability - 100:.1f}%", delta_color=delta_color)
+        col_d2.metric("1. polowa", format_pace(avg_pace_first))
+        col_d3.metric("2. polowa", format_pace(avg_pace_second))
     else:
-        st.info(f"Potrzeba minimum {min_duration_min} minut biegu do obliczenia Durability Index.")
+        st.info(f"Potrzeba minimum {min_duration_min} minut biegu z HR do analizy decoupling.")
     
     st.divider()
     

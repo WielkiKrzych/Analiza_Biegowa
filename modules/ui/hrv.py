@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 from typing import Any, Optional
-from modules.calculations.hrv import calculate_dynamic_dfa_v2
+from modules.calculations.hrv import calculate_dynamic_dfa_v2, calculate_ddfa, detect_hrv_thresholds
 
 
 def render_hrv_tab(df_clean_pl: Any) -> None:
@@ -299,6 +299,63 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                 st.warning("Za mało danych R-R po filtracji artefaktów.")
         else:
             st.warning("Brak surowych danych R-R do wygenerowania wykresu Poincaré.")
+
+        # --- DDFA & HRV THRESHOLDS (Rogers 2021, Frontiers 2023) ---
+        st.markdown("---")
+        st.subheader("🔬 Zaawansowana analiza: DDFA i Progi HRV")
+
+        if "alpha1" in df_dfa.columns and len(df_dfa) > 10:
+            # DDFA — Dynamic DFA trend
+            ddfa_result = calculate_ddfa(df_dfa["alpha1"])
+            col_dd1, col_dd2, col_dd3 = st.columns(3)
+            col_dd1.metric(
+                "DDFA (Trend α1)",
+                f"{ddfa_result['ddfa_slope']:.4f}/min",
+                help="Tempo spadku DFA α1 w czasie. Ujemne = narastające zmęczenie centralne",
+            )
+            col_dd2.metric(
+                "R²",
+                f"{ddfa_result['r_squared']:.2f}",
+                help="Jakość dopasowania trendu liniowego",
+            )
+            col_dd3.metric(
+                "Interpretacja",
+                ddfa_result["classification"],
+            )
+
+            # HRV Thresholds — detect HRVT1 and HRVT2
+            if "hr" in df_dfa.columns or "watts" in df_dfa.columns:
+                intensity_col = "watts" if "watts" in df_dfa.columns and df_dfa["watts"].sum() > 0 else None
+                if intensity_col is None and "hr" in df_dfa.columns:
+                    intensity_col = "hr"
+
+                if intensity_col:
+                    thresholds = detect_hrv_thresholds(df_dfa["alpha1"], df_dfa[intensity_col])
+                    if thresholds.get("hrvt1_intensity"):
+                        col_t1, col_t2 = st.columns(2)
+                        unit = "W" if intensity_col == "watts" else "bpm"
+                        col_t1.metric(
+                            "HRVT1 (α1=0.75)",
+                            f"{thresholds['hrvt1_intensity']:.0f} {unit}",
+                            help="Próg aerobowy wykryty z DFA α1 (Rogers 2021)",
+                        )
+                        if thresholds.get("hrvt2_intensity"):
+                            col_t2.metric(
+                                "HRVT2 (α1=0.50)",
+                                f"{thresholds['hrvt2_intensity']:.0f} {unit}",
+                                help="Próg anaerobowy wykryty z DFA α1",
+                            )
+                        else:
+                            col_t2.metric("HRVT2 (α1=0.50)", "Nie wykryto")
+
+                        st.caption(
+                            "Progi wyznaczone algorytmem regresji DFA α1 vs intensywność "
+                            "(Rogers et al. 2021, Frontiers in Physiology 2023)"
+                        )
+                    else:
+                        st.info("Nie udało się wyznaczyć progów HRV — zbyt mało danych lub brak gradientu intensywności.")
+
+        st.markdown("---")
 
         # --- TEORIA ---
         with st.expander("🧠 O co chodzi z DFA Alpha-1?", expanded=True):

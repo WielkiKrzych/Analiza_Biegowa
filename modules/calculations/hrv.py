@@ -407,3 +407,179 @@ def calculate_dynamic_dfa_v2(
 
     except Exception as e:
         return None, f"Błąd obliczeń Numba: {e}"
+
+
+# ============================================================
+# Dynamical DFA (DDFA) — time-varying DFA alpha1
+# Reference: Frontiers in Physiology 2023 (DDFA), Rogers et al. 2021
+# ============================================================
+
+
+def _classify_alpha1_zone(alpha1: float) -> str:
+    """Classify a single alpha1 value into an intensity zone."""
+    if alpha1 > 1.0:
+        return "correlated"
+    if alpha1 > 0.75:
+        return "moderate"
+    if alpha1 > 0.5:
+        return "transition"
+    return "uncorrelated"
+
+
+def calculate_ddfa(
+    rr_intervals: np.ndarray,
+    window_beats: int = 120,
+    step_beats: int = 10,
+) -> dict:
+    """
+    Dynamical DFA (DDFA) — compute time-varying DFA alpha1 over a sliding window.
+
+    Args:
+        rr_intervals: 1-D array of RR intervals in ms.
+        window_beats: Number of RR intervals per window (default 120).
+        step_beats: Stride in beats between successive windows (default 10).
+
+    Returns:
+        Dictionary with alpha1 time series, zone classification, and
+        HRVT1/HRVT2 beat indices (first sustained downward crossings
+        of 0.75 and 0.50 respectively).
+    """
+    rr = np.asarray(rr_intervals, dtype=np.float64)
+    n = len(rr)
+
+    if n < window_beats:
+        return {
+            "alpha1_series": np.array([]),
+            "time_indices": np.array([], dtype=np.int64),
+            "mean_alpha1": np.nan,
+            "hrvt1_beat_idx": None,
+            "hrvt2_beat_idx": None,
+            "zone_classification": [],
+        }
+
+    alpha1_list: list[float] = []
+    center_list: list[int] = []
+
+    start = 0
+    while start + window_beats <= n:
+        window = rr[start : start + window_beats]
+        a1 = float(_calc_alpha1_numba(window))
+        if not np.isnan(a1):
+            a1 = max(0.2, min(1.8, a1))
+        alpha1_list.append(a1)
+        center_list.append(start + window_beats // 2)
+        start += step_beats
+
+    alpha1_series = np.array(alpha1_list)
+    time_indices = np.array(center_list, dtype=np.int64)
+    zones = [_classify_alpha1_zone(a) for a in alpha1_list]
+
+    # Detect first downward crossing of a threshold
+    def _first_crossing(series: np.ndarray, indices: np.ndarray, threshold: float):
+        for i, val in enumerate(series):
+            if not np.isnan(val) and val < threshold:
+                return int(indices[i])
+        return None
+
+    valid = alpha1_series[~np.isnan(alpha1_series)]
+    mean_a1 = float(np.mean(valid)) if len(valid) > 0 else np.nan
+
+    return {
+        "alpha1_series": alpha1_series,
+        "time_indices": time_indices,
+        "mean_alpha1": mean_a1,
+        "hrvt1_beat_idx": _first_crossing(alpha1_series, time_indices, 0.75),
+        "hrvt2_beat_idx": _first_crossing(alpha1_series, time_indices, 0.50),
+        "zone_classification": zones,
+    }
+
+
+def detect_hrv_thresholds(
+    rr_intervals: np.ndarray,
+    time_stamps: Optional[np.ndarray] = None,
+    hr_series: Optional[np.ndarray] = None,
+    pace_series: Optional[np.ndarray] = None,
+) -> dict:
+    """
+    Detect HRVT1 and HRVT2 from DFA alpha1 trend.
+
+    HRVT1 = time where alpha1 consistently drops below 0.75 (sustained >60 s).
+    HRVT2 = time where alpha1 consistently drops below 0.50 (sustained >60 s).
+
+    Args:
+        rr_intervals: 1-D array of RR intervals in ms.
+        time_stamps: Optional cumulative time in seconds for each beat.
+        hr_series: Optional HR values aligned to beats.
+        pace_series: Optional pace values (min/km) aligned to beats.
+
+    Returns:
+        Dictionary with threshold times, HR, pace, alpha1 series and confidence.
+
+    Reference: Rogers et al. 2021 (Frontiers in Physiology).
+    """
+    rr = np.asarray(rr_intervals, dtype=np.float64)
+    ddfa = calculate_ddfa(rr, window_beats=120, step_beats=10)
+
+    # Build cumulative time from RR intervals when timestamps are absent
+    if time_stamps is None:
+        time_stamps = np.cumsum(rr) / 1000.0  # ms -> seconds
+
+    empty_result = {
+        "hrvt1_time_sec": None, "hrvt1_hr": None, "hrvt1_pace": None,
+        "hrvt2_time_sec": None, "hrvt2_hr": None, "hrvt2_pace": None,
+        "alpha1_series": ddfa["alpha1_series"],
+        "confidence": 0.0,
+    }
+
+    if len(ddfa["alpha1_series"]) == 0:
+        return empty_result
+
+    sustained_sec = 60.0
+
+    def _find_sustained_crossing(threshold: float):
+        """Return beat index where alpha1 stays below *threshold* for >=60 s."""
+        series = ddfa["alpha1_series"]
+        indices = ddfa["time_indices"]
+        candidate_idx = None
+        candidate_time = None
+
+        for i, (a1, beat_idx) in enumerate(zip(series, indices)):
+            if np.isnan(a1):
+                candidate_idx = None
+                continue
+            t = float(time_stamps[min(beat_idx, len(time_stamps) - 1)])
+            if a1 < threshold:
+                if candidate_idx is None:
+                    candidate_idx = beat_idx
+                    candidate_time = t
+                elif t - candidate_time >= sustained_sec:
+                    return int(candidate_idx), candidate_time
+            else:
+                candidate_idx = None
+                candidate_time = None
+        return None, None
+
+    def _lookup(beat_idx, source):
+        if beat_idx is None or source is None:
+            return None
+        idx = min(beat_idx, len(source) - 1)
+        return float(source[idx])
+
+    hrvt1_beat, hrvt1_t = _find_sustained_crossing(0.75)
+    hrvt2_beat, hrvt2_t = _find_sustained_crossing(0.50)
+
+    # Confidence heuristic: ratio of valid alpha1 windows
+    valid_count = int(np.sum(~np.isnan(ddfa["alpha1_series"])))
+    total = len(ddfa["alpha1_series"])
+    confidence = valid_count / total if total > 0 else 0.0
+
+    return {
+        "hrvt1_time_sec": int(hrvt1_t) if hrvt1_t is not None else None,
+        "hrvt1_hr": _lookup(hrvt1_beat, hr_series),
+        "hrvt1_pace": _lookup(hrvt1_beat, pace_series),
+        "hrvt2_time_sec": int(hrvt2_t) if hrvt2_t is not None else None,
+        "hrvt2_hr": _lookup(hrvt2_beat, hr_series),
+        "hrvt2_pace": _lookup(hrvt2_beat, pace_series),
+        "alpha1_series": ddfa["alpha1_series"],
+        "confidence": round(confidence, 3),
+    }
