@@ -1,5 +1,26 @@
 ## 📋 Changelog
 
+### 2026-03-22 - Garmin-only CSV Support & Data Pipeline Fixes
+
+**Naprawione problemy z brakiem danych w Podsumowaniu:**
+- 🏃 **Pace z predkosci**: Automatyczne wyliczanie pace z `velocity_smooth` lub `speed_m_s` gdy brak kolumny `pace` w CSV
+- 🌬️ **Garmin respiration**: Mapowanie kolumny `respiration` z Garmina na `tymebreathrate` (wczesniej nierozpoznawana)
+- 🫁 **VE/BR niezalezne**: Sekcja oddechow (BR) wyswietla sie niezaleznie od wentylacji (VE) — Garmin BR widoczny bez Tymewear
+- 📏 **Dystans i tempo**: Metryki dystansu, srednie tempo i core temperature dodane do panelu Podsumowania
+- 🔴🔵 **O2Hb/HHb smoothing**: Dodane do pipeline wygladzania (wczesniej pomijane)
+- 🔧 **GAP**: Obliczany z predkosci gdy brak kolumny `pace` (dzialanie z Intervals.icu streams)
+- 🛡️ **Dedup kolumn**: Automatyczne usuwanie zduplikowanych kolumn po normalizacji (np. `HeatStrainIndex`/`heat_strain_index`)
+- 🛡️ **Immutable summary**: Naprawiona mutacja `df_plot.columns` w summary.py
+
+**Nowe aliasy kolumn:**
+- `respiration`, `respiratory_rate`, `resprate` → `tymebreathrate`
+- `verticaloscillation`, `vertical_oscillation` → kanoniczny `verticaloscillation`
+- `heatstrainindex`, `hsi` → kanoniczny `heat_strain_index`
+
+**Testy:** 73/73 ✅
+
+---
+
 ### 2026-03-17 - Comprehensive Physiological & Code Quality Audit
 
 **Korekty fizjologiczne (CRITICAL):**
@@ -412,12 +433,14 @@ pytest --cov=modules tests/
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  ✅ WYMAGANE                                         │
+│  ✅ WYMAGANE (jedno z ponizszych)                    │
 │  • pace              [s/km]  ← Tempo                 │
+│  • velocity_smooth   [m/s]   ← Predkosc (auto→pace) │
+│  • speed_m_s         [m/s]   ← Predkosc (auto→pace) │
 │                                                      │
 │  ⚡ OPCJONALNE                                       │
 │  • distance          [m]     ← Dystans               │
-│  • heartrate         [bpm]   ← Tętno                 │
+│  • heartrate         [bpm]   ← Tetno                 │
 │  • cadence           [SPM]   ← Kadencja              │
 └──────────────────────────────────────────────────────┘
 ```
@@ -427,7 +450,7 @@ pytest --cov=modules tests/
 | Kolumna | Opis | Urządzenie | Ikona |
 |---------|------|------------|-------|
 | `tymeventilation` | Wentylacja [L/min] | Tymewear | 🫁 |
-| `tymebreathrate` | Częstość oddechów [/min] | Tymewear | 🌬️ |
+| `tymebreathrate` | Częstość oddechów [/min] | Tymewear / Garmin (`respiration`) | 🌬️ |
 | `smo2` | Saturacja mięśniowa [%] | TrainRed / Moxy | 🩸 |
 | `thb` | Hemoglobina całkowita [g/dL] | TrainRed / Moxy | 🩸 |
 | `verticaloscillation` | Oscylacja pionowa [cm] | Garmin HRM-Run, Stryd | 📊 |

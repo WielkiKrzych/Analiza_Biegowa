@@ -209,8 +209,8 @@ def render_summary_tab(
     st.header("📊 Podsumowanie Treningu")
     st.markdown("Wszystkie kluczowe wykresy i metryki w jednym miejscu.")
 
-    # Normalize columns
-    df_plot.columns = df_plot.columns.str.lower().str.strip()
+    # Normalize columns (immutable — create new DataFrame, don't mutate caller)
+    df_plot = df_plot.rename(columns={c: str(c).lower().strip() for c in df_plot.columns})
 
     # --- SHARED THRESHOLD DETECTION ---
     # We perform detection once here to be used across multiple sections (5, 6, 7)
@@ -291,18 +291,17 @@ def render_summary_tab(
     # =========================================================================
     st.subheader("2️⃣ Wentylacja (VE) i Oddechy (BR)")  # noqa: section numbering
 
-    if "tymeventilation" in df_plot.columns:
+    has_ve = "tymeventilation" in df_plot.columns
+    has_br = "tymebreathrate" in df_plot.columns
+
+    if has_ve or has_br:
         fig_ve_br = make_subplots(specs=[[{"secondary_y": True}]])
 
         time_x_s = df_plot["time"] if "time" in df_plot.columns else range(len(df_plot))
 
         # VE
-        ve_data = (
-            df_plot["tymeventilation"].rolling(10, center=True).mean()
-            if "tymeventilation" in df_plot.columns
-            else None
-        )
-        if ve_data is not None:
+        if has_ve:
+            ve_data = df_plot["tymeventilation"].rolling(10, center=True).mean()
             fig_ve_br.add_trace(
                 go.Scatter(
                     x=time_x_s,
@@ -315,7 +314,7 @@ def render_summary_tab(
             )
 
         # BR
-        if "tymebreathrate" in df_plot.columns:
+        if has_br:
             br_data = df_plot["tymebreathrate"].rolling(10, center=True).mean()
             fig_ve_br.add_trace(
                 go.Scatter(
@@ -325,14 +324,13 @@ def render_summary_tab(
                     line=dict(color="#00cc96", width=2),
                     hovertemplate="BR: %{y:.0f} /min<extra></extra>",
                 ),
-                secondary_y=True,
+                secondary_y=not has_ve,  # Primary Y if VE absent, secondary if VE present
             )
 
-        # TEMPO - Add pace as third variable with hh:mm:ss format
+        # TEMPO
         if "pace" in df_plot.columns or "pace_smooth" in df_plot.columns:
             pace_col = "pace_smooth" if "pace_smooth" in df_plot.columns else "pace"
-            pace_data = df_plot[pace_col].rolling(10, center=True).mean() / 60.0  # Convert to min/km
-            # Format hh:mm:ss for hover (pace is s/km, convert to mm:ss/km)
+            pace_data = df_plot[pace_col].rolling(10, center=True).mean() / 60.0
             pace_hover = [
                 f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--"
                 for p in pace_data
@@ -346,7 +344,7 @@ def render_summary_tab(
                     hovertemplate="Tempo: %{customdata}<extra></extra>",
                     customdata=pace_hover,
                 ),
-                secondary_y=True,  # FIX: Pace on secondary Y-axis (not same as VE)
+                secondary_y=True,
             )
 
         fig_ve_br.update_layout(
@@ -356,41 +354,44 @@ def render_summary_tab(
             hovermode="x unified",
             margin=dict(l=20, r=20, t=30, b=20),
         )
-        fig_ve_br.update_yaxes(title_text="VE (L/min)", secondary_y=False)
-        fig_ve_br.update_yaxes(title_text="BR (/min)", secondary_y=True)
+        primary_label = "VE (L/min)" if has_ve else "BR (/min)"
+        secondary_label = "BR (/min)" if has_ve else "Tempo"
+        fig_ve_br.update_yaxes(title_text=primary_label, secondary_y=False)
+        fig_ve_br.update_yaxes(title_text=secondary_label, secondary_y=True)
         st.plotly_chart(fig_ve_br, use_container_width=True)
 
-        # Oblicz statystyki VE i BR
-        ve_min = df_plot["tymeventilation"].min()
-        ve_max = df_plot["tymeventilation"].max()
-        ve_mean = df_plot["tymeventilation"].mean()
-
-        br_min = df_plot["tymebreathrate"].min() if "tymebreathrate" in df_plot.columns else None
-        br_max = df_plot["tymebreathrate"].max() if "tymebreathrate" in df_plot.columns else None
-        br_mean = df_plot["tymebreathrate"].mean() if "tymebreathrate" in df_plot.columns else None
-
-        # Wyświetl statystyki w ładnych ramkach
+        # Statystyki VE i BR
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown(
-                f"""
-            <div style="padding:15px; border-radius:8px; border:2px solid #ffa15a; background-color: #222;">
-                <h3 style="margin:0; color: #ffa15a;">🫁 VE (Wentylacja)</h3>
-                <p style="margin:5px 0; color:#aaa;"><b>Min:</b> {ve_min:.1f} L/min</p>
-                <p style="margin:5px 0; color:#aaa;"><b>Max:</b> {ve_max:.1f} L/min</p>
-                <p style="margin:5px 0; color:#aaa;"><b>Śr:</b> {ve_mean:.1f} L/min</p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
+            if has_ve:
+                ve_min = df_plot["tymeventilation"].min()
+                ve_max = df_plot["tymeventilation"].max()
+                ve_mean = df_plot["tymeventilation"].mean()
+                st.markdown(
+                    f"""
+                <div style="padding:15px; border-radius:8px; border:2px solid #ffa15a; background-color: #222;">
+                    <h3 style="margin:0; color: #ffa15a;">🫁 VE (Wentylacja)</h3>
+                    <p style="margin:5px 0; color:#aaa;"><b>Min:</b> {ve_min:.1f} L/min</p>
+                    <p style="margin:5px 0; color:#aaa;"><b>Max:</b> {ve_max:.1f} L/min</p>
+                    <p style="margin:5px 0; color:#aaa;"><b>Śr:</b> {ve_mean:.1f} L/min</p>
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("Brak danych VE (wentylacja) — brak czujnika Tymewear.")
 
         with col2:
-            if br_min is not None:
+            if has_br:
+                br_min = df_plot["tymebreathrate"].min()
+                br_max = df_plot["tymebreathrate"].max()
+                br_mean = df_plot["tymebreathrate"].mean()
+                br_source = "Garmin" if not has_ve else "Tymewear"
                 st.markdown(
                     f"""
                 <div style="padding:15px; border-radius:8px; border:2px solid #00cc96; background-color: #222;">
-                    <h3 style="margin:0; color: #00cc96;">🌬️ BR (Oddechy)</h3>
+                    <h3 style="margin:0; color: #00cc96;">🌬️ BR (Oddechy) — {br_source}</h3>
                     <p style="margin:5px 0; color:#aaa;"><b>Min:</b> {br_min:.0f} /min</p>
                     <p style="margin:5px 0; color:#aaa;"><b>Max:</b> {br_max:.0f} /min</p>
                     <p style="margin:5px 0; color:#aaa;"><b>Śr:</b> {br_mean:.0f} /min</p>
@@ -398,6 +399,8 @@ def render_summary_tab(
                 """,
                     unsafe_allow_html=True,
                 )
+            else:
+                st.info("Brak danych BR (częstość oddechów).")
     else:
         st.info("Brak danych wentylacji (VE/BR) w tym pliku.")
 
@@ -444,11 +447,27 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
     # Oblicz metryki z danych
     duration_min = len(df_plot) / 60 if len(df_plot) > 0 else 0
 
+    # Distance (from 'distance' column — cumulative meters)
+    total_distance_km = 0.0
+    if "distance" in df_plot.columns:
+        dist_vals = df_plot["distance"].dropna()
+        if len(dist_vals) > 0:
+            total_distance_km = dist_vals.iloc[-1] / 1000.0 if dist_vals.max() > 100 else dist_vals.iloc[-1]
+
+    # Pace (convert via speed domain for correct averaging)
+    avg_pace_str = "--"
+    if "pace" in df_plot.columns:
+        pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
+        if len(pace_valid) > 0:
+            speed_vals = 1000.0 / pace_valid
+            avg_speed = speed_vals.mean()
+            if avg_speed > 0:
+                avg_pace_s = 1000.0 / avg_speed
+                avg_pace_str = f"{int(avg_pace_s // 60)}:{int(avg_pace_s % 60):02d} /km"
+
     # Power
     avg_power = df_plot["watts"].mean() if "watts" in df_plot.columns else 0
     np_power = _calculate_np(df_plot["watts"]) if "watts" in df_plot.columns else 0
-    # Work = Power × Time. For 1Hz data: sum of watts = total joules.
-    # For non-1Hz: use time delta per row. Assume 1Hz (resampled data).
     work_kj = df_plot["watts"].sum() / 1000.0 if "watts" in df_plot.columns else 0
 
     # HR
@@ -474,6 +493,10 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
     min_br = df_plot["tymebreathrate"].min() if "tymebreathrate" in df_plot.columns else 0
     max_br = df_plot["tymebreathrate"].max() if "tymebreathrate" in df_plot.columns else 0
 
+    # Core temperature
+    avg_core = df_plot["core_temperature"].mean() if "core_temperature" in df_plot.columns else 0
+    max_core = df_plot["core_temperature"].max() if "core_temperature" in df_plot.columns else 0
+
     # Estymacje
     est_vo2max = metrics.get("vo2_max_est", 0) if metrics else 0
     est_vlamax = metrics.get("vlamax_est", 0) if metrics else 0
@@ -484,40 +507,42 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
     # Wyświetlanie w 4 kolumnach
     st.markdown("### 📈 Metryki Treningowe")
 
-    # Wiersz 1: Czas, Moc, NP, Praca
+    # Wiersz 1: Czas, Dystans, Tempo, Praca/Moc
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("⏱️ Czas", f"{duration_min:.1f} min")
-    c2.metric("⚡ AVG Power", f"{avg_power:.0f} W")
-    c3.metric("📊 NP", f"{np_power:.0f} W")
-    c4.metric("🔋 Praca", f"{work_kj:.0f} kJ")
+    c2.metric("📏 Dystans", f"{total_distance_km:.2f} km" if total_distance_km > 0 else "--")
+    c3.metric("🏃 AVG Tempo", avg_pace_str)
+    c4.metric("⚡ AVG Power", f"{avg_power:.0f} W" if avg_power else "--")
 
-    # Wiersz 2: HR
+    # Wiersz 2: HR + NP + praca
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("❤️ AVG HR", f"{avg_hr:.0f} bpm" if avg_hr else "--")
-    c2.metric("❤️ MIN HR", f"{min_hr:.0f} bpm" if min_hr else "--")
-    c3.metric("❤️ MAX HR", f"{max_hr:.0f} bpm" if max_hr else "--")
-    c4.empty()
+    c2.metric("❤️ MAX HR", f"{max_hr:.0f} bpm" if max_hr else "--")
+    c3.metric("📊 NP", f"{np_power:.0f} W" if np_power else "--")
+    c4.metric("🔋 Praca", f"{work_kj:.0f} kJ" if work_kj else "--")
 
-    # Wiersz 3: SmO2
+    # Wiersz 3: SmO2 + Core Temp
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🩸 AVG SmO2", f"{avg_smo2:.1f}%" if avg_smo2 else "--")
     c2.metric("🩸 MIN SmO2", f"{min_smo2:.1f}%" if min_smo2 else "--")
-    c3.metric("🩸 MAX SmO2", f"{max_smo2:.1f}%" if max_smo2 else "--")
-    c4.empty()
+    c3.metric("🌡️ AVG Core", f"{avg_core:.1f} °C" if avg_core else "--")
+    c4.metric("🌡️ MAX Core", f"{max_core:.1f} °C" if max_core else "--")
 
-    # Wiersz 4: VE
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🫁 AVG VE", f"{avg_ve:.1f} L/min" if avg_ve else "--")
-    c2.metric("🫁 MIN VE", f"{min_ve:.1f} L/min" if min_ve else "--")
-    c3.metric("🫁 MAX VE", f"{max_ve:.1f} L/min" if max_ve else "--")
-    c4.empty()
+    # Wiersz 4: VE (only if present)
+    if avg_ve:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("🫁 AVG VE", f"{avg_ve:.1f} L/min")
+        c2.metric("🫁 MIN VE", f"{min_ve:.1f} L/min")
+        c3.metric("🫁 MAX VE", f"{max_ve:.1f} L/min")
+        c4.empty()
 
-    # Wiersz 5: BR
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("💨 AVG BR", f"{avg_br:.0f} /min" if avg_br else "--")
-    c2.metric("💨 MIN BR", f"{min_br:.0f} /min" if min_br else "--")
-    c3.metric("💨 MAX BR", f"{max_br:.0f} /min" if max_br else "--")
-    c4.empty()
+    # Wiersz 5: BR (only if present)
+    if avg_br:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("💨 AVG BR", f"{avg_br:.0f} /min")
+        c2.metric("💨 MIN BR", f"{min_br:.0f} /min")
+        c3.metric("💨 MAX BR", f"{max_br:.0f} /min")
+        c4.empty()
 
     # Wiersz 6: Estymacje
     c1, c2, c3, c4 = st.columns(4)
