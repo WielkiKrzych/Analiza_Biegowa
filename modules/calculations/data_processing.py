@@ -47,6 +47,21 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
         df_pd['time'] = np.arange(len(df_pd)).astype(float)
 
     df_pd = df_pd.sort_values('time').reset_index(drop=True)
+
+    # Derive pace from speed columns if pace not present
+    if 'pace' not in df_pd.columns:
+        speed_col = None
+        if 'velocity_smooth' in df_pd.columns:
+            speed_col = 'velocity_smooth'
+        elif 'speed_m_s' in df_pd.columns:
+            speed_col = 'speed_m_s'
+        if speed_col is not None:
+            speed_vals = pd.to_numeric(df_pd[speed_col], errors='coerce')
+            # speed in m/s → pace in sec/km: pace = 1000 / speed
+            speed_safe = speed_vals.replace(0, np.nan)
+            df_pd['pace'] = 1000.0 / speed_safe
+            logger.info(f"Derived pace from '{speed_col}' column")
+
     df_pd['time_dt'] = pd.to_timedelta(df_pd['time'], unit='s')
 
     # Ensure index has no NaN
@@ -88,7 +103,8 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
     # Create smoothed versions of key columns
     smooth_cols = [
         'watts', 'heartrate', 'cadence', 'smo2', 'torque', 'core_temperature',
-        'skin_temperature', 'velocity_smooth', 'tymebreathrate', 'tymeventilation', 'thb'
+        'skin_temperature', 'velocity_smooth', 'tymebreathrate', 'tymeventilation',
+        'thb', 'o2hb', 'hhb',
     ]
 
     for col in smooth_cols:

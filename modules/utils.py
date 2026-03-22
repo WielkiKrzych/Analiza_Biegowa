@@ -77,6 +77,10 @@ def normalize_columns_pandas(df_pd: pd.DataFrame) -> pd.DataFrame:
     if mapping:
         df_pd = df_pd.rename(columns=mapping)
 
+    # Drop duplicate columns that mapped to the same canonical name
+    # (e.g. heat_strain_index + HeatStrainIndex both become heat_strain_index)
+    df_pd = df_pd.loc[:, ~df_pd.columns.duplicated(keep="first")]
+
     return df_pd
 
 
@@ -105,10 +109,15 @@ _COLUMN_ALIAS_INDEX = {
         "breath rate",
         "breathing rate",
         "respiration rate",
+        "respiration",
+        "respiratory_rate",
+        "resprate",
         "tymebreathrate",
     },
     "cadence": {"cad", "rpm", "cadence"},
     "thb": {"total_hemoglobin", "total hemoglobin", "thb"},
+    "verticaloscillation": {"vertical_oscillation", "vo_cm", "verticaloscillation"},
+    "heat_strain_index": {"heatstrainindex", "heat strain index", "hsi", "heat_strain_index"},
 }
 
 
