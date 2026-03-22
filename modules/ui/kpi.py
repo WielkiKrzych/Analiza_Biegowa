@@ -156,7 +156,10 @@ def render_kpi_tab(df_plot, df_plot_resampled, metrics, rider_weight, decoupling
     with c2:
         st.subheader("Tętno")
         fig_h = go.Figure()
-        fig_h.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['heartrate_smooth'], name='HR', fill='tozeroy', line=dict(color='#ef553b', width=2), hovertemplate="HR: %{y:.0f} BPM<extra></extra>"))
+        if 'heartrate_smooth' not in df_plot_resampled.columns:
+            st.info("Brak danych tętna (HR)")
+        else:
+            fig_h.add_trace(go.Scatter(x=df_plot_resampled['time_min'], y=df_plot_resampled['heartrate_smooth'], name='HR', fill='tozeroy', line=dict(color='#ef553b', width=2), hovertemplate="HR: %{y:.0f} BPM<extra></extra>"))
         # Convert time_min to hh:mm:ss format for x-axis
         time_vals_h = df_plot_resampled['time_min'].values if hasattr(df_plot_resampled['time_min'], 'values') else np.array(df_plot_resampled['time_min'])
         tick_vals_h = np.arange(0, time_vals_h.max() + tick_step, tick_step)
