@@ -265,7 +265,7 @@ def render_report_tab(
     st.markdown("---")
     st.subheader("📈 Wizualizacja Dryfu i Zmienności")
 
-    if "watts_smooth" in df_plot.columns:
+    if "watts_smooth" in df_plot_resampled.columns:
         fig_dec = go.Figure()
         fig_dec.add_trace(
             go.Scatter(
@@ -277,7 +277,7 @@ def render_report_tab(
             )
         )
 
-        if "heartrate_smooth" in df_plot.columns:
+        if "heartrate_smooth" in df_plot_resampled.columns:
             fig_dec.add_trace(
                 go.Scatter(
                     x=df_plot_resampled["time_min"],
@@ -288,7 +288,7 @@ def render_report_tab(
                     hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
                 )
             )
-        if "smo2_smooth" in df_plot.columns:
+        if "smo2_smooth" in df_plot_resampled.columns:
             fig_dec.add_trace(
                 go.Scatter(
                     x=df_plot_resampled["time_min"],
@@ -383,8 +383,8 @@ def render_report_tab(
         st.subheader("SmO2")
         col_smo2 = (
             "smo2_smooth_ultra"
-            if "smo2_smooth_ultra" in df_plot.columns
-            else ("smo2_smooth" if "smo2_smooth" in df_plot.columns else None)
+            if "smo2_smooth_ultra" in df_plot_resampled.columns
+            else ("smo2_smooth" if "smo2_smooth" in df_plot_resampled.columns else None)
         )
 
         if col_smo2:
@@ -438,26 +438,29 @@ def render_report_tab(
     # PRAWA KOLUMNA: TĘTNO (HR)
     with c2:
         st.subheader("Tętno")
-        fig_h = go.Figure()
-        fig_h.add_trace(
-            go.Scatter(
-                x=df_plot_resampled["time_min"],
-                y=df_plot_resampled["heartrate_smooth"],
-                name="HR",
-                fill="tozeroy",
-                line=dict(color="#ef553b", width=2),
-                hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+        if "heartrate_smooth" in df_plot_resampled.columns:
+            fig_h = go.Figure()
+            fig_h.add_trace(
+                go.Scatter(
+                    x=df_plot_resampled["time_min"],
+                    y=df_plot_resampled["heartrate_smooth"],
+                    name="HR",
+                    fill="tozeroy",
+                    line=dict(color="#ef553b", width=2),
+                    hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+                )
             )
-        )
-        fig_h.update_layout(
-            template="plotly_dark",
-            title="Odpowiedź Sercowa (HR)",
-            hovermode="x unified",
-            yaxis=dict(title="HR [bpm]"),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=400,
-        )
-        st.plotly_chart(fig_h, use_container_width=True)
+            fig_h.update_layout(
+                template="plotly_dark",
+                title="Odpowiedź Sercowa (HR)",
+                hovermode="x unified",
+                yaxis=dict(title="HR [bpm]"),
+                margin=dict(l=10, r=10, t=40, b=10),
+                height=400,
+            )
+            st.plotly_chart(fig_h, use_container_width=True)
+        else:
+            st.info("Brak danych tętna (HR)")
 
         st.info("""
         **💡 Reakcja Sercowo-Naczyniowa (HR) - Globalny System:**
