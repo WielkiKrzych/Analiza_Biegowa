@@ -101,9 +101,9 @@ uploaded_file, params = layout.render_sidebar()
 
 # Parameters shorthand - RUNNING only
 runner_weight = params.get("runner_weight", 75.0)
-threshold_pace_input = params.get("threshold_pace", 300)
-lthr_input = params.get("lthr", 170)
-max_hr_input = params.get("max_hr", 185)
+threshold_pace_input = params.get("threshold_pace", 233)
+lthr_input = params.get("lthr", 166)
+max_hr_input = params.get("max_hr", 184)
 vt1_vent = params.get("vt1_vent", 0)
 vt2_vent = params.get("vt2_vent", 0)
 runner_age = params.get("runner_age", 30)

@@ -44,16 +44,16 @@ class AppLayout:
         
         with st.sidebar.expander("🏃 Parametry Progowe", expanded=True):
             params['threshold_pace'] = st.number_input(
-                "Tempo Progowe [s/km]", min_value=120, max_value=600, value=230,
-                help="Np. 3:50 min/km = 230s",
+                "Tempo Progowe [s/km]", min_value=120, max_value=600, value=233,
+                help="Np. 3:53 min/km = 233s",
                 key="threshold_pace", on_change=self.state.save_settings_callback
             )
             params['lthr'] = st.number_input(
-                "LTHR (Tętno Progowe) [bpm]", min_value=100, max_value=200, value=167,
+                "LTHR (Tętno Progowe) [bpm]", min_value=100, max_value=200, value=166,
                 key="lthr", on_change=self.state.save_settings_callback
             )
             params['max_hr'] = st.number_input(
-                "MaxHR [bpm]", min_value=120, max_value=220, value=180,
+                "MaxHR [bpm]", min_value=120, max_value=220, value=184,
                 key="max_hr", on_change=self.state.save_settings_callback
             )
         
