@@ -1,5 +1,13 @@
 ## 📋 Changelog
 
+### 2026-03-23 - Sidebar Defaults & Report Tab Fix
+
+**Naprawione:**
+- 🐛 **Report tab crash**: `KeyError: 'tymeventilation_smooth'` przy ładowaniu pliku CSV bez danych Tymewear — dodane guardy `if "tymeventilation_smooth" in df.columns` we wszystkich miejscach dostępu
+- ⚙️ **Domyślne parametry sidebar**: Tempo Progowe 233 s/km (3:53 /km), LTHR 166 bpm, MaxHR 184 bpm
+
+---
+
 ### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
 
 **Nowe moduły obliczeniowe:**

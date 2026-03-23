@@ -32,9 +32,9 @@ class StateManager:
             "height": 180,
             "age": 30,
             "gender_m": True,
-            "threshold_pace": 230,
-            "lthr": 167,
-            "max_hr": 180,
+            "threshold_pace": 233,
+            "lthr": 166,
+            "max_hr": 184,
             "vt1_v": 0.0,
             "vt2_v": 0.0,
         }
