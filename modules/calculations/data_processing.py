@@ -49,12 +49,13 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
     df_pd = df_pd.sort_values('time').reset_index(drop=True)
 
     # Derive pace from speed columns if pace not present
+    # Prefer speed_m_s (explicit m/s) over velocity_smooth (ambiguous units)
     if 'pace' not in df_pd.columns:
         speed_col = None
-        if 'velocity_smooth' in df_pd.columns:
-            speed_col = 'velocity_smooth'
-        elif 'speed_m_s' in df_pd.columns:
+        if 'speed_m_s' in df_pd.columns:
             speed_col = 'speed_m_s'
+        elif 'velocity_smooth' in df_pd.columns:
+            speed_col = 'velocity_smooth'
         if speed_col is not None:
             speed_vals = pd.to_numeric(df_pd[speed_col], errors='coerce')
             # speed in m/s → pace in sec/km: pace = 1000 / speed

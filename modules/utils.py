@@ -255,18 +255,40 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
     # 2. Normalization -> Standard Column Names
     df_pd = normalize_columns_pandas(df_pd)
 
-    if "pace" not in df_pd.columns and "velocity_smooth" in df_pd.columns:
-        df_pd["pace"] = np.where(
-            df_pd["velocity_smooth"] > 0,
-            1000.0 / df_pd["velocity_smooth"],
-            np.nan
-        )
+    # 2a. Normalize velocity_smooth units (km/h → m/s detection)
+    # FIT exports may have velocity_smooth in km/h (~13 km/h) while Intervals CSV uses m/s (~3.7)
+    if "velocity_smooth" in df_pd.columns:
+        vs_median = df_pd["velocity_smooth"].replace(0, np.nan).median()
+        if pd.notna(vs_median) and vs_median > 10:
+            # Likely km/h (running speed 10-20 km/h), convert to m/s
+            df_pd["velocity_smooth"] = df_pd["velocity_smooth"] / 3.6
 
-    # 2b. Running cadence doubling (Garmin exports half-steps as RPM)
-    if "pace" in df_pd.columns and "cadence" in df_pd.columns:
+    # Prefer speed_m_s (explicit m/s) over velocity_smooth for pace derivation
+    if "pace" not in df_pd.columns:
+        speed_source = None
+        if "speed_m_s" in df_pd.columns:
+            speed_source = "speed_m_s"
+        elif "velocity_smooth" in df_pd.columns:
+            speed_source = "velocity_smooth"
+        if speed_source is not None:
+            df_pd["pace"] = np.where(
+                df_pd[speed_source] > 0,
+                1000.0 / df_pd[speed_source],
+                np.nan
+            )
+
+    # 2b. Running cadence doubling (Intervals.icu exports half-cadence ~80 strides/min)
+    if "cadence" in df_pd.columns:
         cad_median = df_pd["cadence"].median()
         if 0 < cad_median < 120:
             df_pd["cadence"] = df_pd["cadence"] * 2
+
+    # 2b2. Normalize VerticalOscillation units (mm → cm)
+    # Intervals.icu exports in mm (~90mm), FIT uses cm (~9cm). Canonical: cm.
+    if "verticaloscillation" in df_pd.columns:
+        vo_median = df_pd["verticaloscillation"].replace(0, np.nan).median()
+        if pd.notna(vo_median) and vo_median > 20:
+            df_pd["verticaloscillation"] = df_pd["verticaloscillation"] / 10.0
 
     # 2c. GCT: prefer real stance_time from FIT, then other GCT columns, then estimate
     gct_columns = ["stance_time", "ground_contact", "gct", "groundcontacttime"]

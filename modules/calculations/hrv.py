@@ -330,20 +330,39 @@ def calculate_dynamic_dfa_v2(
             except ValueError:
                 pass
 
-            # Handle HH:MM:SS format (Excel time export artifact)
+            # Handle colon-separated RR intervals (Intervals.icu: "493:490")
+            # and HH:MM:SS format (Excel time export artifact)
             if ":" in val:
                 parts = val.split(":")
-                if len(parts) == 3:
+                if len(parts) == 2:
+                    # Intervals.icu format: "493:490" — two RR intervals
                     try:
-                        hours = float(parts[0])
-                        minutes = float(parts[1])
-                        seconds = float(parts[2])
-                        total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000
-                        # Validate: if result is > 10 seconds, it's likely an error
-                        if 300 <= total_ms <= 2000:
-                            return total_ms
+                        rr_vals = [float(p) for p in parts if p.strip()]
+                        mean_rr = np.mean(rr_vals)
+                        if 300 <= mean_rr <= 2000:
+                            return float(mean_rr)
                     except ValueError:
                         pass
+                elif len(parts) >= 3:
+                    # Could be HH:MM:SS or "455:465:451" (3+ RR intervals)
+                    try:
+                        rr_vals = [float(p) for p in parts if p.strip()]
+                        mean_rr = np.mean(rr_vals)
+                        if 300 <= mean_rr <= 2000:
+                            return float(mean_rr)
+                    except ValueError:
+                        pass
+                    # Fallback: try HH:MM:SS format
+                    if len(parts) == 3:
+                        try:
+                            hours = float(parts[0])
+                            minutes = float(parts[1])
+                            seconds = float(parts[2])
+                            total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000
+                            if 300 <= total_ms <= 2000:
+                                return total_ms
+                        except ValueError:
+                            pass
 
         return np.nan
 
