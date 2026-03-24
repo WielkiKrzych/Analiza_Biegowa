@@ -1,5 +1,31 @@
 ## 📋 Changelog
 
+### 2026-03-24 - CSV vs FIT Unit Normalization & Sidebar Defaults
+
+**Normalizacja jednostek Intervals.icu CSV vs Garmin FIT:**
+- 🏃 **velocity_smooth**: Auto-detekcja km/h (FIT) vs m/s (CSV) — median > 10 → km/h → konwersja /3.6
+- 📏 **VerticalOscillation**: Auto-detekcja mm (Intervals) vs cm (FIT) — median > 20 → mm → konwersja /10
+- ⏱️ **Kadencja**: Podwajanie half-cadence niezależne od istnienia kolumny `pace` (fix: Intervals eksportuje ~81 strides/min)
+- 🔄 **Priorytet speed_m_s**: Preferowany nad `velocity_smooth` (jawne m/s vs nieznane jednostki)
+- 💓 **HRV DFA**: Obsługa Intervals.icu colon-delimited RR ("493:490", "455:465:451") — wcześniej tylko HH:MM:SS
+
+**Porównanie tego samego treningu (SubT):**
+| Metryka | CSV (Intervals) | FIT (Garmin) | Po normalizacji |
+|---------|-----------------|--------------|-----------------|
+| Tempo | 4:29/km | 4:29/km | ✅ Identyczne |
+| Kadencja | 81→162 SPM | 169 SPM | ✅ Spójne |
+| VO | 93.7mm→9.4cm | 9.4cm | ✅ Identyczne |
+| Watts | 487W (Stryd) | Brak | ✅ Graceful fallback |
+| GCT | Estymowana | 240ms (sensor) | ✅ Oba obsługiwane |
+
+**Sidebar defaults:**
+- ⚙️ Tempo Progowe: 233 s/km (3:53/km), LTHR: 166 bpm, MaxHR: 184 bpm
+
+**Naprawione:**
+- 🐛 Report tab crash `KeyError: 'tymeventilation_smooth'` przy CSV bez Tymewear
+
+---
+
 ### 2026-03-24 - Security & Code Quality Audit Fixes
 
 **Security Fixes (HIGH):**
@@ -45,7 +71,7 @@
 
 ---
 
-### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
+### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
 
 **Nowe moduły obliczeniowe:**
 - 🏃 **Running Effectiveness** (`running_effectiveness.py`): RE = speed/specific_power (Coggan/Tredict), GCT Asymmetry Index (Seminati 2020, 3.7% metabolic cost/1% asymmetry), Leg Spring Stiffness kvert (Morin/Dalleau, Sports Med 2024)
