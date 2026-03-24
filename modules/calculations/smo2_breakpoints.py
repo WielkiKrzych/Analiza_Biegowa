@@ -263,7 +263,7 @@ def _two_phase_breakpoint_search(
                     best_rss = rss
                     best_bp1, best_bp2 = bp1, bp2
                     best_slopes = slopes
-            except:
+            except Exception:
                 continue
 
     if best_bp1 is None:
@@ -294,7 +294,7 @@ def _two_phase_breakpoint_search(
                     best_rss = rss
                     best_bp1, best_bp2 = bp1, bp2
                     best_slopes = slopes
-            except:
+            except Exception:
                 continue
 
     return best_bp1, best_bp2, best_slopes, best_rss

@@ -46,7 +46,7 @@ def render_hr_tab(df):
             if len(parts) == 3: return parts[0]*3600 + parts[1]*60 + parts[2]
             if len(parts) == 2: return parts[0]*60 + parts[1]
             if len(parts) == 1: return parts[0]
-        except:
+        except Exception:
             return None
         return None
     

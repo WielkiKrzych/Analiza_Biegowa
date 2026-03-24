@@ -627,7 +627,7 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
                     line=dict(color='white', dash='dash'),
                     hoverinfo='skip'
                 ))
-            except:
+            except Exception:
                 pass
     
     # Convert time to hh:mm:ss format for x-axis

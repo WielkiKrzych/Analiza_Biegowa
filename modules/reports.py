@@ -346,7 +346,7 @@ def export_all_charts_as_png(
                     zipf.writestr(exporter.filename, png_bytes)
             except Exception as e:
                 # Loguj błąd ale kontynuuj z innymi wykresami
-                print(f"Error exporting {exporter.filename}: {e}")
+                logger.error(f"Error exporting {exporter.filename}: {e}")
 
         # README
         readme = f"""RAPORT WYKRESÓW Z PEŁNĄ ANALIZĄ

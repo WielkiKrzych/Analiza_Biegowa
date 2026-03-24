@@ -100,7 +100,7 @@ def _check_source_file_exists(base_dir: str, source_file: str) -> bool:
                 if existing_source and existing_source == source_file:
                     return True
     except Exception as e:
-        print(f"Warning: Failed to check deduplication: {e}")
+        logger.warning(f"Failed to check deduplication: {e}")
         return False
 
     return False
@@ -168,13 +168,15 @@ def save_ramp_test_report(
     """
     # --- HARD TRIGGER CHECK ---
     if not st.session_state.get("report_generation_requested", False):
-        print("[GATING] Report generation NOT requested (Hard Trigger). Skipping save.")
+        logger.info("[GATING] Report generation NOT requested (Hard Trigger). Skipping save.")
         return {"gated": True, "reason": "Report generation NOT requested by user"}
 
     # --- DEDUPLICATION: Check if source_file already exists in index ---
     if source_file:
         if _check_source_file_exists(output_base_dir, source_file):
-            print(f"[Dedup] Source file '{source_file}' already exists in index. Skipping save.")
+            logger.info(
+                f"[Dedup] Source file '{source_file}' already exists in index. Skipping save."
+            )
             return {
                 "gated": True,
                 "reason": f"Source file '{source_file}' already saved",
@@ -297,7 +299,7 @@ def save_ramp_test_report(
                 data["vent_advanced"] = format_vent_metrics_for_report(vent_metrics)
 
             except Exception as e:
-                print(f"[Vent Advanced] Analysis failed: {e}")
+                logger.info(f"[Vent Advanced] Analysis failed: {e}")
 
         # 1.5 Run biomechanical occlusion analysis if torque and SmO2 available
         has_torque = "torque_nm" in ts_data or "torque" in df_ts.columns
@@ -355,12 +357,12 @@ def save_ramp_test_report(
                 if len(torque) > 0 and len(smo2) > 0:
                     occlusion = analyze_biomech_occlusion(torque, smo2, cadence)
                     data["biomech_occlusion"] = format_occlusion_for_report(occlusion)
-                    print(
+                    logger.info(
                         f"[Biomech] Occlusion Index: {occlusion.occlusion_index:.3f} ({occlusion.classification})"
                     )
 
             except Exception as e:
-                print(f"[Biomech Occlusion] Analysis failed: {e}")
+                logger.warning(f"[Biomech Occlusion] Analysis failed: {e}")
 
             # 1.4.2 Thermoregulation Analysis
             try:
@@ -397,11 +399,11 @@ def save_ramp_test_report(
 
                     thermo = analyze_thermoregulation(core_temp, time_seconds, hr, power, hsi)
                     data["thermo_analysis"] = format_thermo_for_report(thermo)
-                    print(
+                    logger.info(
                         f"[Thermal] Max Core: {thermo.max_core_temp:.1f}C, Delta/10min: {thermo.delta_per_10min:.2f}C"
                     )
             except Exception as e:
-                print(f"[Thermoregulation] Analysis failed: {e}")
+                logger.warning(f"[Thermoregulation] Analysis failed: {e}")
 
         # === CARDIAC DRIFT ANALYSIS ===
         try:
@@ -435,11 +437,11 @@ def save_ramp_test_report(
                 if "thermo_analysis" not in data:
                     data["thermo_analysis"] = {}
                 data["thermo_analysis"]["cardiac_drift"] = format_drift_for_report(drift_profile)
-                print(
+                logger.info(
                     f"[Cardiac Drift] EF: {drift_profile.ef_start:.2f} → {drift_profile.ef_end:.2f} ({drift_profile.delta_ef_pct:+.1f}%), Type: {drift_profile.drift_type}"
                 )
         except Exception as e:
-            print(f"[Cardiac Drift] Analysis failed: {e}")
+            logger.warning(f"[Cardiac Drift] Analysis failed: {e}")
 
     # 1.5 Calculate VO2max using same method as UI (pandas rolling)
     # This ensures consistency between UI KPI display and PDF report
@@ -484,12 +486,12 @@ def save_ramp_test_report(
                         "weight_kg": weight,
                     }
 
-                    print(
+                    logger.info(
                         f"[VO2max] Calculated: {vo2max_est:.1f} ml/kg/min from MMP5={mmp_5min:.1f}W (method: rolling_300s_mean_max)"
                     )
 
         except Exception as e:
-            print(f"[VO2max] Calculation failed: {e}")
+            logger.warning(f"[VO2max] Calculation failed: {e}")
 
     # 1.6 Build CANONICAL PHYSIOLOGY (Single Source of Truth)
     try:
@@ -541,7 +543,7 @@ def save_ramp_test_report(
             data["metabolic_strategy"] = formatted
 
     except Exception as e:
-        print(f"[Canonical Physio / Metabolic Engine] Analysis failed: {e}")
+        logger.info(f"[Canonical Physio / Metabolic Engine] Analysis failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -619,7 +621,7 @@ def save_ramp_test_report(
                         "interpretation": _get_limiter_interpretation(limiting_factor),
                     }
     except Exception as e:
-        print(f"[Limiter Analysis] Calculation failed: {e}")
+        logger.info(f"[Limiter Analysis] Calculation failed: {e}")
 
     # 2. Enrich metadata
     now = datetime.now()
@@ -680,7 +682,7 @@ def save_ramp_test_report(
         from modules.canonical_values import log_resolution
 
         for line in log_resolution(resolved):
-            print(f"[DataPolicy] {line}")
+            logger.info(f"[DataPolicy] {line}")
 
     # 4. Generate path
     year_str = test_date.strftime("%Y")
@@ -703,7 +705,7 @@ def save_ramp_test_report(
     try:
         with open(file_path, mode, encoding="utf-8") as f:
             json.dump(final_json, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
-        print(f"Ramp Test JSON saved: {session_id}")
+        logger.info(f"Ramp Test JSON saved: {session_id}")
     except FileExistsError:
         # Should be rare given UUID, but protects against collision/logic errors
         if not dev_mode:
@@ -735,7 +737,7 @@ def save_ramp_test_report(
             )
         except Exception as e:
             # PDF failure does NOT affect JSON or index
-            print(f"Warning: PDF generation failed for {session_id}: {e}")
+            logger.warning(f" PDF generation failed for {session_id}: {e}")
 
     # 8. Update Index (CSV)
     try:
@@ -746,9 +748,9 @@ def save_ramp_test_report(
             pdf_path,
             source_file,
         )
-        print(f"Ramp Test indexed: {session_id}")
+        logger.info(f"Ramp Test indexed: {session_id}")
     except Exception as e:
-        print(f"Warning: Failed to update report index: {e}")
+        logger.warning(f" Failed to update report index: {e}")
 
     return {
         "path": str(file_path.absolute()),
@@ -783,7 +785,7 @@ def _auto_generate_pdf(
     """
     # --- HARD TRIGGER CHECK ---
     if not st.session_state.get("report_generation_requested", False):
-        print("[PDF GATING] PDF generation NOT requested (Hard Trigger). Aborting.")
+        logger.info("[PDF GATING] PDF generation NOT requested (Hard Trigger). Aborting.")
         return None
 
     from .pdf import generate_ramp_pdf, PDFConfig
@@ -816,11 +818,11 @@ def _auto_generate_pdf(
 
         docx_path = pdf_path.with_suffix(".docx")
         build_ramp_docx(report_data, figure_paths, str(docx_path))
-        print(f"Ramp Test DOCX generated: {docx_path}")
+        logger.info(f"Ramp Test DOCX generated: {docx_path}")
     except Exception as e:
-        print(f"DOCX generation failed: {e}")
+        logger.error(f"DOCX generation failed: {e}")
 
-    print(f"Ramp Test PDF generated: {pdf_path}")
+    logger.info(f"Ramp Test PDF generated: {pdf_path}")
 
     # --- RESET HARD TRIGGER ---
     st.session_state["report_generation_requested"] = False
@@ -857,14 +859,14 @@ def _update_index(
 
     # Validation: Ensure all columns are present and no empty critical fields
     if len(row) != len(INDEX_COLUMNS):
-        print(
-            f"Error: Invalid record length for index. Expected {len(INDEX_COLUMNS)}, got {len(row)}."
+        logger.error(
+            f"Invalid record length for index. Expected {len(INDEX_COLUMNS)}, got {len(row)}."
         )
         return
 
     if not row["session_id"] or not row["json_path"]:
-        print(
-            f"Error: Missing critical data for index (session_id or json_path). Record not saved."
+        logger.error(
+            f"Missing critical data for index (session_id or json_path). Record not saved."
         )
         return
 
@@ -875,9 +877,9 @@ def _update_index(
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
-        print(f"Ramp Test indexed: {row['session_id']}")
+        logger.info(f"Ramp Test indexed: {row['session_id']}")
     except Exception as e:
-        print(f"Error: Failed to write to index at {index_path}: {e}")
+        logger.error(f" Failed to write to index at {index_path}: {e}")
 
 
 def update_index_pdf_path(base_dir: str, session_id: str, pdf_path: str):
@@ -897,7 +899,7 @@ def update_index_pdf_path(base_dir: str, session_id: str, pdf_path: str):
     index_path = Path(base_dir) / "index.csv"
 
     if not index_path.exists():
-        print(f"Warning: Index not found at {index_path}")
+        logger.warning(f" Index not found at {index_path}")
         return
 
     # Read all rows
@@ -913,7 +915,7 @@ def update_index_pdf_path(base_dir: str, session_id: str, pdf_path: str):
             if all(k in row for k in INDEX_COLUMNS):
                 rows.append(row)
             else:
-                print(f"Warning: Skipping malformed index row for session {row.get('session_id')}")
+                logger.warning(f" Skipping malformed index row for session {row.get('session_id')}")
 
     # Write back with updated row
     try:
@@ -921,9 +923,9 @@ def update_index_pdf_path(base_dir: str, session_id: str, pdf_path: str):
             writer = csv.DictWriter(f, fieldnames=INDEX_COLUMNS, quoting=csv.QUOTE_ALL)
             writer.writeheader()
             writer.writerows(rows)
-        print(f"Updated PDF path for session {session_id}")
+        logger.info(f"Updated PDF path for session {session_id}")
     except Exception as e:
-        print(f"Error: Failed to update index at {index_path}: {e}")
+        logger.error(f" Failed to update index at {index_path}: {e}")
 
 
 def generate_and_save_pdf(
@@ -956,7 +958,7 @@ def generate_and_save_pdf(
     json_path = Path(json_path)
 
     if not json_path.exists():
-        print(f"Error: JSON report not found: {json_path}")
+        logger.error(f" JSON report not found: {json_path}")
         return None
 
     # Load JSON report
@@ -989,16 +991,16 @@ def generate_and_save_pdf(
 
         docx_path = pdf_path.with_suffix(".docx")
         build_ramp_docx(report_data, figure_paths, str(docx_path))
-        print(f"DOCX generated: {docx_path}")
+        logger.info(f"DOCX generated: {docx_path}")
     except Exception as e:
-        print(f"DOCX failure: {e}")
+        logger.info(f"DOCX failure: {e}")
 
     # Update index with PDF path
     session_id = report_data.get("metadata", {}).get("session_id", "")
     if session_id:
         update_index_pdf_path(output_base_dir, session_id, str(pdf_path.absolute()))
 
-    print(f"PDF generated: {pdf_path}")
+    logger.info(f"PDF generated: {pdf_path}")
 
     return str(pdf_path.absolute())
 
@@ -1022,13 +1024,13 @@ def generate_ramp_test_pdf(
     """
     import csv
 
-    print(f"Generating PDF for session_id: {session_id}")
+    logger.debug(f"Generating PDF for session_id: {session_id}")
     if manual_overrides:
-        print(f"  With manual overrides: {list(manual_overrides.keys())}")
+        logger.debug(f"  With manual overrides: {list(manual_overrides.keys())}")
 
     index_path = Path(output_base_dir) / "index.csv"
     if not index_path.exists():
-        print(f"Error: Index not found at {index_path}")
+        logger.error(f" Index not found at {index_path}")
         return None
 
     json_path = None
@@ -1040,7 +1042,7 @@ def generate_ramp_test_pdf(
                 break
 
     if not json_path:
-        print(f"Error: JSON path not found in index for session {session_id}")
+        logger.error(f" JSON path not found in index for session {session_id}")
         return None
 
     # Re-use existing logic for generation - NOW with manual_overrides
@@ -1049,8 +1051,8 @@ def generate_ramp_test_pdf(
     )
 
     if pdf_path_str:
-        print(f"PDF saved to: {pdf_path_str}")
-        print(f"index.csv updated for session_id: {session_id}")
+        logger.info(f"PDF saved to: {pdf_path_str}")
+        logger.info(f"index.csv updated for session_id: {session_id}")
         return pdf_path_str
 
     return None

@@ -161,7 +161,7 @@ def calculate_rate_per_week(values: List[float], dates: List[datetime]) -> float
     # Linear regression
     try:
         slope, intercept = np.polyfit(days, values, 1)
-    except:
+    except Exception:
         return 0.0
     
     # Convert to % per week

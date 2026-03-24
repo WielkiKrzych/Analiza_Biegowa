@@ -1,14 +1,51 @@
 ## 📋 Changelog
 
-### 2026-03-23 - Sidebar Defaults & Report Tab Fix
+### 2026-03-24 - Security & Code Quality Audit Fixes
 
-**Naprawione:**
-- 🐛 **Report tab crash**: `KeyError: 'tymeventilation_smooth'` przy ładowaniu pliku CSV bez danych Tymewear — dodane guardy `if "tymeventilation_smooth" in df.columns` we wszystkich miejscach dostępu
-- ⚙️ **Domyślne parametry sidebar**: Tempo Progowe 233 s/km (3:53 /km), LTHR 166 bpm, MaxHR 184 bpm
+**Security Fixes (HIGH):**
+- 🔒 **XSS Prevention**: Fixed XSS vulnerability in `history_import_ui.py` by adding `html.escape()` for filename sanitization before embedding in HTML output
+- 🛡️ **Bare except clauses**: Replaced all 21 bare `except:` clauses with `except Exception:` to prevent catching `KeyboardInterrupt` and `SystemExit`
+- 🔧 **Error handling**: Added try/except around JSON I/O operations in `notes.py`
+- 🔧 **SQLite error handling**: Added try/except around all database operations in `session_store.py`
+- 🔒 **Credentials**: No hardcoded API keys, passwords, or secrets found — app properly uses `python-dotenv` for environment variables
+
+**Code Quality Fixes (HIGH/MEDIUM):**
+- 📝 **Logging migration**: Replaced 91 `print()` statements with proper `logging` across 8 production files:
+  - `modules/reporting/persistence.py` (41 prints → logger calls)
+  - `modules/reporting/pdf/summary_pdf.py` (4 prints → logger.warning)
+  - `modules/reporting/figures/__init__.py` (4 prints → logger calls)
+  - `modules/environment.py` (1 print → logger.warning)
+  - `modules/tte.py` (3 prints → logger.error/warning)
+  - `modules/calculations/pipeline.py` (1 print → logger.warning)
+  - `modules/reports.py` (1 print → logger.error)
+  - `modules/reporting/pdf/builder.py` (1 print → logger.info)
+- 🏗 **File size reduction**: Split `modules/reporting/pdf/layout.py` (4212 lines) into modular components:
+  - `layout_executive.py` (facade, 75 lines)
+  - `layout_executive_summary.py` (276 lines)
+  - `layout_executive_verdict.py` (226 lines)
+  - `layout_formatters.py` (280 lines)
+  - `layout_tables.py` (140 lines)
+  - `layout_title.py` (280 lines)
+- 🔧 **Function refactoring**: Extracted helper functions from large monolithic functions:
+  - `render_vent_tab` in `vent.py` → helper functions for VE/BR/TV sections
+  - `detect_vt_cpet` in `ventilatory.py` → preprocessing and VT1/VT2 detection helpers
+- 🧹 **Dead code removal**: Removed debug artifacts (`importlib.reload` from hrv.py)
+
+**Security Audit Summary:**
+| Category | Status |
+|----------|--------|
+| Hardcoded credentials | ✅ PASS |
+| SQL injection | ✅ PASS (parameterized queries) |
+| Code injection (eval/exec) | ✅ PASS |
+| Path traversal | ✅ PASS |
+| Unsafe deserialization | ✅ PASS |
+| XSS (now fixed) | ✅ FIXED |
+
+**Testy:** 73/73 ✅
 
 ---
 
-### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
+### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
 
 **Nowe moduły obliczeniowe:**
 - 🏃 **Running Effectiveness** (`running_effectiveness.py`): RE = speed/specific_power (Coggan/Tredict), GCT Asymmetry Index (Seminati 2020, 3.7% metabolic cost/1% asymmetry), Leg Spring Stiffness kvert (Morin/Dalleau, Sports Med 2024)

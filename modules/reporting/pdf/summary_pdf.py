@@ -5,6 +5,7 @@ Generates a multi-page PDF from the Summary tab with each chart and values on se
 """
 
 import io
+import logging
 from typing import Dict, Any, Optional
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -20,6 +21,8 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # Import existing PDF styles with Polish font support
 from .styles import (
@@ -468,7 +471,7 @@ def _create_training_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
 
         return buf.getvalue()
     except Exception as e:
-        print(f"Error creating training chart: {e}")
+        logger.warning(f"Error creating training chart: {e}")
         return None
 
 
@@ -506,7 +509,7 @@ def _create_ve_br_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
 
         return buf.getvalue()
     except Exception as e:
-        print(f"Error creating VE/BR chart: {e}")
+        logger.warning(f"Error creating VE/BR chart: {e}")
         return None
 
 
@@ -544,7 +547,7 @@ def _create_smo2_thb_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
 
         return buf.getvalue()
     except Exception as e:
-        print(f"Error creating SmO2/THb chart: {e}")
+        logger.warning(f"Error creating SmO2/THb chart: {e}")
         return None
 
 
@@ -599,5 +602,5 @@ def _create_vo2max_chart_matplotlib(
 
         return buf.getvalue()
     except Exception as e:
-        print(f"Error creating VO2max chart: {e}")
+        logger.warning(f"Error creating VO2max chart: {e}")
         return None

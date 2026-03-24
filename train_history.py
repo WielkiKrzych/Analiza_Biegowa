@@ -115,7 +115,7 @@ def load_data(filepath: Path) -> pd.DataFrame:
             # CSV/TXT
             try:
                 df = pd.read_csv(filepath, low_memory=False)
-            except:
+            except Exception:
                 df = pd.read_csv(filepath, sep=';', low_memory=False)
         
         # Czyszczenie
@@ -198,7 +198,7 @@ def update_history(hr_base, hr_thresh, filename: str):
         try:
             with open(HISTORY_FILE, 'r') as f:
                 history = json.load(f)
-        except:
+        except Exception:
             pass
     
     entry = {
