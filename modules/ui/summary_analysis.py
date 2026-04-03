@@ -65,7 +65,7 @@ def _render_durability_section(df_plot):
         "moderate": "#F39C12",
         "poor": "#E74C3C",
     }
-    dec_color = dec_colors.get(decoupling.get("classification", ""), "#808080")
+    dec_colors.get(decoupling.get("classification", ""), "#808080")
 
     c1.metric(
         "Pa:HR Decoupling",

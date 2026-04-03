@@ -4,13 +4,6 @@ Ventilatory Threshold Detection (VT1/VT2).
 This module re-exports all functions from the split submodules for backward compatibility.
 """
 
-from .ventilatory_step import (
-    calculate_slope,
-    detect_vt1_peaks_heuristic,
-    detect_vt_from_steps,
-    detect_vt_transition_zone,
-    run_sensitivity_analysis,
-)
 from .ventilatory_cpet import (
     _aggregate_steps,
     _calculate_segment_slope,
@@ -21,6 +14,13 @@ from .ventilatory_cpet import (
     _run_ve_only_mode,
     detect_vt_cpet,
     detect_vt_vslope_savgol,
+)
+from .ventilatory_step import (
+    calculate_slope,
+    detect_vt1_peaks_heuristic,
+    detect_vt_from_steps,
+    detect_vt_transition_zone,
+    run_sensitivity_analysis,
 )
 
 __all__ = [

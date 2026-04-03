@@ -190,7 +190,7 @@ def _add_power_zones_section(doc: Document, df_plot: pd.DataFrame, cp_input: flo
     table.rows[0].cells[1].text = "Zakres"
     table.rows[0].cells[2].text = "Czas"
 
-    for i, (label, low, high) in enumerate(zip(labels, bins[:-1], bins[1:])):
+    for i, (label, low, high) in enumerate(zip(labels, bins[:-1], bins[1:], strict=False)):
         count = len(dfz[dfz["Zone"] == label])
         time_min = count / 60
 

@@ -6,6 +6,7 @@ Automatically detects and classifies training intervals:
 - Classification of interval types (Sprint, VO2max, Threshold, Tempo, Endurance)
 - Quality scoring (target vs actual)
 """
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
@@ -17,13 +18,14 @@ from scipy.ndimage import uniform_filter1d
 
 class IntervalType(Enum):
     """Classification of training interval types."""
-    SPRINT = "sprint"           # <30s, >150% CP
-    VO2MAX = "vo2max"           # 2-8min, 105-120% CP
-    THRESHOLD = "threshold"     # 8-20min, 90-105% CP
-    SWEETSPOT = "sweetspot"     # 10-30min, 83-90% CP
-    TEMPO = "tempo"             # 20-60min, 75-83% CP
-    ENDURANCE = "endurance"     # >20min, <75% CP
-    RECOVERY = "recovery"       # any duration, <55% CP
+
+    SPRINT = "sprint"  # <30s, >150% CP
+    VO2MAX = "vo2max"  # 2-8min, 105-120% CP
+    THRESHOLD = "threshold"  # 8-20min, 90-105% CP
+    SWEETSPOT = "sweetspot"  # 10-30min, 83-90% CP
+    TEMPO = "tempo"  # 20-60min, 75-83% CP
+    ENDURANCE = "endurance"  # >20min, <75% CP
+    RECOVERY = "recovery"  # any duration, <55% CP
     UNKNOWN = "unknown"
 
     @property
@@ -37,7 +39,7 @@ class IntervalType(Enum):
             IntervalType.TEMPO: "#32CD32",
             IntervalType.ENDURANCE: "#00CED1",
             IntervalType.RECOVERY: "#808080",
-            IntervalType.UNKNOWN: "#CCCCCC"
+            IntervalType.UNKNOWN: "#CCCCCC",
         }.get(self, "#CCCCCC")
 
     @property
@@ -51,13 +53,14 @@ class IntervalType(Enum):
             IntervalType.TEMPO: "Tempo (trening bazowy)",
             IntervalType.ENDURANCE: "Wytrzymałość (Z2)",
             IntervalType.RECOVERY: "Recovery (regeneracja)",
-            IntervalType.UNKNOWN: "Nieznany"
+            IntervalType.UNKNOWN: "Nieznany",
         }.get(self, "Nieznany")
 
 
 @dataclass
 class DetectedInterval:
     """Represents a detected training interval."""
+
     start_sec: float
     end_sec: float
     interval_type: IntervalType
@@ -108,21 +111,21 @@ class IntervalDetector:
 
     def detect_intervals(self, df: pd.DataFrame) -> List[DetectedInterval]:
         """Detect all intervals in the workout.
-        
+
         Uses change-point detection on smoothed power data.
-        
+
         Args:
             df: DataFrame with 'watts' and 'time' columns
-            
+
         Returns:
             List of detected intervals
         """
-        if 'watts' not in df.columns:
+        if "watts" not in df.columns:
             return []
 
         # Get power data
-        watts = df['watts'].fillna(0).values
-        time = df['time'].values if 'time' in df.columns else np.arange(len(watts))
+        watts = df["watts"].fillna(0).values
+        time = df["time"].values if "time" in df.columns else np.arange(len(watts))
 
         if len(watts) < self.MIN_INTERVAL_DURATION * 2:
             return []
@@ -140,7 +143,9 @@ class IntervalDetector:
             end_idx = boundaries[i + 1]
 
             # Skip very short intervals
-            duration = time[end_idx] - time[start_idx] if len(time) > end_idx else end_idx - start_idx
+            duration = (
+                time[end_idx] - time[start_idx] if len(time) > end_idx else end_idx - start_idx
+            )
             if duration < self.MIN_INTERVAL_DURATION:
                 continue
 
@@ -152,8 +157,8 @@ class IntervalDetector:
             # Get HR if available
             avg_hr = None
             max_hr = None
-            if 'heartrate' in df.columns:
-                interval_hr = df['heartrate'].iloc[start_idx:end_idx]
+            if "heartrate" in df.columns:
+                interval_hr = df["heartrate"].iloc[start_idx:end_idx]
                 avg_hr = interval_hr.mean()
                 max_hr = interval_hr.max()
 
@@ -171,7 +176,7 @@ class IntervalDetector:
                 max_power=max_power,
                 avg_hr=avg_hr,
                 max_hr=max_hr,
-                normalized_power=np_val
+                normalized_power=np_val,
             )
             intervals.append(interval)
 
@@ -182,7 +187,7 @@ class IntervalDetector:
 
     def _detect_boundaries(self, watts_smooth: np.ndarray) -> List[int]:
         """Detect interval boundaries using derivative analysis.
-        
+
         Returns list of indices where intervals start/end.
         """
         boundaries = [0]  # Start
@@ -216,7 +221,7 @@ class IntervalDetector:
 
     def _classify_interval(self, avg_power: float, duration: float) -> IntervalType:
         """Classify interval based on power relative to CP and duration.
-        
+
         Args:
             avg_power: Average power in watts
             duration: Duration in seconds
@@ -270,10 +275,7 @@ class IntervalDetector:
         # 4th root
         return np.power(mean_powered, 0.25)
 
-    def _merge_similar_intervals(
-        self,
-        intervals: List[DetectedInterval]
-    ) -> List[DetectedInterval]:
+    def _merge_similar_intervals(self, intervals: List[DetectedInterval]) -> List[DetectedInterval]:
         """Merge adjacent intervals of the same type."""
         if len(intervals) < 2:
             return intervals
@@ -296,8 +298,10 @@ class IntervalDetector:
                     interval_type=last.interval_type,
                     avg_power=(last.avg_power + interval.avg_power) / 2,
                     max_power=max(last.max_power, interval.max_power),
-                    avg_hr=(last.avg_hr + interval.avg_hr) / 2 if last.avg_hr and interval.avg_hr else None,
-                    max_hr=max(last.max_hr or 0, interval.max_hr or 0) or None
+                    avg_hr=(last.avg_hr + interval.avg_hr) / 2
+                    if last.avg_hr and interval.avg_hr
+                    else None,
+                    max_hr=max(last.max_hr or 0, interval.max_hr or 0) or None,
                 )
             else:
                 merged.append(interval)
@@ -305,18 +309,15 @@ class IntervalDetector:
         return merged
 
     def score_interval_quality(
-        self,
-        interval: DetectedInterval,
-        target_power: float,
-        tolerance: float = 0.05
+        self, interval: DetectedInterval, target_power: float, tolerance: float = 0.05
     ) -> float:
         """Score interval execution quality (0-100).
-        
+
         Args:
             interval: The detected interval
             target_power: Target average power
             tolerance: Acceptable deviation (default 5%)
-            
+
         Returns:
             Quality score 0-100
         """
@@ -342,18 +343,15 @@ class IntervalDetector:
         else:
             return max(0, 10 - (deviation - 0.30) * 100)
 
-    def analyze_workout_structure(
-        self,
-        intervals: List[DetectedInterval]
-    ) -> dict:
+    def analyze_workout_structure(self, intervals: List[DetectedInterval]) -> dict:
         """Analyze overall workout structure.
-        
+
         Returns summary statistics about the detected intervals.
         """
         if not intervals:
             return {}
 
-        total_time = sum(i.duration_sec for i in intervals)
+        sum(i.duration_sec for i in intervals)
 
         # Time in each zone
         zone_times = {}
@@ -368,16 +366,22 @@ class IntervalDetector:
             zone_counts[zone] = zone_counts.get(zone, 0) + 1
 
         # Find work intervals (non-recovery, non-endurance)
-        work_types = [IntervalType.SPRINT, IntervalType.VO2MAX,
-                      IntervalType.THRESHOLD, IntervalType.SWEETSPOT]
+        work_types = [
+            IntervalType.SPRINT,
+            IntervalType.VO2MAX,
+            IntervalType.THRESHOLD,
+            IntervalType.SWEETSPOT,
+        ]
         work_intervals = [i for i in intervals if i.interval_type in work_types]
 
         return {
-            'total_intervals': len(intervals),
-            'work_intervals': len(work_intervals),
-            'total_work_time': sum(i.duration_sec for i in work_intervals),
-            'zone_times': zone_times,
-            'zone_counts': zone_counts,
-            'avg_work_power': np.mean([i.avg_power for i in work_intervals]) if work_intervals else 0,
-            'max_interval_power': max(i.max_power for i in intervals) if intervals else 0
+            "total_intervals": len(intervals),
+            "work_intervals": len(work_intervals),
+            "total_work_time": sum(i.duration_sec for i in work_intervals),
+            "zone_times": zone_times,
+            "zone_counts": zone_counts,
+            "avg_work_power": np.mean([i.avg_power for i in work_intervals])
+            if work_intervals
+            else 0,
+            "max_interval_power": max(i.max_power for i in intervals) if intervals else 0,
         }

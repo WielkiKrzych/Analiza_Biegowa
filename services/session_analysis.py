@@ -43,7 +43,11 @@ def calculate_header_metrics(df: pd.DataFrame, cp: float) -> Tuple[float, float,
     if "watts" not in df.columns or len(df) < Config.MIN_RECORDS_FOR_ROLLING:
         return 0.0, 0.0, 0.0
 
-    rolling_30s = df["watts"].rolling(window=Config.ROLLING_WINDOW_30S, min_periods=Config.ROLLING_WINDOW_30S).mean()
+    rolling_30s = (
+        df["watts"]
+        .rolling(window=Config.ROLLING_WINDOW_30S, min_periods=Config.ROLLING_WINDOW_30S)
+        .mean()
+    )
     np_val = np.power(np.mean(np.power(rolling_30s, 4)), 0.25)
 
     if pd.isna(np_val):
@@ -96,7 +100,7 @@ def calculate_extended_metrics(
         metrics["carbs_total"] = estimate_carbs_burned(df, vt1_watts, vt2_watts)
 
         # Power Duration Curve (running context - no VLamax estimation)
-        pdc = calculate_power_duration_curve(df)
+        calculate_power_duration_curve(df)
         # VLamax estimation removed - cycling model not applicable to running
         metrics["vlamax_est"] = 0  # Not applicable for running analysis
 

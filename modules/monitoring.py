@@ -100,7 +100,7 @@ class PerformanceMonitor:
             func_stats["max_ms"] = max(func_stats["max_ms"], record.duration_ms)
 
         # Calculate averages
-        for func_name, func_stats in stats.items():
+        for _func_name, func_stats in stats.items():
             if func_stats["count"] > 0:
                 func_stats["avg_ms"] = func_stats["total_ms"] / func_stats["count"]
 

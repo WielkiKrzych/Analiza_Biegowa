@@ -5,11 +5,12 @@ Contains the cached training timeline chart builder and the comprehensive
 metrics panel rendered below it (sections 1 and 1a of the summary tab).
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from typing import Optional
 
 from modules.config import Config
 
@@ -203,13 +204,13 @@ def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weigh
         "heartrate" if "heartrate" in df_plot.columns else "hr" if "hr" in df_plot.columns else None
     )
     avg_hr = df_plot[hr_col].mean() if hr_col else 0
-    min_hr = df_plot[hr_col].min() if hr_col else 0
+    df_plot[hr_col].min() if hr_col else 0
     max_hr = df_plot[hr_col].max() if hr_col else 0
 
     # SmO2
     avg_smo2 = df_plot["smo2"].mean() if "smo2" in df_plot.columns else 0
     min_smo2 = df_plot["smo2"].min() if "smo2" in df_plot.columns else 0
-    max_smo2 = df_plot["smo2"].max() if "smo2" in df_plot.columns else 0
+    df_plot["smo2"].max() if "smo2" in df_plot.columns else 0
 
     # VE
     avg_ve = df_plot["tymeventilation"].mean() if "tymeventilation" in df_plot.columns else 0

@@ -189,7 +189,7 @@ class SessionStore:
                            avg_watts, avg_hr, max_hr, work_kj, avg_cadence,
                            mmp_5s, mmp_1m, mmp_5m, mmp_20m, avg_rmssd,
                            alerts_count, extra_metrics
-                    FROM sessions 
+                    FROM sessions
                     WHERE date >= date('now', ?)
                     ORDER BY date DESC
                 """,
@@ -207,8 +207,8 @@ class SessionStore:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
                     """
-                    SELECT date, SUM(tss) as daily_tss 
-                    FROM sessions 
+                    SELECT date, SUM(tss) as daily_tss
+                    FROM sessions
                     WHERE date >= date('now', ?)
                     GROUP BY date
                     ORDER BY date ASC

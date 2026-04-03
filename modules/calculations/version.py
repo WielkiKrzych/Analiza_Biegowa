@@ -4,12 +4,14 @@ Ramp Test Methodology Versioning.
 Defines the current version of the analysis algorithm.
 Used by persistence and reporting modules to ensure traceability.
 """
+
 import json
 from pathlib import Path
 from typing import Any, Dict
 
 # GLOBAL CONSTANT - Single Source of Truth
 RAMP_METHOD_VERSION = "1.0.0"
+
 
 def get_methodology_info() -> Dict[str, Any]:
     """
@@ -32,7 +34,4 @@ def get_methodology_info() -> Dict[str, Any]:
         pass
 
     # Fallback
-    return {
-        "version": RAMP_METHOD_VERSION,
-        "description": "Version info not found"
-    }
+    return {"version": RAMP_METHOD_VERSION, "description": "Version info not found"}

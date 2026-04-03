@@ -21,26 +21,29 @@ import pandas as pd
 
 class ConflictSeverity(str, Enum):
     """Severity levels for signal conflicts."""
-    MINOR = "minor"       # Small disagreement, may be noise
-    MAJOR = "major"       # Significant disagreement, affects interpretation
-    CRITICAL = "critical" # Signals fundamentally disagree
+
+    MINOR = "minor"  # Small disagreement, may be noise
+    MAJOR = "major"  # Significant disagreement, affects interpretation
+    CRITICAL = "critical"  # Signals fundamentally disagree
 
 
 class ConflictType(str, Enum):
     """Types of signal conflicts."""
-    CARDIAC_DRIFT = "cardiac_drift"           # HR/Power ratio increases
-    PHASE_MISMATCH = "phase_mismatch"         # Timing lag between signals
-    DIRECTION_CONFLICT = "direction_conflict" # Signals moving opposite ways
-    DFA_ANOMALY = "dfa_anomaly"               # DFA-a1 unexpected values
-    DECOUPLING = "decoupling"                 # Loss of correlation
-    RANGE_MISMATCH = "range_mismatch"         # Different intensity ranges
+
+    CARDIAC_DRIFT = "cardiac_drift"  # HR/Power ratio increases
+    PHASE_MISMATCH = "phase_mismatch"  # Timing lag between signals
+    DIRECTION_CONFLICT = "direction_conflict"  # Signals moving opposite ways
+    DFA_ANOMALY = "dfa_anomaly"  # DFA-a1 unexpected values
+    DECOUPLING = "decoupling"  # Loss of correlation
+    RANGE_MISMATCH = "range_mismatch"  # Different intensity ranges
 
 
 @dataclass
 class SignalConflict:
     """A single conflict between two signals."""
-    signal_a: str                   # e.g., "HR"
-    signal_b: str                   # e.g., "Power"
+
+    signal_a: str  # e.g., "HR"
+    signal_b: str  # e.g., "Power"
     conflict_type: ConflictType
     severity: ConflictSeverity
     description: str
@@ -55,9 +58,10 @@ class SignalConflict:
 @dataclass
 class ConflictAnalysisResult:
     """Complete result of conflict analysis between signals."""
+
     has_conflicts: bool
     conflicts: List[SignalConflict] = field(default_factory=list)
-    agreement_score: float = 1.0    # 0-1, higher = more agreement
+    agreement_score: float = 1.0  # 0-1, higher = more agreement
     recommendations: List[str] = field(default_factory=list)
     signals_analyzed: List[str] = field(default_factory=list)
 
@@ -89,21 +93,20 @@ class ConflictAnalysisResult:
 # Conflict Detection Functions
 # ============================================================
 
+
 def detect_cardiac_drift(
-    hr_data: pd.Series,
-    power_data: pd.Series,
-    threshold_pct: float = 0.05
+    hr_data: pd.Series, power_data: pd.Series, threshold_pct: float = 0.05
 ) -> Optional[SignalConflict]:
     """
     Detect cardiac drift (HR increasing while power stable).
-    
+
     Cardiac drift typically indicates fatigue, dehydration, or heat stress.
-    
+
     Args:
         hr_data: Heart rate series
         power_data: Power series
         threshold_pct: Threshold for drift detection (default: 5%)
-    
+
     Returns:
         SignalConflict if drift detected, None otherwise
     """
@@ -136,8 +139,10 @@ def detect_cardiac_drift(
     drift_pct = (mean_second - mean_first) / mean_first
 
     if drift_pct > threshold_pct:
-        severity = ConflictSeverity.MINOR if drift_pct < 0.1 else (
-            ConflictSeverity.MAJOR if drift_pct < 0.15 else ConflictSeverity.CRITICAL
+        severity = (
+            ConflictSeverity.MINOR
+            if drift_pct < 0.1
+            else (ConflictSeverity.MAJOR if drift_pct < 0.15 else ConflictSeverity.CRITICAL)
         )
         return SignalConflict(
             signal_a="HR",
@@ -145,27 +150,25 @@ def detect_cardiac_drift(
             conflict_type=ConflictType.CARDIAC_DRIFT,
             severity=severity,
             description=f"Dryft tętna: +{drift_pct:.1%} (HR rośnie przy stałej mocy)",
-            details={"drift_pct": round(drift_pct * 100, 1)}
+            details={"drift_pct": round(drift_pct * 100, 1)},
         )
 
     return None
 
 
 def detect_smo2_power_conflict(
-    smo2_data: pd.Series,
-    power_data: pd.Series,
-    window: int = 60
+    smo2_data: pd.Series, power_data: pd.Series, window: int = 60
 ) -> Optional[SignalConflict]:
     """
     Detect conflict between SmO2 and Power trends.
-    
+
     Normally SmO2 should decrease with increasing power.
-    
+
     Args:
         smo2_data: SmO2 series (%)
         power_data: Power series
         window: Window for trend calculation
-    
+
     Returns:
         SignalConflict if conflict detected, None otherwise
     """
@@ -192,8 +195,10 @@ def detect_smo2_power_conflict(
     conflict_ratio = conflict_mask.sum() / len(conflict_mask)
 
     if conflict_ratio > 0.1:
-        severity = ConflictSeverity.MINOR if conflict_ratio < 0.2 else (
-            ConflictSeverity.MAJOR if conflict_ratio < 0.3 else ConflictSeverity.CRITICAL
+        severity = (
+            ConflictSeverity.MINOR
+            if conflict_ratio < 0.2
+            else (ConflictSeverity.MAJOR if conflict_ratio < 0.3 else ConflictSeverity.CRITICAL)
         )
         return SignalConflict(
             signal_a="SmO2",
@@ -202,7 +207,7 @@ def detect_smo2_power_conflict(
             severity=severity,
             description=f"SmO2 rośnie przy rosnącej mocy ({conflict_ratio:.0%} czasu)",
             affected_zones=["VT1", "VT2"],
-            details={"conflict_ratio": round(conflict_ratio * 100, 1)}
+            details={"conflict_ratio": round(conflict_ratio * 100, 1)},
         )
 
     return None
@@ -211,19 +216,19 @@ def detect_smo2_power_conflict(
 def detect_dfa_anomaly(
     dfa_data: pd.Series,
     power_data: pd.Series,
-    high_power_threshold: float = 0.7  # % of max power
+    high_power_threshold: float = 0.7,  # % of max power
 ) -> Optional[SignalConflict]:
     """
     Detect DFA-a1 anomalies at high intensity.
-    
+
     At high intensity, DFA-a1 should be ~0.5-0.75 (uncorrelated).
     Values > 1.0 at high intensity suggest measurement issues.
-    
+
     Args:
         dfa_data: DFA Alpha-1 series
         power_data: Power series
         high_power_threshold: Threshold for "high power" (% of max)
-    
+
     Returns:
         SignalConflict if anomaly detected, None otherwise
     """
@@ -261,7 +266,7 @@ def detect_dfa_anomaly(
             severity=severity,
             description=f"DFA-a1 > 1.0 przy wysokiej intensywności ({anomaly_ratio:.0%})",
             affected_zones=["VT2"],
-            details={"anomaly_ratio": round(anomaly_ratio * 100, 1)}
+            details={"anomaly_ratio": round(anomaly_ratio * 100, 1)},
         )
 
     return None
@@ -272,18 +277,18 @@ def detect_decoupling(
     signal_b: pd.Series,
     signal_a_name: str,
     signal_b_name: str,
-    correlation_threshold: float = 0.5
+    correlation_threshold: float = 0.5,
 ) -> Optional[SignalConflict]:
     """
     Detect decoupling (loss of correlation) between two signals.
-    
+
     Args:
         signal_a: First signal
         signal_b: Second signal
         signal_a_name: Name of first signal
         signal_b_name: Name of second signal
         correlation_threshold: Minimum expected correlation
-    
+
     Returns:
         SignalConflict if decoupling detected, None otherwise
     """
@@ -312,8 +317,10 @@ def detect_decoupling(
 
     # Check for low correlation
     if abs(correlation) < correlation_threshold:
-        severity = ConflictSeverity.MINOR if abs(correlation) > 0.3 else (
-            ConflictSeverity.MAJOR if abs(correlation) > 0.1 else ConflictSeverity.CRITICAL
+        severity = (
+            ConflictSeverity.MINOR
+            if abs(correlation) > 0.3
+            else (ConflictSeverity.MAJOR if abs(correlation) > 0.1 else ConflictSeverity.CRITICAL)
         )
         return SignalConflict(
             signal_a=signal_a_name,
@@ -321,7 +328,7 @@ def detect_decoupling(
             conflict_type=ConflictType.DECOUPLING,
             severity=severity,
             description=f"Niska korelacja między {signal_a_name} i {signal_b_name} (r={correlation:.2f})",
-            details={"correlation": round(correlation, 2)}
+            details={"correlation": round(correlation, 2)},
         )
 
     return None
@@ -331,20 +338,21 @@ def detect_decoupling(
 # Main Conflict Detection Function
 # ============================================================
 
+
 def detect_signal_conflicts(
     df: pd.DataFrame,
-    hr_column: str = 'heartrate',
-    power_column: str = 'watts',
-    smo2_column: str = 'smo2',
-    dfa_column: str = 'alpha1',
-    time_column: str = 'time'
+    hr_column: str = "heartrate",
+    power_column: str = "watts",
+    smo2_column: str = "smo2",
+    dfa_column: str = "alpha1",
+    time_column: str = "time",
 ) -> ConflictAnalysisResult:
     """
     Perform complete conflict analysis between physiological signals.
-    
+
     Detects conflicts between HR, Power, SmO2, and DFA-a1.
     When signals disagree, this MUST be communicated clearly.
-    
+
     Args:
         df: DataFrame with signal columns
         hr_column: Column name for heart rate
@@ -352,7 +360,7 @@ def detect_signal_conflicts(
         smo2_column: Column name for SmO2
         dfa_column: Column name for DFA Alpha-1
         time_column: Column name for time
-    
+
     Returns:
         ConflictAnalysisResult with conflicts, agreement score, recommendations
     """
@@ -404,12 +412,12 @@ def detect_signal_conflicts(
 
     # Calculate agreement score
     n_signals = len(signals_analyzed)
-    n_possible_pairs = n_signals * (n_signals - 1) // 2 if n_signals > 1 else 1
+    n_signals * (n_signals - 1) // 2 if n_signals > 1 else 1
 
     conflict_weight = sum(
-        0.1 if c.severity == ConflictSeverity.MINOR else (
-            0.25 if c.severity == ConflictSeverity.MAJOR else 0.4
-        )
+        0.1
+        if c.severity == ConflictSeverity.MINOR
+        else (0.25 if c.severity == ConflictSeverity.MAJOR else 0.4)
         for c in conflicts
     )
 
@@ -420,21 +428,21 @@ def detect_signal_conflicts(
         conflicts=conflicts,
         agreement_score=round(agreement_score, 2),
         recommendations=recommendations,
-        signals_analyzed=signals_analyzed
+        signals_analyzed=signals_analyzed,
     )
 
 
 __all__ = [
     # Enums
-    'ConflictSeverity',
-    'ConflictType',
+    "ConflictSeverity",
+    "ConflictType",
     # Dataclasses
-    'SignalConflict',
-    'ConflictAnalysisResult',
+    "SignalConflict",
+    "ConflictAnalysisResult",
     # Functions
-    'detect_cardiac_drift',
-    'detect_smo2_power_conflict',
-    'detect_dfa_anomaly',
-    'detect_decoupling',
-    'detect_signal_conflicts',
+    "detect_cardiac_drift",
+    "detect_smo2_power_conflict",
+    "detect_dfa_anomaly",
+    "detect_decoupling",
+    "detect_signal_conflicts",
 ]

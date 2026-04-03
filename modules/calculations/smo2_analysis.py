@@ -19,9 +19,6 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from ._smo2_utils import logger
-
-
 # =============================================================================
 # DATA CLASSES
 # =============================================================================
@@ -125,7 +122,7 @@ def calculate_halftime_reoxygenation(
         return None
 
     # Get SmO2 at peak and minimum before peak
-    smo2_at_peak = smo2[peak_idx]
+    smo2[peak_idx]
     smo2_min_during_ramp = np.min(smo2[:peak_idx])
 
     # Look for recovery after peak
@@ -286,12 +283,6 @@ def _generate_interpretation(
         if coupling > -0.5:
             detail += "Niska korelacja z HR wskazuje na niezależność od układu centralnego. "
 
-        recommendations = [
-            "Trening Sweet Spot (2×20min) dla rozbudowy kapilar",
-            "Siłowy na rowerze (4×8min @ 50rpm) dla rekrutacji włókien",
-            "Objętość Z2 (3-4h) dla gęstości naczyń",
-        ]
-
     elif limiter_type == "central":
         base = "LIMIT CENTRALNY (RZUT SERCA)"
         detail = (
@@ -301,12 +292,6 @@ def _generate_interpretation(
             detail += f"Umiarkowany spadek SmO₂ ({abs(slope):.1f}%/100W) potwierdza wystarczającą kapilaryzację. "
         if halftime and halftime < 45:
             detail += f"Szybka reoksygenacja ({halftime:.0f}s) – mięśnie sprawnie odbierają tlen. "
-
-        recommendations = [
-            "Interwały VO₂max (4-6×4min) dla wzrostu rzutu serca",
-            "Tempo długie (60-90min) dla adaptacji sercowej",
-            "Budowa bazy Z2 (4-5h) dla objętości wyrzutowej",
-        ]
 
     else:  # metabolic
         base = "LIMIT METABOLICZNY (GLIKOLIZA)"
@@ -318,12 +303,6 @@ def _generate_interpretation(
             detail += (
                 f" Umiarkowana reoksygenacja ({halftime:.0f}s) potwierdza stres metaboliczny. "
             )
-
-        recommendations = [
-            "Długie jazdy Z2 (4-5h) na obniżenie VLaMax",
-            "Treningi na czczo dla optymalizacji FatMax",
-            "Tempo pod LT1 dla efektywności metabolicznej",
-        ]
 
     full_interpretation = f"{base}\n{detail}"
 

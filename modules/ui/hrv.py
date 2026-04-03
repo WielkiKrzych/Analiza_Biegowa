@@ -145,10 +145,14 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
         )
 
         # Convert time_min to hh:mm:ss format for x-axis
-        time_vals = df_dfa["time_min"].values if hasattr(df_dfa["time_min"], 'values') else np.array(df_dfa["time_min"])
+        time_vals = (
+            df_dfa["time_min"].values
+            if hasattr(df_dfa["time_min"], "values")
+            else np.array(df_dfa["time_min"])
+        )
         tick_step = 5  # every 5 minutes
         tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
-        tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+        tick_text = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals]
 
         fig_dfa.update_layout(
             template="plotly_dark",
@@ -195,9 +199,13 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                 )
             )
             # Convert time_min to hh:mm:ss format for x-axis
-            time_vals_rmssd = df_dfa["time_min"].values if hasattr(df_dfa["time_min"], 'values') else np.array(df_dfa["time_min"])
+            time_vals_rmssd = (
+                df_dfa["time_min"].values
+                if hasattr(df_dfa["time_min"], "values")
+                else np.array(df_dfa["time_min"])
+            )
             tick_vals_rmssd = np.arange(0, time_vals_rmssd.max() + tick_step, tick_step)
-            tick_text_rmssd = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals_rmssd]
+            tick_text_rmssd = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_rmssd]
 
             fig_rmssd.update_layout(
                 template="plotly_dark",
@@ -288,12 +296,12 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                 with c_p2:
                     st.info(f"""
                     **📊 Interpretacja Kliniczna:**
-                    
+
                     * **Kształt "Komety" / "Rakiety":** Fizjologiczna norma u sportowca. Długa oś (SD2) to ogólna zmienność, krótka oś (SD1) to nagłe zmiany (parasympatyka).
                     * **Kształt "Kulisty":** Wysoki stres, dominacja współczulna (Fight or Flight) lub... bardzo równe tempo (metronom).
                     * **SD1 ({sd1:.1f} ms):** Czysta aktywność nerwu błędnego (regeneracja). Im więcej, tym lepiej.
                     * **SD2 ({sd2:.1f} ms):** Długoterminowa zmienność (rytm dobowy + termoregulacja).
-                    
+
                     *Punkty daleko od głównej chmury to zazwyczaj ektopie (dodatkowe skurcze) lub błędy pomiaru.*
                     """)
             else:
@@ -326,7 +334,9 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
 
             # HRV Thresholds — detect HRVT1 and HRVT2
             if "hr" in df_dfa.columns or "watts" in df_dfa.columns:
-                intensity_col = "watts" if "watts" in df_dfa.columns and df_dfa["watts"].sum() > 0 else None
+                intensity_col = (
+                    "watts" if "watts" in df_dfa.columns and df_dfa["watts"].sum() > 0 else None
+                )
                 if intensity_col is None and "hr" in df_dfa.columns:
                     intensity_col = "hr"
 
@@ -354,7 +364,9 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                             "(Rogers et al. 2021, Frontiers in Physiology 2023)"
                         )
                     else:
-                        st.info("Nie udało się wyznaczyć progów HRV — zbyt mało danych lub brak gradientu intensywności.")
+                        st.info(
+                            "Nie udało się wyznaczyć progów HRV — zbyt mało danych lub brak gradientu intensywności."
+                        )
 
         st.markdown("---")
 
@@ -380,7 +392,7 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
             ---
 
             ### ⚠️ Uwagi Techniczne
-            Analiza DFA jest niezwykle czuła na artefakty. Nawet 1-2 "zgubione" uderzenia serca mogą drastycznie zmienić wynik. 
+            Analiza DFA jest niezwykle czuła na artefakty. Nawet 1-2 "zgubione" uderzenia serca mogą drastycznie zmienić wynik.
             *   **Wymagany sprzęt**: Pas piersiowy o wysokiej precyzji (np. Polar H10).
             *   **Stabilizacja**: Algorytm potrzebuje około 2 minut stabilnego wysiłku, aby poprawnie wyliczyć okno fraktalne.
             """)

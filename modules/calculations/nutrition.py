@@ -1,6 +1,7 @@
 """
 SRP: Moduł odpowiedzialny za obliczenia związane z żywieniem.
 """
+
 from typing import Any, Union
 
 import numpy as np
@@ -17,37 +18,39 @@ from .common import (
 )
 
 
-def estimate_carbs_burned(df_pl: Union[pd.DataFrame, Any], vt1_watts: float, vt2_watts: float) -> float:
+def estimate_carbs_burned(
+    df_pl: Union[pd.DataFrame, Any], vt1_watts: float, vt2_watts: float
+) -> float:
     """
     Estimate carbohydrate consumption based on power zones.
-    
+
     Assumption: 22% mechanical efficiency.
     Carb utilization varies by zone:
     - Below VT1: ~40% carbs
     - VT1 to VT2: ~70% carbs
     - Above VT2: ~100% carbs
-    
+
     Args:
         df_pl: DataFrame with 'watts' column
         vt1_watts: Ventilatory Threshold 1 power [W]
         vt2_watts: Ventilatory Threshold 2 power [W]
-    
+
     Returns:
         Total carbohydrates burned [g]
     """
     df = ensure_pandas(df_pl)
-    if 'watts' not in df.columns:
+    if "watts" not in df.columns:
         return 0.0
 
     # Energy per second (kcal/s)
     # Power (W = J/s). Efficiency ~22% -> Total Energy = Power / efficiency
-    energy_kcal_sec = (df['watts'] / EFFICIENCY_FACTOR) * KCAL_PER_JOULE
+    energy_kcal_sec = (df["watts"] / EFFICIENCY_FACTOR) * KCAL_PER_JOULE
 
     # Carb fraction by zone
     conditions = [
-        (df['watts'] < vt1_watts),
-        (df['watts'] >= vt1_watts) & (df['watts'] < vt2_watts),
-        (df['watts'] >= vt2_watts)
+        (df["watts"] < vt1_watts),
+        (df["watts"] >= vt1_watts) & (df["watts"] < vt2_watts),
+        (df["watts"] >= vt2_watts),
     ]
     choices = [CARB_FRACTION_BELOW_VT1, CARB_FRACTION_VT1_VT2, CARB_FRACTION_ABOVE_VT2]
     carb_fraction = np.select(conditions, choices, default=1.0)
@@ -62,6 +65,7 @@ def estimate_carbs_burned(df_pl: Union[pd.DataFrame, Any], vt1_watts: float, vt2
 # MULTI-FACTOR GLYCOGEN CONSUMPTION MODEL
 # =============================================================================
 
+
 def calculate_glycogen_consumption(
     power: float,
     cp: float,
@@ -69,11 +73,11 @@ def calculate_glycogen_consumption(
     vlamax: float = 0.5,
     occlusion_index: float = 0.15,
     smo2_slope: float = -0.02,
-    cadence: float = 90.0
+    cadence: float = 90.0,
 ) -> dict:
     """
     Calculate glycogen consumption rate with multi-factor adjustments.
-    
+
     Base model: CHO consumption scales with power relative to CP.
     Modifiers applied for:
     - Core temperature (hyperthermia increases CHO usage)
@@ -81,7 +85,7 @@ def calculate_glycogen_consumption(
     - Occlusion index (restricted perfusion = more anaerobic)
     - SmO2 slope (desaturation rate)
     - Cadence (low cadence = higher torque = more occlusion)
-    
+
     Args:
         power: Power output [W]
         cp: Critical Power [W]
@@ -90,7 +94,7 @@ def calculate_glycogen_consumption(
         occlusion_index: Occlusion index (0-1, higher = more occlusion)
         smo2_slope: SmO2 slope [%/Nm] (negative = desaturation)
         cadence: Pedaling cadence [RPM]
-        
+
     Returns:
         dict with CHO consumption [g/h] and breakdown
     """
@@ -119,7 +123,9 @@ def calculate_glycogen_consumption(
     temp_modifier = 1 + (temp_delta * 0.10)  # 10% per degree
     modifiers["temperature"] = temp_modifier
     if temp_delta > 1.0:
-        warnings.append(f"⚠️ Wysoka temperatura rdzenia ({core_temp:.1f}°C) zwiększa zużycie CHO o {(temp_modifier-1)*100:.0f}%")
+        warnings.append(
+            f"⚠️ Wysoka temperatura rdzenia ({core_temp:.1f}°C) zwiększa zużycie CHO o {(temp_modifier - 1) * 100:.0f}%"
+        )
 
     # 2. VLaMax modifier (higher VLaMax = more glycolytic capacity used)
     # Reference: VLaMax 0.5 = neutral, >0.6 = glycolytic, <0.4 = oxidative
@@ -131,7 +137,9 @@ def calculate_glycogen_consumption(
     occlusion_modifier = 1 + (occlusion_index * 0.8)  # up to +24% at high occlusion
     modifiers["occlusion"] = occlusion_modifier
     if occlusion_index > 0.25:
-        warnings.append(f"🔴 Wysoka okluzja mechaniczna (+{(occlusion_modifier-1)*100:.0f}% CHO)")
+        warnings.append(
+            f"🔴 Wysoka okluzja mechaniczna (+{(occlusion_modifier - 1) * 100:.0f}% CHO)"
+        )
 
     # 4. SmO2 slope modifier (steep desaturation = more anaerobic work)
     # Negative slope = desaturation per Nm
@@ -149,7 +157,9 @@ def calculate_glycogen_consumption(
     modifiers["cadence"] = cadence_modifier
 
     # === FINAL CALCULATION ===
-    total_modifier = temp_modifier * vlamax_modifier * occlusion_modifier * smo2_modifier * cadence_modifier
+    total_modifier = (
+        temp_modifier * vlamax_modifier * occlusion_modifier * smo2_modifier * cadence_modifier
+    )
     cho_final = cho_base * total_modifier
 
     return {
@@ -158,7 +168,7 @@ def calculate_glycogen_consumption(
         "total_modifier": round(total_modifier, 3),
         "intensity_pct": round(intensity_pct, 1),
         "breakdown": modifiers,
-        "warnings": warnings
+        "warnings": warnings,
     }
 
 
@@ -171,20 +181,20 @@ def compare_cadence_glycogen(
     vlamax: float = 0.5,
     occlusion_index_low: float = 0.35,  # High occlusion at low cadence
     occlusion_index_high: float = 0.12,  # Low occlusion at high cadence
-    smo2_slope: float = -0.02
+    smo2_slope: float = -0.02,
 ) -> dict:
     """
     Compare glycogen consumption at different cadences for same power.
-    
+
     Demonstrates metabolic cost of occlusion.
-    
+
     Args:
         power: Power output [W]
         cp: Critical Power [W]
         cadence_low: Low cadence [RPM]
         cadence_high: High cadence [RPM]
         Other params: See calculate_glycogen_consumption
-        
+
     Returns:
         dict with comparison results
     """
@@ -198,7 +208,7 @@ def compare_cadence_glycogen(
         vlamax=vlamax,
         occlusion_index=occlusion_index_low,
         smo2_slope=smo2_slope,
-        cadence=cadence_low
+        cadence=cadence_low,
     )
 
     # Calculate for high cadence (spinning)
@@ -209,12 +219,16 @@ def compare_cadence_glycogen(
         vlamax=vlamax,
         occlusion_index=occlusion_index_high,
         smo2_slope=smo2_slope,
-        cadence=cadence_high
+        cadence=cadence_high,
     )
 
     # Calculate delta
     delta_cho = result_low["cho_g_per_hour"] - result_high["cho_g_per_hour"]
-    delta_pct = (delta_cho / result_high["cho_g_per_hour"] * 100) if result_high["cho_g_per_hour"] > 0 else 0
+    delta_pct = (
+        (delta_cho / result_high["cho_g_per_hour"] * 100)
+        if result_high["cho_g_per_hour"] > 0
+        else 0
+    )
 
     # Occlusion cost
     torque_low = power / (2 * np.pi * (cadence_low / 60))
@@ -226,15 +240,15 @@ def compare_cadence_glycogen(
             "cadence": cadence_low,
             "torque": round(torque_low, 1),
             "cho_g_per_hour": result_low["cho_g_per_hour"],
-            "occlusion_index": occlusion_index_low
+            "occlusion_index": occlusion_index_low,
         },
         "high_cadence": {
             "cadence": cadence_high,
             "torque": round(torque_high, 1),
             "cho_g_per_hour": result_high["cho_g_per_hour"],
-            "occlusion_index": occlusion_index_high
+            "occlusion_index": occlusion_index_high,
         },
         "delta_cho_g_per_hour": round(delta_cho, 1),
         "delta_pct": round(delta_pct, 1),
-        "metabolic_cost_occlusion": f"+{delta_cho:.1f} g/h ({delta_pct:.1f}%) at {cadence_low:.0f} RPM vs {cadence_high:.0f} RPM"
+        "metabolic_cost_occlusion": f"+{delta_cho:.1f} g/h ({delta_pct:.1f}%) at {cadence_low:.0f} RPM vs {cadence_high:.0f} RPM",
     }

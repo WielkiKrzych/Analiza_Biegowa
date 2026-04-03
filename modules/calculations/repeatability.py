@@ -7,6 +7,7 @@ Key Metrics:
 - SEM (Standard Error of Measurement): Typical error range.
 - Reproducibility Classification: Excellent (<3%), Good (<6%), Moderate (<10%), Unstable (>10%).
 """
+
 from typing import Dict, List, Union
 
 import numpy as np
@@ -19,8 +20,9 @@ def calculate_cv(values: List[float]) -> float:
     mean_val = np.mean(values)
     if mean_val == 0:
         return 0.0
-    std_val = np.std(values, ddof=1) # Sample std deviation
+    std_val = np.std(values, ddof=1)  # Sample std deviation
     return (std_val / mean_val) * 100.0
+
 
 def calculate_sem(values: List[float]) -> float:
     """Calculate Standard Error of Measurement."""
@@ -28,6 +30,7 @@ def calculate_sem(values: List[float]) -> float:
         return 0.0
     std_val = np.std(values, ddof=1)
     return std_val / np.sqrt(len(values))
+
 
 def classify_reproducibility(cv: float) -> str:
     """Classify the stability of a metric based on CV."""
@@ -40,17 +43,18 @@ def classify_reproducibility(cv: float) -> str:
     else:
         return "Unstable"
 
+
 def calculate_repeatability_metrics(
-    sessions_metrics: List[Dict[str, float]]
+    sessions_metrics: List[Dict[str, float]],
 ) -> Dict[str, Dict[str, Union[float, str]]]:
     """
     Calculate repeatability stats for a list of session results.
-    
+
     Args:
         sessions_metrics: List of dicts, e.g. [{'vt1': 200}, {'vt1': 210}]
-        
+
     Returns:
-        Dict of stats per metric: 
+        Dict of stats per metric:
         {
             'vt1': {'mean': 205, 'std': 7.07, 'cv': 3.4, 'class': 'Good'},
             ...
@@ -63,7 +67,8 @@ def calculate_repeatability_metrics(
     aggregated = {}
     for session in sessions_metrics:
         for k, v in session.items():
-            if v is None: continue
+            if v is None:
+                continue
             if k not in aggregated:
                 aggregated[k] = []
             aggregated[k].append(float(v))
@@ -76,7 +81,7 @@ def calculate_repeatability_metrics(
                 "std": 0,
                 "cv": 0,
                 "sem": 0,
-                "class": "N/A (1 sample)"
+                "class": "N/A (1 sample)",
             }
             continue
 
@@ -90,22 +95,22 @@ def calculate_repeatability_metrics(
             "std": round(std_val, 2),
             "cv": round(cv, 2),
             "sem": round(sem, 2),
-            "class": classify_reproducibility(cv)
+            "class": classify_reproducibility(cv),
         }
 
     return results
 
+
 def compare_session_to_baseline(
-    current_metrics: Dict[str, float],
-    baseline_stats: Dict[str, Dict[str, float]]
+    current_metrics: Dict[str, float], baseline_stats: Dict[str, Dict[str, float]]
 ) -> Dict[str, Dict[str, any]]:
     """
     Compare a single session against a baseline (repeatability stats).
-    
+
     Args:
         current_metrics: Dict of current values {'vt1': 215}
         baseline_stats: Output from calculate_repeatability_metrics
-        
+
     Returns:
         Dict with comparison details per metric.
     """
@@ -116,8 +121,8 @@ def compare_session_to_baseline(
             continue
 
         stats = baseline_stats[metric]
-        baseline_mean = stats.get('mean', 0)
-        baseline_cv = stats.get('cv', 0)
+        baseline_mean = stats.get("mean", 0)
+        baseline_cv = stats.get("cv", 0)
 
         if baseline_mean == 0:
             pct_diff = 0
@@ -126,13 +131,15 @@ def compare_session_to_baseline(
 
         # Interpretation
         # If change is > 1.5-2x CV, it's likely significant
-        threshold_cv = max(baseline_cv, 1.0) # Min threshold 1%
+        threshold_cv = max(baseline_cv, 1.0)  # Min threshold 1%
 
         is_significant = abs(pct_diff) > (threshold_cv * 1.5)
 
         status = "Stable"
         if is_significant:
-            status = "Significant Change" if abs(pct_diff) > (threshold_cv * 2.0) else "Possible Change"
+            status = (
+                "Significant Change" if abs(pct_diff) > (threshold_cv * 2.0) else "Possible Change"
+            )
 
         comparison[metric] = {
             "current": current_val,
@@ -140,7 +147,7 @@ def compare_session_to_baseline(
             "pct_diff": round(pct_diff, 1),
             "is_significant": is_significant,
             "status": status,
-            "baseline_cv": baseline_cv
+            "baseline_cv": baseline_cv,
         }
 
     return comparison

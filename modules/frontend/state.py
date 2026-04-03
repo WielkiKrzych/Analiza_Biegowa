@@ -3,6 +3,7 @@ Frontend State Management.
 
 Centralized state manager to handle Session State with type safety.
 """
+
 import streamlit as st
 
 from modules.settings import SettingsManager
@@ -24,7 +25,7 @@ class StateManager:
             "vt2_v": "vt2_vent",
             "cp_in": "cp",
             "wp_in": "w_prime",
-            "crank": "crank_length"
+            "crank": "crank_length",
         }
 
     def init_session_state(self) -> None:
@@ -45,8 +46,8 @@ class StateManager:
             if key not in st.session_state:
                 st.session_state[key] = value
 
-        if 'report_generation_requested' not in st.session_state:
-            st.session_state['report_generation_requested'] = False
+        if "report_generation_requested" not in st.session_state:
+            st.session_state["report_generation_requested"] = False
 
     def save_settings_callback(self) -> None:
         """Callback to save current UI values to persistence."""
@@ -58,13 +59,13 @@ class StateManager:
 
     def cleanup_old_data(self) -> None:
         """Clean up old DataFrames from session state."""
-        keys_to_Check = ['_prev_df_plot', '_prev_df_resampled', '_prev_file_name', 'data_loaded']
+        keys_to_Check = ["_prev_df_plot", "_prev_df_resampled", "_prev_file_name", "data_loaded"]
         for key in keys_to_Check:
             if key in st.session_state:
                 del st.session_state[key]
 
     def set_data_loaded(self) -> None:
-        st.session_state['data_loaded'] = True
+        st.session_state["data_loaded"] = True
 
     def is_data_loaded(self) -> bool:
-        return st.session_state.get('data_loaded', False)
+        return st.session_state.get("data_loaded", False)

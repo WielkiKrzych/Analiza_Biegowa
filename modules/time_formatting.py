@@ -1,16 +1,17 @@
 """
 Utilities for formatting time values in charts.
 """
+
 import pandas as pd
 
 
 def format_time_hhmmss(seconds: float) -> str:
     """
     Format seconds as hh:mm:ss string.
-    
+
     Args:
         seconds: Time in seconds
-        
+
     Returns:
         Formatted string like "01:30:45"
     """
@@ -27,14 +28,14 @@ def format_time_hhmmss(seconds: float) -> str:
         return f"{minutes:02d}:{secs:02d}"
 
 
-def format_time_axis(df: pd.DataFrame, time_col: str = 'time_min') -> pd.Series:
+def format_time_axis(df: pd.DataFrame, time_col: str = "time_min") -> pd.Series:
     """
     Convert time column from minutes to formatted hh:mm:ss strings.
-    
+
     Args:
         df: DataFrame with time column
         time_col: Name of time column (in minutes)
-        
+
     Returns:
         Series with formatted time strings
     """
@@ -49,11 +50,11 @@ def format_time_axis(df: pd.DataFrame, time_col: str = 'time_min') -> pd.Series:
 def get_time_axis_config(time_values: pd.Series, is_minutes: bool = True) -> dict:
     """
     Get Plotly axis configuration for time formatting.
-    
+
     Args:
         time_values: Time values (in minutes if is_minutes=True)
         is_minutes: Whether time_values are in minutes
-        
+
     Returns:
         Dict with axis configuration
     """
@@ -71,21 +72,21 @@ def get_time_axis_config(time_values: pd.Series, is_minutes: bool = True) -> dic
         title = "Czas [mm:ss]"
 
     return {
-        'tickformat': tickformat,
-        'title': title,
-        'type': 'linear',
-        'tickmode': 'auto',
-        'nticks': 10
+        "tickformat": tickformat,
+        "title": title,
+        "type": "linear",
+        "tickmode": "auto",
+        "nticks": 10,
     }
 
 
 def pace_to_seconds(pace: float) -> str:
     """
     Convert pace in seconds per km to mm:ss format.
-    
+
     Args:
         pace: Pace in seconds per km
-        
+
     Returns:
         Formatted string like "4:30"
     """

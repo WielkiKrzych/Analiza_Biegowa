@@ -3,6 +3,7 @@ Drift Maps UI Module.
 
 Displays Pace-HR-SmO2 scatter plots and drift analysis at constant pace.
 """
+
 import json
 
 import pandas as pd
@@ -24,9 +25,10 @@ def _format_min_to_mmss(decimal_min: float) -> str:
     seconds = total_seconds % 60
     return f"{minutes:02d}:{seconds:02d}"
 
+
 def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
     """Render the Drift Maps tab in Performance section.
-    
+
     Args:
         df_plot: Session DataFrame with pace, hr, and optionally smo2 data
     """
@@ -34,14 +36,14 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
 
     st.markdown("""
     Analiza relacji między tempem, tętnem i saturacją mięśniową (SmO₂).
-    **Drift HR** wskazuje na zmęczenie sercowo-naczyniowe, 
+    **Drift HR** wskazuje na zmęczenie sercowo-naczyniowe,
     **spadek SmO₂** sugeruje narastający deficyt tlenowy.
     """)
 
     # Check data availability
-    has_hr = any(col in df_plot.columns for col in ['heartrate', 'hr', 'heart_rate', 'HeartRate'])
-    has_smo2 = any(col in df_plot.columns for col in ['smo2', 'SmO2', 'muscle_oxygen'])
-    has_pace = any(col in df_plot.columns for col in ['pace', 'pace_sec_per_km', 'tempo'])
+    has_hr = any(col in df_plot.columns for col in ["heartrate", "hr", "heart_rate", "HeartRate"])
+    has_smo2 = any(col in df_plot.columns for col in ["smo2", "SmO2", "muscle_oxygen"])
+    has_pace = any(col in df_plot.columns for col in ["pace", "pace_sec_per_km", "tempo"])
 
     if not has_hr:
         st.warning("Brak danych HR - nie można wygenerować wykresów.")
@@ -83,7 +85,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
 
     # Get pace column for manual input
     pace_col = None
-    for col in ['pace', 'pace_sec_per_km', 'tempo']:
+    for col in ["pace", "pace_sec_per_km", "tempo"]:
         if col in df_plot.columns:
             pace_col = col
             break
@@ -102,15 +104,11 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 max_value=900,
                 value=default_pace,
                 step=10,
-                key="drift_pace_target"
+                key="drift_pace_target",
             )
         with col_manual2:
             tolerance = st.slider(
-                "Tolerancja [%]",
-                min_value=5,
-                max_value=20,
-                value=10,
-                key="drift_tolerance"
+                "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance"
             )
 
         fig_drift, drift_metrics = trend_at_constant_pace(
@@ -126,7 +124,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
     else:
         # Segment selector
         segment_options = [
-            f"{i+1}. {(seg[2]/60.0):.2f} min/km ({_format_min_to_mmss((seg[1]-seg[0])/60)})"
+            f"{i + 1}. {(seg[2] / 60.0):.2f} min/km ({_format_min_to_mmss((seg[1] - seg[0]) / 60)})"
             for i, seg in enumerate(segments)
         ]
 
@@ -134,7 +132,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
             "Wybierz segment stałego tempa:",
             range(len(segments)),
             format_func=lambda x: segment_options[x],
-            key="segment_selector"
+            key="segment_selector",
         )
 
         selected_segment = segments[selected_idx]
@@ -143,11 +141,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
         col_opts1, col_opts2 = st.columns(2)
         with col_opts1:
             tolerance = st.slider(
-                "Tolerancja [%]",
-                min_value=5,
-                max_value=20,
-                value=10,
-                key="drift_tolerance_seg"
+                "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance_seg"
             )
 
         fig_drift, drift_metrics = trend_at_constant_pace(
@@ -177,7 +171,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 data=json.dumps(overall_metrics, indent=2),
                 file_name="drift_metrics.json",
                 mime="application/json",
-                key="download_drift_json"
+                key="download_drift_json",
             )
 
     # Interpretation
@@ -187,12 +181,12 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
         - **> 0.5 bpm/min**: Znaczący drift - pogarszająca się wydolność sercowo-naczyniowa
         - **0.2 - 0.5 bpm/min**: Umiarkowany drift - normalne zmęczenie
         - **< 0.2 bpm/min**: Minimalny drift - dobra kondycja aerobowa
-        
+
         ### SmO₂ Slope (%/min)
         - **< -0.3 %/min**: Postępujący deficyt tlenowy - przekroczenie progu
         - **-0.1 do -0.3 %/min**: Umiarkowany spadek - praca na granicy wydolności
         - **> -0.1 %/min**: Stabilna saturacja - praca w strefie tlenowej
-        
+
         ### Korelacja Tempo-HR
         - **r > 0.7**: Silna zależność - typowa odpowiedź fizjologiczna
         - **r 0.4-0.7**: Umiarkowana zależność
@@ -215,7 +209,7 @@ def _display_drift_metrics(metrics) -> None:
                 "HR Drift",
                 f"{hr_drift:.2f} bpm/min",
                 delta="znaczący" if hr_drift > 0.5 else "normalny",
-                delta_color=delta_color
+                delta_color=delta_color,
             )
         else:
             st.metric("HR Drift", "—")
@@ -228,24 +222,18 @@ def _display_drift_metrics(metrics) -> None:
                 "SmO₂ Slope",
                 f"{smo2_slope:.2f} %/min",
                 delta="spadek" if smo2_slope < -0.1 else "stabilny",
-                delta_color=delta_color
+                delta_color=delta_color,
             )
         else:
             st.metric("SmO₂ Slope", "—")
 
     with col3:
-        st.metric(
-            "Czas segmentu",
-            _format_min_to_mmss(metrics.segment_duration_min)
-        )
+        st.metric("Czas segmentu", _format_min_to_mmss(metrics.segment_duration_min))
 
     with col4:
         # Display pace instead of power
-        avg_pace_min = metrics.avg_pace / 60.0 if hasattr(metrics, 'avg_pace') else None
+        avg_pace_min = metrics.avg_pace / 60.0 if hasattr(metrics, "avg_pace") else None
         if avg_pace_min is not None:
-            st.metric(
-                "Śr. tempo",
-                f"{avg_pace_min:.2f} min/km"
-            )
+            st.metric("Śr. tempo", f"{avg_pace_min:.2f} min/km")
         else:
             st.metric("Śr. tempo", "—")

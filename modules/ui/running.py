@@ -79,36 +79,45 @@ def render_pace_chart(df: pd.DataFrame, threshold_pace: float):
 
     pace_data = df["pace"].clip(upper=PACE_CAP)
 
-    fig.add_trace(go.Scatter(
-        x=df.index, y=[PACE_CAP] * len(df),
-        mode='lines', line=dict(width=0),
-        showlegend=False, hoverinfo='skip',
-    ))
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=pace_data,
-        name='Tempo',
-        fill='tonexty',
-        fillcolor='rgba(52, 152, 219, 0.3)',
-        line=dict(color='#3498db', width=1.5),
-        hovertemplate="Tempo: %{customdata}<extra></extra>",
-        customdata=[format_pace(p) for p in pace_data],
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=[PACE_CAP] * len(df),
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=pace_data,
+            name="Tempo",
+            fill="tonexty",
+            fillcolor="rgba(52, 152, 219, 0.3)",
+            line=dict(color="#3498db", width=1.5),
+            hovertemplate="Tempo: %{customdata}<extra></extra>",
+            customdata=[format_pace(p) for p in pace_data],
+        )
+    )
 
     if "gap" in df.columns:
-        fig.add_trace(go.Scatter(
-            x=df.index,
-            y=df["gap"].clip(upper=PACE_CAP),
-            mode='lines',
-            name='GAP',
-            line=dict(color='#2ecc71', width=2, dash='dash')
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["gap"].clip(upper=PACE_CAP),
+                mode="lines",
+                name="GAP",
+                line=dict(color="#2ecc71", width=2, dash="dash"),
+            )
+        )
 
     fig.add_hline(
         y=threshold_pace,
         line_dash="dot",
         line_color="red",
-        annotation_text=f"Próg ({format_pace(threshold_pace)})"
+        annotation_text=f"Próg ({format_pace(threshold_pace)})",
     )
 
     pace_min_val = max(120, int(pace_data.min() // 30 * 30))
@@ -140,24 +149,15 @@ def render_pace_zones_bar(time_in_zones: Dict[str, int]):
 
     colors = ["#3498db", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c", "#9b59b6"]
 
-    fig = go.Figure(data=[
-        go.Bar(x=zones, y=times, marker_color=colors[:len(zones)])
-    ])
+    fig = go.Figure(data=[go.Bar(x=zones, y=times, marker_color=colors[: len(zones)])])
 
-    fig.update_layout(
-        title="Czas w strefach tempa",
-        yaxis_title="Czas (min)",
-        xaxis_title="Strefa"
-    )
+    fig.update_layout(title="Czas w strefach tempa", yaxis_title="Czas (min)", xaxis_title="Strefa")
 
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_running_metrics_cards(
-    avg_pace: float,
-    threshold_pace: float,
-    distance_km: float,
-    rss: float
+    avg_pace: float, threshold_pace: float, distance_km: float, rss: float
 ):
     """Render running metrics cards."""
     col1, col2, col3, col4 = st.columns(4)
@@ -166,7 +166,7 @@ def render_running_metrics_cards(
         st.metric(
             "Srednie tempo",
             format_pace_for_display(avg_pace),
-            help=f"Prog: {format_pace_for_display(threshold_pace)}"
+            help=f"Prog: {format_pace_for_display(threshold_pace)}",
         )
 
     with col2:
@@ -185,6 +185,7 @@ def render_running_metrics_cards(
 # MAIN TAB RENDERER
 # ===========================================================================
 
+
 def _format_duration(seconds: int) -> str:
     """Format seconds to human-readable duration."""
     if seconds < 60:
@@ -202,7 +203,7 @@ def _format_duration(seconds: int) -> str:
 def render_running_tab(df_plot, threshold_pace, runner_weight):
     """
     Main Running analysis tab — pace-based equivalent of render_power_tab.
-    
+
     Sections:
     1. Pace chart with D' balance
     2. Pace zones (time in zones)
@@ -213,8 +214,10 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     has_pace = "pace" in df_plot.columns
 
     if not has_pace:
-        st.warning("⚠️ Brak danych tempa (pace) w pliku. "
-                   "Zakładka Running wymaga kolumny `pace` lub `speed`.")
+        st.warning(
+            "⚠️ Brak danych tempa (pace) w pliku. "
+            "Zakładka Running wymaga kolumny `pace` lub `speed`."
+        )
         return
 
     # ==================== 1. PACE + D' BALANCE ====================
@@ -230,33 +233,42 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     pace_clipped = pace_smooth.clip(upper=PACE_CAP)
 
     # Invisible baseline for Garmin-style fill from slow pace downward
-    fig_pace.add_trace(go.Scatter(
-        x=x_data, y=[PACE_CAP] * len(x_data),
-        mode='lines', line=dict(width=0),
-        showlegend=False, hoverinfo='skip',
-    ))
-    fig_pace.add_trace(go.Scatter(
-        x=x_data,
-        y=pace_clipped,
-        name="Tempo",
-        fill="tonexty",
-        fillcolor="rgba(52, 152, 219, 0.3)",
-        line=dict(color="#3498db", width=1.5),
-        hovertemplate="Tempo: %{customdata}<extra></extra>",
-        customdata=[format_pace(p) for p in pace_clipped],
-    ))
+    fig_pace.add_trace(
+        go.Scatter(
+            x=x_data,
+            y=[PACE_CAP] * len(x_data),
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig_pace.add_trace(
+        go.Scatter(
+            x=x_data,
+            y=pace_clipped,
+            name="Tempo",
+            fill="tonexty",
+            fillcolor="rgba(52, 152, 219, 0.3)",
+            line=dict(color="#3498db", width=1.5),
+            hovertemplate="Tempo: %{customdata}<extra></extra>",
+            customdata=[format_pace(p) for p in pace_clipped],
+        )
+    )
 
     if "gap" in df_plot.columns:
         gap_smooth = df_plot["gap"].rolling(window=10, min_periods=1, center=True).mean()
         gap_clipped = gap_smooth.clip(upper=PACE_CAP)
-        fig_pace.add_trace(go.Scatter(
-            x=x_data,
-            y=gap_clipped,
-            name="GAP",
-            line=dict(color="#2ecc71", width=1.5, dash="dash"),
-            hovertemplate="GAP: %{customdata}<extra></extra>",
-            customdata=[format_pace(p) for p in gap_clipped],
-        ))
+        fig_pace.add_trace(
+            go.Scatter(
+                x=x_data,
+                y=gap_clipped,
+                name="GAP",
+                line=dict(color="#2ecc71", width=1.5, dash="dash"),
+                hovertemplate="GAP: %{customdata}<extra></extra>",
+                customdata=[format_pace(p) for p in gap_clipped],
+            )
+        )
 
     fig_pace.add_hline(
         y=threshold_pace,
@@ -273,8 +285,8 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     y_ticktext = [format_pace(v) for v in y_tickvals]
 
     # HH:MM:SS X-axis ticks
-    x_min_val = float(x_data.min()) if hasattr(x_data, 'min') else 0
-    x_max_val = float(x_data.max()) if hasattr(x_data, 'max') else 60
+    x_min_val = float(x_data.min()) if hasattr(x_data, "min") else 0
+    x_max_val = float(x_data.max()) if hasattr(x_data, "max") else 60
     x_tick_step = max(1, int((x_max_val - x_min_val) / 10))
     x_tickvals = list(range(int(x_min_val), int(x_max_val) + 1, x_tick_step))
     x_ticktext = []
@@ -311,7 +323,7 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     * **Niebieska linia (Tempo):** Aktualne tempo biegu (min/km). Im niżej na wykresie = szybciej.
     * **Zielona przerywana (GAP):** Grade-Adjusted Pace — tempo skorygowane o profil terenu.
     * **Czerwona linia (Próg):** Twoje tempo progowe.
-    
+
     **Jak to czytać?**
     * **Tempo < Próg (powyżej linii):** Biegasz poniżej progu — strefa tlenowa. Regeneracja D'.
     * **Tempo > Próg (poniżej linii):** Biegasz powyżej progu — spalasz D'. Im szybciej, tym szybciej się wyczerpiesz.
@@ -337,16 +349,18 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
 
         time_labels = [format_time_mmss(t) for t in times_min]
 
-        fig_z = go.Figure(data=[
-            go.Bar(
-                x=[t for t in times_min],
-                y=zones_list,
-                orientation="h",
-                text=time_labels,  # FIX: Show mm:ss format
-                textposition="auto",
-                marker_color=colors[:len(zones_list)],
-            )
-        ])
+        fig_z = go.Figure(
+            data=[
+                go.Bar(
+                    x=[t for t in times_min],
+                    y=zones_list,
+                    orientation="h",
+                    text=time_labels,  # FIX: Show mm:ss format
+                    textposition="auto",
+                    marker_color=colors[: len(zones_list)],
+                )
+            ]
+        )
 
         # FIX: Convert x-axis tick values to mm:ss labels
         x_max = max(times_min) if times_min else 10
@@ -368,14 +382,14 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
 
         st.info("""
         **💡 Interpretacja Stref Tempa:**
-        
+
         * **Z1 Recovery (>115% progu):** Regeneracja, rozgrzewka, schładzanie.
         * **Z2 Aerobic (105-115%):** Budowa bazy tlenowej. Fundament.
         * **Z3 Tempo (95-105%):** Strefa progowa. Efektywna, ale wymagająca.
         * **Z4 Threshold (88-95%):** Powyżej progu. Trening tolerancji na mleczan.
         * **Z5 Interval (75-88%):** Interwały VO2max.
         * **Z6 Repetition (<75%):** Sprinterskie powtórzenia. Maksymalna prędkość.
-        
+
         **Polaryzacja 80/20:** Dobrze zaprojektowany plan treningowy to ~80% Z1-Z2 i ~20% Z4-Z6.
         """)
     else:
@@ -407,10 +421,12 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     intensity_factor = threshold_pace / np_pace if np_pace > 0 else 0
 
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("Tempo Normalizowane", format_pace(np_pace),
-                  help="Tempo znormalizowane algorytmem 4-potęgowym (jak NP dla mocy)")
-    col_m2.metric("RSS", f"{rss:.0f}",
-                  help=f"Running Stress Score (IF: {intensity_factor:.2f})")
+    col_m1.metric(
+        "Tempo Normalizowane",
+        format_pace(np_pace),
+        help="Tempo znormalizowane algorytmem 4-potęgowym (jak NP dla mocy)",
+    )
+    col_m2.metric("RSS", f"{rss:.0f}", help=f"Running Stress Score (IF: {intensity_factor:.2f})")
     col_m3.metric("Średnie Tempo", format_pace(avg_pace))
     col_m4.metric("Dystans", f"{distance_km:.2f} km")
 
@@ -461,16 +477,18 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             pace_labels = [format_pace(p) for p in paces]
 
             fig_pdc = go.Figure()
-            fig_pdc.add_trace(go.Scatter(
-                x=durations_min,
-                y=paces,
-                mode="lines+markers",
-                name="Best Pace",
-                line=dict(color="#3498db", width=3),
-                marker=dict(size=8, color="#3498db", line=dict(width=1, color="white")),
-                hovertemplate="Czas: %{x:.0f} min<br>Tempo: %{customdata}<extra></extra>",
-                customdata=pace_labels,
-            ))
+            fig_pdc.add_trace(
+                go.Scatter(
+                    x=durations_min,
+                    y=paces,
+                    mode="lines+markers",
+                    name="Best Pace",
+                    line=dict(color="#3498db", width=3),
+                    marker=dict(size=8, color="#3498db", line=dict(width=1, color="white")),
+                    hovertemplate="Czas: %{x:.0f} min<br>Tempo: %{customdata}<extra></extra>",
+                    customdata=pace_labels,
+                )
+            )
 
             # Threshold line
             fig_pdc.add_hline(
@@ -542,7 +560,11 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             help="Jones 2024 — composite fatigue resistance metric",
         )
         col_d3.metric("Pace CV", f"{dur_idx['pace_cv_pct']:.1f}%")
-        onset_str = f"{onset.get('onset_time_sec', 0) // 60:.0f} min" if onset.get("onset_time_sec") else "brak"
+        onset_str = (
+            f"{onset.get('onset_time_sec', 0) // 60:.0f} min"
+            if onset.get("onset_time_sec")
+            else "brak"
+        )
         col_d4.metric("Onset Driftu", onset_str, help="Smyth 2025 — moment rozpoczęcia driftu")
 
         # EF trend chart
@@ -551,19 +573,26 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             if len(ef_s) > 60:
                 fig_ef = go.Figure()
                 t_min = np.arange(len(ef_s)) / 60.0
-                fig_ef.add_trace(go.Scatter(
-                    x=t_min, y=ef_s.values,
-                    name="EF (speed/HR)", line=dict(color="#3498db", width=2),
-                ))
+                fig_ef.add_trace(
+                    go.Scatter(
+                        x=t_min,
+                        y=ef_s.values,
+                        name="EF (speed/HR)",
+                        line=dict(color="#3498db", width=2),
+                    )
+                )
                 if onset.get("onset_time_sec"):
                     fig_ef.add_vline(
                         x=onset["onset_time_sec"] / 60,
-                        line_dash="dash", line_color="#E74C3C",
+                        line_dash="dash",
+                        line_color="#E74C3C",
                         annotation_text="Onset",
                     )
                 fig_ef.update_layout(
-                    template="plotly_dark", height=250,
-                    xaxis_title="Czas [min]", yaxis_title="Efficiency Factor",
+                    template="plotly_dark",
+                    height=250,
+                    xaxis_title="Czas [min]",
+                    yaxis_title="Efficiency Factor",
                     margin=dict(l=20, r=20, t=30, b=20),
                 )
                 st.plotly_chart(fig_ef, use_container_width=True)
@@ -581,7 +610,12 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             durability = 100.0
         col_d1, col_d2, col_d3 = st.columns(3)
         delta_color = "normal" if durability >= 97 else "inverse"
-        col_d1.metric("Durability", f"{durability:.1f}%", delta=f"{durability - 100:.1f}%", delta_color=delta_color)
+        col_d1.metric(
+            "Durability",
+            f"{durability:.1f}%",
+            delta=f"{durability - 100:.1f}%",
+            delta_color=delta_color,
+        )
         col_d2.metric("1. polowa", format_pace(avg_pace_first))
         col_d3.metric("2. polowa", format_pace(avg_pace_second))
     else:
@@ -596,28 +630,34 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         phenotype = classify_running_phenotype(pdc, runner_weight)
         emoji, name, description = get_phenotype_description(phenotype)
 
-        st.markdown(f"""
-        <div style="background: linear-gradient(90deg, rgba(52, 152, 219, 0.2), transparent); 
+        st.markdown(
+            f"""
+        <div style="background: linear-gradient(90deg, rgba(52, 152, 219, 0.2), transparent);
                     padding: 15px 20px; border-radius: 12px; margin-bottom: 15px;">
             <span style="font-size: 2em;">{emoji}</span>
             <span style="font-size: 1.3em; font-weight: bold; margin-left: 10px;">{name}</span>
             <br/>
             <span style="font-size: 1em; color: #c9d1d9;">{description}</span>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         # VO2max estimation from best ~6min pace (PDC 300-360s)
         best_pace_5min = pdc.get(300)
         if best_pace_5min:
             vo2max_est = estimate_vo2max_from_pace(best_pace_5min, runner_weight)
             if vo2max_est > 0:
-                st.metric("Est. VO2max", f"{vo2max_est:.1f} ml/kg/min",
-                         help="Szacowane na podstawie najlepszego tempa 5-minutowego (formuła Danielsa)")
+                st.metric(
+                    "Est. VO2max",
+                    f"{vo2max_est:.1f} ml/kg/min",
+                    help="Szacowane na podstawie najlepszego tempa 5-minutowego (formuła Danielsa)",
+                )
 
         with st.expander("📚 Jak interpretować fenotyp biegacza?"):
             st.markdown("""
             ### Typy biegaczy
-            
+
             | Fenotyp | Charakterystyka | Silne strony | Treningi kluczowe |
             |---------|----------------|--------------|-------------------|
             | ⚡ Sprinter | Szybki na 400m-1km, duży spadek na dłuższych | Sprint, 800m | Progi, tempo runs |
@@ -625,7 +665,7 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
             | 🏃‍♂️ Maratończyk | Małe spadki na długich dystansach | Ekonomia, wytrzymałość | Tempo długie, baza |
             | 🦶 Ultra-biegacz | Niesamowita wytrzymałość | Wytrwałość, psychika | Objętość, back-to-back |
             | 🔄 Wszechstronny | Zbalansowany profil | Adaptacja | Periodyzacja |
-            
+
             ### VO2max — poziomy
             | VO2max (ml/kg/min) | Mężczyźni | Kobiety |
             |---|---|---|

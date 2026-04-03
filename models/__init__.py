@@ -29,9 +29,11 @@ from modules.calculations.threshold_types import (
 # Calculation Result Dataclasses
 # ============================================================
 
+
 @dataclass
 class NormalizedPowerResult:
     """Result of Normalized Power calculation."""
+
     value: float
     rolling_window_sec: int
     samples_count: int
@@ -45,6 +47,7 @@ class NormalizedPowerResult:
 @dataclass
 class PulsePowerResult:
     """Result of Pulse Power (cardiac efficiency) calculation."""
+
     avg_pulse_power: float
     trend_drop_pct: float
     df_filtered: pd.DataFrame
@@ -60,14 +63,15 @@ class PulsePowerResult:
 @dataclass
 class DFAResult:
     """Result of DFA Alpha-1 (HRV) calculation.
-    
+
     ⚠️ DFA-a1 is HIGHLY SENSITIVE to artifacts in RR data.
-    
+
     Uncertainty conditions:
     1. Window < min_window_sec (default 120s) → uncertain
     2. Data quality < 0.9 (>10% artifacts) → uncertain
     3. Alpha1 outside [0.5, 1.5] at moderate intensity → uncertain
     """
+
     df_results: Optional[pd.DataFrame]
     mean_alpha1: Optional[float]
     alpha1_range: Tuple[float, float]  # (min, max)
@@ -91,9 +95,11 @@ class DFAResult:
     window_meets_minimum: bool = True
 
     # NEW: Artifact sensitivity warning
-    artifact_sensitivity_note: str = field(default_factory=lambda:
-        "⚠️ DFA-a1 jest BARDZO wrażliwy na artefakty. "
-        "Nawet 1-2% błędnych wartości RR może znacząco wpłynąć na wynik."
+    artifact_sensitivity_note: str = field(
+        default_factory=lambda: (
+            "⚠️ DFA-a1 jest BARDZO wrażliwy na artefakty. "
+            "Nawet 1-2% błędnych wartości RR może znacząco wpłynąć na wynik."
+        )
     )
 
     def get_interpretation(self) -> str:
@@ -112,6 +118,7 @@ class DFAResult:
 @dataclass
 class RecoveryScoreResult:
     """Result of W' recovery score calculation."""
+
     score: float
     w_pct: float  # W' percentage
     time_bonus: float
@@ -125,6 +132,7 @@ class RecoveryScoreResult:
 @dataclass
 class SessionRecord:
     """Session data record for storage."""
+
     filename: str
     timestamp: str
     duration_sec: int
@@ -140,6 +148,7 @@ class SessionRecord:
 @dataclass
 class AthleteProfile:
     """Athlete profile with physiological parameters."""
+
     weight_kg: float
     ftp: float
     max_hr: int
@@ -150,18 +159,17 @@ class AthleteProfile:
 
 __all__ = [
     # Threshold models
-    'TransitionZone',
-    'ThresholdResult',
-    'StepTestResult',
-    'HysteresisResult',
-    'SensitivityResult',
+    "TransitionZone",
+    "ThresholdResult",
+    "StepTestResult",
+    "HysteresisResult",
+    "SensitivityResult",
     # Result models
-    'NormalizedPowerResult',
-    'PulsePowerResult',
-    'DFAResult',
-    'RecoveryScoreResult',
+    "NormalizedPowerResult",
+    "PulsePowerResult",
+    "DFAResult",
+    "RecoveryScoreResult",
     # Session models
-    'SessionRecord',
-    'AthleteProfile',
+    "SessionRecord",
+    "AthleteProfile",
 ]
-

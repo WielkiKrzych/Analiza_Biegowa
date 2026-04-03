@@ -23,6 +23,7 @@ from .common import ensure_pandas
 @dataclass
 class HRZoneConfig:
     """Configuration for HR zone calculation."""
+
     max_hr: float
     resting_hr: float = 60.0
     lthr: Optional[float] = None  # Lactate Threshold HR (for Friel zones)
@@ -39,32 +40,32 @@ ZONES_HRMAX = {
 }
 
 ZONES_KARVONEN = {
-    "Z1 Recovery": (0.00, 0.30),   # 0-30% of HRR
-    "Z2 Aerobic": (0.30, 0.50),   # 30-50% of HRR
-    "Z3 Tempo": (0.50, 0.70),     # 50-70% of HRR
-    "Z4 Threshold": (0.70, 0.85), # 70-85% of HRR
-    "Z5 VO2max": (0.85, 0.95),    # 85-95% of HRR
-    "Z6 Anaerobic": (0.95, 1.10), # 95-100%+ of HRR
+    "Z1 Recovery": (0.00, 0.30),  # 0-30% of HRR
+    "Z2 Aerobic": (0.30, 0.50),  # 30-50% of HRR
+    "Z3 Tempo": (0.50, 0.70),  # 50-70% of HRR
+    "Z4 Threshold": (0.70, 0.85),  # 70-85% of HRR
+    "Z5 VO2max": (0.85, 0.95),  # 85-95% of HRR
+    "Z6 Anaerobic": (0.95, 1.10),  # 95-100%+ of HRR
 }
 
 ZONES_LTHR = {
     # Joe Friel's LTHR-based zones (Cyclist's Training Bible, adapted for running)
-    "Z1 Recovery": (0.00, 0.81),   # <81% LTHR
-    "Z2 Aerobic": (0.81, 0.89),    # 81-89% LTHR
-    "Z3 Tempo": (0.89, 0.94),      # 89-94% LTHR
+    "Z1 Recovery": (0.00, 0.81),  # <81% LTHR
+    "Z2 Aerobic": (0.81, 0.89),  # 81-89% LTHR
+    "Z3 Tempo": (0.89, 0.94),  # 89-94% LTHR
     "Z4 Threshold": (0.94, 1.00),  # 94-100% LTHR
-    "Z5 VO2max": (1.00, 1.05),     # 100-105% LTHR
+    "Z5 VO2max": (1.00, 1.05),  # 100-105% LTHR
     "Z6 Anaerobic": (1.05, 1.20),  # >105% LTHR
 }
 
 
 def calculate_hr_zones_hrmax(hr: float, max_hr: float) -> Dict[str, bool]:
     """Determine which zone a heart rate value falls into using %HRmax.
-    
+
     Args:
         hr: Heart rate in bpm
         max_hr: Maximum heart rate in bpm
-    
+
     Returns:
         Dict mapping zone names to boolean (True if HR in that zone)
     """
@@ -82,14 +83,14 @@ def calculate_hr_zones_hrmax(hr: float, max_hr: float) -> Dict[str, bool]:
 
 def calculate_hr_zones_karvonen(hr: float, max_hr: float, resting_hr: float) -> Dict[str, bool]:
     """Determine which zone a heart rate value falls into using Karvonen method.
-    
+
     Karvonen formula: Target HR = Resting HR + (%HRR × (Max HR - Resting HR))
-    
+
     Args:
         hr: Heart rate in bpm
         max_hr: Maximum heart rate in bpm
         resting_hr: Resting heart rate in bpm
-    
+
     Returns:
         Dict mapping zone names to boolean (True if HR in that zone)
     """
@@ -113,14 +114,14 @@ def calculate_hr_zones_karvonen(hr: float, max_hr: float, resting_hr: float) -> 
 
 def calculate_hr_zones_lthr(hr: float, lthr: float) -> Dict[str, bool]:
     """Determine which zone a heart rate value falls into using LTHR method.
-    
+
     Joe Friel's zones based on Lactate Threshold Heart Rate.
     Most accurate for trained athletes.
-    
+
     Args:
         hr: Heart rate in bpm
         lthr: Lactate Threshold Heart Rate in bpm
-    
+
     Returns:
         Dict mapping zone names to boolean (True if HR in that zone)
     """
@@ -138,12 +139,12 @@ def calculate_hr_zones_lthr(hr: float, lthr: float) -> Dict[str, bool]:
 
 def get_hr_zone(hr: float, config: HRZoneConfig, model: str = "auto") -> str:
     """Get the primary zone for a heart rate value.
-    
+
     Args:
         hr: Heart rate in bpm
         config: HRZoneConfig with max_hr, resting_hr, lthr
         model: "hrmax", "karvonen", "lthr", or "auto" (uses LTHR if available, else Karvonen)
-    
+
     Returns:
         Zone name string
     """
@@ -223,7 +224,7 @@ def calculate_time_in_hr_zones(
     df_pl: Union[pd.DataFrame, Any],
     config: HRZoneConfig,
     model: str = "auto",
-    hr_col: str = "heartrate"
+    hr_col: str = "heartrate",
 ) -> Dict[str, int]:
     """Calculate time spent in each HR zone using vectorized pd.cut.
 
@@ -264,13 +265,13 @@ def calculate_time_in_hr_zones(
 
 def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, tuple]:
     """Get HR boundaries for each zone in bpm.
-    
+
     Useful for displaying zone ranges in UI.
-    
+
     Args:
         config: HRZoneConfig with max_hr, resting_hr, lthr
         model: "hrmax", "karvonen", "lthr", or "auto"
-    
+
     Returns:
         Dict mapping zone names to (low_bpm, high_bpm) tuples
     """
@@ -287,43 +288,34 @@ def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, 
 
     if model == "hrmax":
         for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
-            boundaries[zone_name] = (
-                int(config.max_hr * low_pct),
-                int(config.max_hr * high_pct)
-            )
+            boundaries[zone_name] = (int(config.max_hr * low_pct), int(config.max_hr * high_pct))
     elif model == "karvonen":
         for zone_name, (low_pct, high_pct) in ZONES_KARVONEN.items():
             boundaries[zone_name] = (
                 int(config.resting_hr + hrr * low_pct),
-                int(config.resting_hr + hrr * high_pct)
+                int(config.resting_hr + hrr * high_pct),
             )
     elif model == "lthr" and config.lthr:
         for zone_name, (low_pct, high_pct) in ZONES_LTHR.items():
-            boundaries[zone_name] = (
-                int(config.lthr * low_pct),
-                int(config.lthr * high_pct)
-            )
+            boundaries[zone_name] = (int(config.lthr * low_pct), int(config.lthr * high_pct))
     else:
         # Fallback to hrmax
         for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
-            boundaries[zone_name] = (
-                int(config.max_hr * low_pct),
-                int(config.max_hr * high_pct)
-            )
+            boundaries[zone_name] = (int(config.max_hr * low_pct), int(config.max_hr * high_pct))
 
     return boundaries
 
 
 def estimate_lthr_from_threshold_pace(threshold_pace: float, max_hr: float) -> float:
     """Estimate LTHR from threshold pace using typical relationships.
-    
+
     LTHR is typically 90-95% of max HR for trained runners.
     This is a rough estimate - actual LTHR should be determined by testing.
-    
+
     Args:
         threshold_pace: Threshold pace in sec/km
         max_hr: Maximum heart rate in bpm
-    
+
     Returns:
         Estimated LTHR in bpm
     """

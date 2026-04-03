@@ -6,10 +6,13 @@ Usage:
     python init_db.py           # Initialize database if missing
     python init_db.py --reset   # Delete existing database and recreate
 """
-import sys
+
 import argparse
+import sys
+
 from modules.config import Config
 from modules.db.session_store import SessionStore
+
 
 def init_db(reset: bool = False):
     db_path = Config.DB_PATH
@@ -27,7 +30,7 @@ def init_db(reset: bool = False):
     # Initialize store (this triggers schema creation)
     print("Initializing SessionStore...")
     store = SessionStore()
-    
+
     # Verify
     if db_path.exists():
         tables = store.get_session_count()
@@ -37,9 +40,12 @@ def init_db(reset: bool = False):
         print("❌ Failed to create database file.")
         sys.exit(1)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Initialize Tri_Dashboard Database")
-    parser.add_argument("--reset", action="store_true", help="Delete existing database and recreate")
+    parser.add_argument(
+        "--reset", action="store_true", help="Delete existing database and recreate"
+    )
     args = parser.parse_args()
-    
+
     init_db(args.reset)

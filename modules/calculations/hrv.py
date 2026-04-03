@@ -14,6 +14,7 @@ from .common import ensure_pandas
 # FIX: Add logger to avoid NameError on lines 273, 276
 logger = logging.getLogger(__name__)
 
+
 @jit(nopython=True)
 def _calc_alpha1_numba(rr_values: np.ndarray) -> float:
     """True DFA Alpha-1 calculation for short-term fractal correlation (Rogers et al. methodology)."""
@@ -229,6 +230,7 @@ from collections import OrderedDict
 
 class LRUCache(OrderedDict):
     """LRU Cache with max size limit."""
+
     def __init__(self, maxsize: int = 10):
         super().__init__()
         self.maxsize = maxsize
@@ -240,7 +242,9 @@ class LRUCache(OrderedDict):
         if len(self) > self.maxsize:
             self.popitem(last=False)
 
+
 dfa_cache = LRUCache(maxsize=10)
+
 
 def _generate_cache_key(
     df_pl, window_sec: int, step_sec: int, min_samples_hrv: int, alpha1_clip_range: tuple
@@ -547,8 +551,12 @@ def detect_hrv_thresholds(
         time_stamps = np.cumsum(rr) / 1000.0  # ms -> seconds
 
     empty_result = {
-        "hrvt1_time_sec": None, "hrvt1_hr": None, "hrvt1_pace": None,
-        "hrvt2_time_sec": None, "hrvt2_hr": None, "hrvt2_pace": None,
+        "hrvt1_time_sec": None,
+        "hrvt1_hr": None,
+        "hrvt1_pace": None,
+        "hrvt2_time_sec": None,
+        "hrvt2_hr": None,
+        "hrvt2_pace": None,
         "alpha1_series": ddfa["alpha1_series"],
         "confidence": 0.0,
     }
@@ -565,7 +573,7 @@ def detect_hrv_thresholds(
         candidate_idx = None
         candidate_time = None
 
-        for i, (a1, beat_idx) in enumerate(zip(series, indices)):
+        for _i, (a1, beat_idx) in enumerate(zip(series, indices, strict=False)):
             if np.isnan(a1):
                 candidate_idx = None
                 continue

@@ -176,8 +176,8 @@ def map_ramp_json_to_pdf_data(
     thresholds = report_json.get("thresholds", {})
 
     # Debug helper for VE
-    vt1_data = thresholds.get("vt1", {})
-    vt2_data = thresholds.get("vt2", {})
+    thresholds.get("vt1", {})
+    thresholds.get("vt2", {})
 
     mapped_thresholds = {
         "vt1_watts": get_num("thresholds", "vt1", ["vt1", "midpoint_watts"]),
@@ -286,7 +286,7 @@ def map_ramp_json_to_pdf_data(
     }
 
     # 6. SmO2 Manual
-    smo2_manual = report_json.get("smo2_manual", {})
+    report_json.get("smo2_manual", {})
     mapped_smo2_manual = {
         "lt1_watts": get_num("smo2_manual", "lt1_watts", ["lt1_watts"]),
         "lt2_watts": get_num("smo2_manual", "lt2_watts", ["lt2_watts"]),
@@ -498,8 +498,8 @@ def build_ramp_pdf(
     confidence = pdf_data["confidence"]
 
     # Store metadata for footer
-    session_id = metadata.get("session_id", "")[:8]
-    method_version = metadata.get("method_version", "1.0.0")
+    metadata.get("session_id", "")[:8]
+    metadata.get("method_version", "1.0.0")
 
     def add_page_footer(canvas, doc):
         """Add footer, watermark, and page bookmark to each page."""
@@ -542,7 +542,7 @@ def build_ramp_pdf(
                 pass  # Silently skip if watermark fails
 
         # === FOOTER TEXT ===
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        datetime.now().strftime("%Y-%m-%d %H:%M")
         footer_text = f"Strona {page_num}"
 
         canvas.setFont(FONT_FAMILY, 8)

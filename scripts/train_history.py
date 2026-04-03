@@ -15,14 +15,15 @@ Integracja:
     - Zapisuje metryki do: training_history.db (dla SessionStore)
 """
 
-import os
 import argparse
-import time
 import json
-import pandas as pd
-import numpy as np
-from pathlib import Path
+import os
+import time
 from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 # --- KONFIGURACJA ---
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,7 +41,7 @@ except ImportError:
 
 # Import bazy danych sesji
 try:
-    from modules.db.session_store import SessionStore, SessionRecord
+    from modules.db.session_store import SessionRecord, SessionStore
 
     DB_AVAILABLE = True
 except ImportError:
@@ -110,7 +111,7 @@ def load_data(filepath: Path) -> pd.DataFrame:
 
                 if target_list is None:
                     max_len = 0
-                    for k, v in data.items():
+                    for _k, v in data.items():
                         if isinstance(v, list) and len(v) > max_len:
                             if len(v) > 0 and isinstance(v[0], dict):
                                 target_list = v
@@ -403,7 +404,7 @@ def train_loop():
     mx.savez(MODEL_FILE, **flat_params)
 
     total_time = time.time() - total_start
-    print(f"✅ GOTOWE!")
+    print("✅ GOTOWE!")
     print(f"   Przetworzono: {processed}/{len(files)} plików")
     print(f"   Czas: {total_time:.1f} sekund")
     print(f"   Model: {MODEL_FILE}")

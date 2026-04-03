@@ -8,6 +8,7 @@ Automatically detects physiological anomalies and provides warnings:
 - Muscle fatigue patterns
 - Overreaching warning
 """
+
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
@@ -17,6 +18,7 @@ import pandas as pd
 @dataclass
 class HealthAlert:
     """Represents a health warning or recommendation."""
+
     type: str
     severity: Literal["info", "warning", "critical"]
     message: str
@@ -27,20 +29,12 @@ class HealthAlert:
     @property
     def icon(self) -> str:
         """Get emoji icon based on severity."""
-        return {
-            "info": "ℹ️",
-            "warning": "⚠️",
-            "critical": "🚨"
-        }.get(self.severity, "ℹ️")
+        return {"info": "ℹ️", "warning": "⚠️", "critical": "🚨"}.get(self.severity, "ℹ️")
 
     @property
     def color(self) -> str:
         """Get color for UI display."""
-        return {
-            "info": "blue",
-            "warning": "orange",
-            "critical": "red"
-        }.get(self.severity, "blue")
+        return {"info": "blue", "warning": "orange", "critical": "red"}.get(self.severity, "blue")
 
 
 class HealthMonitor:
@@ -57,18 +51,15 @@ class HealthMonitor:
     TSB_OVERREACH_THRESHOLD = -30
 
     def analyze_session(
-        self,
-        df: pd.DataFrame,
-        metrics: dict,
-        tsb: Optional[float] = None
+        self, df: pd.DataFrame, metrics: dict, tsb: Optional[float] = None
     ) -> List[HealthAlert]:
         """Run all health checks on session data.
-        
+
         Args:
             df: Session DataFrame with physiological data
             metrics: Calculated metrics dict
             tsb: Current Training Stress Balance (optional)
-            
+
         Returns:
             List of HealthAlert objects
         """
@@ -102,21 +93,17 @@ class HealthMonitor:
 
         return alerts
 
-    def check_cardiac_drift(
-        self,
-        df: pd.DataFrame,
-        metrics: dict
-    ) -> Optional[HealthAlert]:
+    def check_cardiac_drift(self, df: pd.DataFrame, metrics: dict) -> Optional[HealthAlert]:
         """Detect cardiac drift (decoupling of power and HR).
-        
+
         Cardiac drift indicates fatigue, dehydration, or heat stress.
         """
-        decoupling = metrics.get('decoupling_percent') or metrics.get('ef_factor_drop', 0)
+        decoupling = metrics.get("decoupling_percent") or metrics.get("ef_factor_drop", 0)
 
         if not decoupling:
             # Calculate if not provided
-            if 'watts_smooth' in df.columns and 'heartrate_smooth' in df.columns:
-                mask = (df['watts_smooth'] > 50) & (df['heartrate_smooth'] > 90)
+            if "watts_smooth" in df.columns and "heartrate_smooth" in df.columns:
+                mask = (df["watts_smooth"] > 50) & (df["heartrate_smooth"] > 90)
                 df_active = df[mask]
 
                 if len(df_active) < 600:  # Need at least 10 min
@@ -125,12 +112,12 @@ class HealthMonitor:
                 mid = len(df_active) // 2
                 p1, p2 = df_active.iloc[:mid], df_active.iloc[mid:]
 
-                hr1, hr2 = p1['heartrate_smooth'].mean(), p2['heartrate_smooth'].mean()
+                hr1, hr2 = p1["heartrate_smooth"].mean(), p2["heartrate_smooth"].mean()
                 if hr1 == 0 or hr2 == 0:
                     return None
 
-                ef1 = p1['watts_smooth'].mean() / hr1
-                ef2 = p2['watts_smooth'].mean() / hr2
+                ef1 = p1["watts_smooth"].mean() / hr1
+                ef2 = p2["watts_smooth"].mean() / hr2
 
                 if ef1 > 0:
                     decoupling = ((ef1 - ef2) / ef1) * 100
@@ -141,7 +128,7 @@ class HealthMonitor:
                 severity="critical",
                 message=f"Krytyczny dryf sercowy: {decoupling:.1f}%",
                 recommendation="Przerwij intensywny wysiłek. Sprawdź nawodnienie i temperaturę.",
-                value=decoupling
+                value=decoupling,
             )
         elif decoupling >= self.CARDIAC_DRIFT_WARNING:
             return HealthAlert(
@@ -149,17 +136,21 @@ class HealthMonitor:
                 severity="warning",
                 message=f"Podwyższony dryf sercowy: {decoupling:.1f}%",
                 recommendation="Rozważ zmniejszenie intensywności lub dodatkowe nawodnienie.",
-                value=decoupling
+                value=decoupling,
             )
 
         return None
 
     def check_thermal_stress(self, df: pd.DataFrame) -> Optional[HealthAlert]:
         """Detect dangerous core temperature levels."""
-        if 'core_temperature' not in df.columns and 'core_temperature_smooth' not in df.columns:
+        if "core_temperature" not in df.columns and "core_temperature_smooth" not in df.columns:
             return None
 
-        temp_col = 'core_temperature_smooth' if 'core_temperature_smooth' in df.columns else 'core_temperature'
+        temp_col = (
+            "core_temperature_smooth"
+            if "core_temperature_smooth" in df.columns
+            else "core_temperature"
+        )
         max_temp = df[temp_col].max()
 
         if pd.isna(max_temp):
@@ -167,7 +158,7 @@ class HealthMonitor:
 
         if max_temp >= self.CORE_TEMP_CRITICAL:
             # Find when it happened
-            critical_time = df[df[temp_col] >= self.CORE_TEMP_CRITICAL]['time'].min()
+            critical_time = df[df[temp_col] >= self.CORE_TEMP_CRITICAL]["time"].min()
 
             return HealthAlert(
                 type="thermal_critical",
@@ -175,7 +166,7 @@ class HealthMonitor:
                 message=f"Krytyczna temperatura ciała: {max_temp:.1f}°C",
                 recommendation="NATYCHMIAST przerwij wysiłek! Schłodź się, pij zimne płyny.",
                 timestamp=critical_time,
-                value=max_temp
+                value=max_temp,
             )
         elif max_temp >= self.CORE_TEMP_WARNING:
             return HealthAlert(
@@ -183,14 +174,14 @@ class HealthMonitor:
                 severity="warning",
                 message=f"Podwyższona temperatura ciała: {max_temp:.1f}°C",
                 recommendation="Ogranicz intensywność, zwiększ chłodzenie, pij więcej.",
-                value=max_temp
+                value=max_temp,
             )
 
         return None
 
     def check_muscle_fatigue(self, df: pd.DataFrame) -> Optional[HealthAlert]:
         """Detect prolonged muscle deoxygenation (SmO2 desaturation)."""
-        smo2_col = 'smo2_smooth' if 'smo2_smooth' in df.columns else 'smo2'
+        smo2_col = "smo2_smooth" if "smo2_smooth" in df.columns else "smo2"
 
         if smo2_col not in df.columns:
             return None
@@ -213,7 +204,7 @@ class HealthMonitor:
                     severity="warning",
                     message=f"Przedłużona desaturacja mięśni: SmO2 < {self.SMO2_DESAT_THRESHOLD}% przez {max_stretch:.0f}s",
                     recommendation="Mięśnie są silnie obciążone. Rozważ dłuższe okresy recovery między interwałami.",
-                    value=min_smo2
+                    value=min_smo2,
                 )
 
         return None
@@ -226,15 +217,11 @@ class HealthMonitor:
                 severity="warning",
                 message=f"Ryzyko przetrenowania: TSB = {tsb:.0f}",
                 recommendation="Zaplanuj 1-2 dni odpoczynku lub bardzo lekki trening regeneracyjny.",
-                value=tsb
+                value=tsb,
             )
         return None
 
-    def check_hydration_status(
-        self,
-        df: pd.DataFrame,
-        metrics: dict
-    ) -> Optional[HealthAlert]:
+    def check_hydration_status(self, df: pd.DataFrame, metrics: dict) -> Optional[HealthAlert]:
         """Estimate dehydration risk based on drift + duration + HR."""
         duration_sec = len(df)
 
@@ -242,11 +229,11 @@ class HealthMonitor:
             return None
 
         # High duration + elevated HR trend suggests dehydration
-        if 'heartrate_smooth' in df.columns:
-            hr_values = df['heartrate_smooth'].dropna()
+        if "heartrate_smooth" in df.columns:
+            hr_values = df["heartrate_smooth"].dropna()
             if len(hr_values) > 100:
-                hr_first_half = hr_values.iloc[:len(hr_values)//2].mean()
-                hr_second_half = hr_values.iloc[len(hr_values)//2:].mean()
+                hr_first_half = hr_values.iloc[: len(hr_values) // 2].mean()
+                hr_second_half = hr_values.iloc[len(hr_values) // 2 :].mean()
 
                 hr_rise = hr_second_half - hr_first_half
 
@@ -257,18 +244,16 @@ class HealthMonitor:
                         severity="info",
                         message=f"Możliwe odwodnienie: HR wzrosło o {hr_rise:.0f} bpm",
                         recommendation="Pamiętaj o regularnym piciu podczas długich treningów (500-1000ml/h).",
-                        value=hr_rise
+                        value=hr_rise,
                     )
 
         return None
 
     def check_hrv_trend(
-        self,
-        rmssd_history: List[float],
-        baseline_rmssd: Optional[float] = None
+        self, rmssd_history: List[float], baseline_rmssd: Optional[float] = None
     ) -> Optional[HealthAlert]:
         """Check for declining HRV trend over multiple sessions.
-        
+
         Args:
             rmssd_history: List of RMSSD values from recent sessions
             baseline_rmssd: Optional baseline RMSSD for comparison
@@ -276,22 +261,19 @@ class HealthMonitor:
         if len(rmssd_history) < self.HRV_DECLINE_SESSIONS:
             return None
 
-        recent = rmssd_history[-self.HRV_DECLINE_SESSIONS:]
+        recent = rmssd_history[-self.HRV_DECLINE_SESSIONS :]
 
         # Check if all recent values are declining
-        is_declining = all(
-            recent[i] < recent[i-1]
-            for i in range(1, len(recent))
-        )
+        is_declining = all(recent[i] < recent[i - 1] for i in range(1, len(recent)))
 
         if is_declining:
             if baseline_rmssd and recent[-1] < baseline_rmssd * 0.7:
                 return HealthAlert(
                     type="hrv_decline",
                     severity="warning",
-                    message=f"HRV spadło o {((baseline_rmssd - recent[-1])/baseline_rmssd)*100:.0f}% poniżej baseline",
+                    message=f"HRV spadło o {((baseline_rmssd - recent[-1]) / baseline_rmssd) * 100:.0f}% poniżej baseline",
                     recommendation="Rozważ dzień odpoczynku. Monitoruj jakość snu i stres.",
-                    value=recent[-1]
+                    value=recent[-1],
                 )
             else:
                 return HealthAlert(
@@ -299,7 +281,7 @@ class HealthMonitor:
                     severity="info",
                     message=f"HRV spada przez {self.HRV_DECLINE_SESSIONS} kolejne sesje",
                     recommendation="Obserwuj samopoczucie. Może być potrzebny odpoczynek.",
-                    value=recent[-1]
+                    value=recent[-1],
                 )
 
         return None

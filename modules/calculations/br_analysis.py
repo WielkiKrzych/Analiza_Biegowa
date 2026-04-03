@@ -45,9 +45,7 @@ def classify_br_zone(br_value: float) -> str:
     return "Unknown"
 
 
-def calculate_br_zones_time(
-    br_series: pd.Series, sample_rate_hz: float = 1.0
-) -> Dict[str, float]:
+def calculate_br_zones_time(br_series: pd.Series, sample_rate_hz: float = 1.0) -> Dict[str, float]:
     """Calculate time spent in each BR zone.
 
     Args:
@@ -61,10 +59,7 @@ def calculate_br_zones_time(
     clean = br_series.dropna()
     zones = clean.map(classify_br_zone)
     counts = zones.value_counts()
-    return {
-        name: counts.get(name, 0) * sample_interval
-        for name, _, _ in _BR_ZONES
-    }
+    return {name: counts.get(name, 0) * sample_interval for name, _, _ in _BR_ZONES}
 
 
 def _segmented_regression(x: np.ndarray, y: np.ndarray):
@@ -78,10 +73,16 @@ def _segmented_regression(x: np.ndarray, y: np.ndarray):
         for j in range(3 * n // 5, 4 * n // 5, step):
             if j - i < 5:
                 continue
-            s1, s2, s3 = stats.linregress(x[:i], y[:i]), stats.linregress(x[i:j], y[i:j]), stats.linregress(x[j:], y[j:])
-            rss = (np.sum((y[:i] - (s1.slope * x[:i] + s1.intercept)) ** 2)
-                   + np.sum((y[i:j] - (s2.slope * x[i:j] + s2.intercept)) ** 2)
-                   + np.sum((y[j:] - (s3.slope * x[j:] + s3.intercept)) ** 2))
+            s1, s2, s3 = (
+                stats.linregress(x[:i], y[:i]),
+                stats.linregress(x[i:j], y[i:j]),
+                stats.linregress(x[j:], y[j:]),
+            )
+            rss = (
+                np.sum((y[:i] - (s1.slope * x[:i] + s1.intercept)) ** 2)
+                + np.sum((y[i:j] - (s2.slope * x[i:j] + s2.intercept)) ** 2)
+                + np.sum((y[j:] - (s3.slope * x[j:] + s3.intercept)) ** 2)
+            )
             if rss < best_rss:
                 best_rss, best_bp1, best_bp2 = rss, i, j
     tss = np.sum((y - np.mean(y)) ** 2)
@@ -104,29 +105,56 @@ def detect_vt_from_br(
 
     Reference: npj Digital Medicine 2024.
     """
-    _empty = {"vt1_time_sec": None, "vt1_br": None, "vt1_hr": None, "vt1_pace": None,
-              "vt2_time_sec": None, "vt2_br": None, "vt2_hr": None, "vt2_pace": None,
-              "confidence": 0.0, "method": "none"}
+    _empty = {
+        "vt1_time_sec": None,
+        "vt1_br": None,
+        "vt1_hr": None,
+        "vt1_pace": None,
+        "vt2_time_sec": None,
+        "vt2_br": None,
+        "vt2_hr": None,
+        "vt2_pace": None,
+        "confidence": 0.0,
+        "method": "none",
+    }
     result = dict(_empty)
     clean_br = br_series.dropna()
     if len(clean_br) < 60:
         return result
     smoothed = clean_br.rolling(window=_SMOOTHING_WINDOW, min_periods=1, center=True).median()
-    t = (time_series.loc[smoothed.index].values.astype(float)
-         if time_series is not None else np.arange(len(smoothed), dtype=float))
+    t = (
+        time_series.loc[smoothed.index].values.astype(float)
+        if time_series is not None
+        else np.arange(len(smoothed), dtype=float)
+    )
     x, y = t - t[0], smoothed.values
 
     bp1, bp2, seg_conf = _segmented_regression(x, y)
     if bp1 is not None and bp2 is not None and seg_conf > 0.15:
-        result.update(method="segmented_regression", confidence=round(float(seg_conf), 3),
-                      vt1_time_sec=int(x[bp1]), vt1_br=round(float(y[bp1]), 1),
-                      vt2_time_sec=int(x[bp2]), vt2_br=round(float(y[bp2]), 1))
+        result.update(
+            method="segmented_regression",
+            confidence=round(float(seg_conf), 3),
+            vt1_time_sec=int(x[bp1]),
+            vt1_br=round(float(y[bp1]), 1),
+            vt2_time_sec=int(x[bp2]),
+            vt2_br=round(float(y[bp2]), 1),
+        )
     else:
-        dt = np.diff(x); dt[dt == 0] = 1.0
-        dbr_smooth = pd.Series(np.diff(y) / dt).rolling(window=_SMOOTHING_WINDOW, min_periods=1).mean().values
-        vt1_idx = next((i for i in range(len(dbr_smooth)) if dbr_smooth[i] > _VT1_SLOPE_THRESHOLD), None)
+        dt = np.diff(x)
+        dt[dt == 0] = 1.0
+        dbr_smooth = (
+            pd.Series(np.diff(y) / dt)
+            .rolling(window=_SMOOTHING_WINDOW, min_periods=1)
+            .mean()
+            .values
+        )
+        vt1_idx = next(
+            (i for i in range(len(dbr_smooth)) if dbr_smooth[i] > _VT1_SLOPE_THRESHOLD), None
+        )
         start = (vt1_idx + _SMOOTHING_WINDOW) if vt1_idx is not None else len(dbr_smooth) // 2
-        vt2_idx = next((i for i in range(start, len(dbr_smooth)) if dbr_smooth[i] > _VT2_SLOPE_THRESHOLD), None)
+        vt2_idx = next(
+            (i for i in range(start, len(dbr_smooth)) if dbr_smooth[i] > _VT2_SLOPE_THRESHOLD), None
+        )
         result["method"] = "slope_change"
         result["confidence"] = round(0.4 if vt1_idx and vt2_idx else 0.2, 3)
         if vt1_idx is not None:
@@ -170,14 +198,22 @@ def calculate_br_decoupling(
     """
     ratio = calculate_br_hr_ratio(br_series, hr_series).dropna()
     if len(ratio) < 2:
-        return {"decoupling_pct": 0.0, "is_significant": False, "interpretation": "Insufficient data"}
+        return {
+            "decoupling_pct": 0.0,
+            "is_significant": False,
+            "interpretation": "Insufficient data",
+        }
 
     mid = len(ratio) // 2
     mean_first = ratio.iloc[:mid].mean()
     mean_second = ratio.iloc[mid:].mean()
 
     if mean_first == 0:
-        return {"decoupling_pct": 0.0, "is_significant": False, "interpretation": "Invalid first-half ratio"}
+        return {
+            "decoupling_pct": 0.0,
+            "is_significant": False,
+            "interpretation": "Invalid first-half ratio",
+        }
 
     decoupling = (mean_second - mean_first) / mean_first * 100.0
     is_significant = abs(decoupling) > _DECOUPLING_SIGNIFICANT_PCT
@@ -185,7 +221,9 @@ def calculate_br_decoupling(
     if not is_significant:
         interpretation = "Stable ventilatory efficiency throughout the activity"
     elif decoupling > 0:
-        interpretation = "Ventilatory drift detected: breathing became less efficient in the second half"
+        interpretation = (
+            "Ventilatory drift detected: breathing became less efficient in the second half"
+        )
     else:
         interpretation = "Improved ventilatory efficiency in the second half"
 

@@ -3,6 +3,7 @@ Historical Training Importer.
 
 Batch import of CSV files from the 'treningi_csv' folder into training_history.db.
 """
+
 import re
 from datetime import datetime
 from pathlib import Path
@@ -19,28 +20,28 @@ TRAINING_FOLDER = Path(__file__).parent.parent / "treningi_csv"
 
 def extract_date_from_filename(filename: str) -> Optional[str]:
     """Extract date from filename if present.
-    
+
     Supports formats:
     - 2024-12-28_trening.csv
     - trening_28.12.2024.csv
     - 20241228.csv
     - session_20241228_120000.csv
-    
+
     Returns:
         Date string in YYYY-MM-DD format or None
     """
     # Pattern 1: YYYY-MM-DD
-    match = re.search(r'(\d{4})-(\d{2})-(\d{2})', filename)
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", filename)
     if match:
         return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
 
     # Pattern 2: DD.MM.YYYY
-    match = re.search(r'(\d{2})\.(\d{2})\.(\d{4})', filename)
+    match = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", filename)
     if match:
         return f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
 
     # Pattern 3: YYYYMMDD
-    match = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
+    match = re.search(r"(\d{4})(\d{2})(\d{2})", filename)
     if match:
         year = int(match.group(1))
         if 2020 <= year <= 2030:  # Sanity check
@@ -50,17 +51,15 @@ def extract_date_from_filename(filename: str) -> Optional[str]:
 
 
 def import_single_file(
-    filepath: Path,
-    cp: float = 280,
-    store: Optional[SessionStore] = None
+    filepath: Path, cp: float = 280, store: Optional[SessionStore] = None
 ) -> Tuple[bool, str]:
     """Import a single CSV file into the database.
-    
+
     Args:
         filepath: Path to CSV file
         cp: Critical Power for metrics calculation
         store: Optional SessionStore instance
-        
+
     Returns:
         Tuple of (success, message)
     """
@@ -69,7 +68,7 @@ def import_single_file(
 
     try:
         # Load and process data
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             df_raw = load_data(f)
 
         if df_raw is None or df_raw.empty:
@@ -84,7 +83,7 @@ def import_single_file(
         metrics = calculate_metrics(df, cp)
 
         # Calculate NP and TSS
-        if 'watts' in df.columns and len(df) >= 30:
+        if "watts" in df.columns and len(df) >= 30:
             np_val = calculate_normalized_power(df)
             if cp > 0:
                 if_factor = np_val / cp
@@ -93,7 +92,7 @@ def import_single_file(
                 if_factor = 0
                 tss = 0
         else:
-            np_val = metrics.get('avg_watts', 0)
+            np_val = metrics.get("avg_watts", 0)
             if_factor = 0
             tss = 0
 
@@ -102,7 +101,7 @@ def import_single_file(
         if not date_str:
             # Use file modification time
             mod_time = datetime.fromtimestamp(filepath.stat().st_mtime)
-            date_str = mod_time.strftime('%Y-%m-%d')
+            date_str = mod_time.strftime("%Y-%m-%d")
 
         # Create session record
         record = SessionRecord(
@@ -112,15 +111,21 @@ def import_single_file(
             tss=tss,
             np=np_val,
             if_factor=if_factor,
-            avg_watts=metrics.get('avg_watts', 0),
-            avg_hr=metrics.get('avg_hr', 0),
-            max_hr=df['heartrate'].max() if 'heartrate' in df.columns else 0,
-            work_kj=metrics.get('work_kj', 0) if 'work_kj' in metrics else (df['watts'].sum() / 1000 if 'watts' in df.columns else 0),
-            avg_cadence=metrics.get('avg_cadence', 0),
-            mmp_5s=df['watts'].rolling(5).mean().max() if 'watts' in df.columns else None,
-            mmp_1m=df['watts'].rolling(60).mean().max() if 'watts' in df.columns else None,
-            mmp_5m=df['watts'].rolling(300).mean().max() if 'watts' in df.columns and len(df) >= 300 else None,
-            mmp_20m=df['watts'].rolling(1200).mean().max() if 'watts' in df.columns and len(df) >= 1200 else None,
+            avg_watts=metrics.get("avg_watts", 0),
+            avg_hr=metrics.get("avg_hr", 0),
+            max_hr=df["heartrate"].max() if "heartrate" in df.columns else 0,
+            work_kj=metrics.get("work_kj", 0)
+            if "work_kj" in metrics
+            else (df["watts"].sum() / 1000 if "watts" in df.columns else 0),
+            avg_cadence=metrics.get("avg_cadence", 0),
+            mmp_5s=df["watts"].rolling(5).mean().max() if "watts" in df.columns else None,
+            mmp_1m=df["watts"].rolling(60).mean().max() if "watts" in df.columns else None,
+            mmp_5m=df["watts"].rolling(300).mean().max()
+            if "watts" in df.columns and len(df) >= 300
+            else None,
+            mmp_20m=df["watts"].rolling(1200).mean().max()
+            if "watts" in df.columns and len(df) >= 1200
+            else None,
         )
 
         store.add_session(record)
@@ -133,15 +138,15 @@ def import_single_file(
 def import_training_folder(
     folder_path: Optional[Path] = None,
     cp: float = 280,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
 ) -> Tuple[int, int, List[str]]:
     """Import all CSV files from the training folder.
-    
+
     Args:
         folder_path: Path to folder (default: 'Treningi CSV')
         cp: Critical Power for calculations
         progress_callback: Optional callback(current, total, message) for progress updates
-        
+
     Returns:
         Tuple of (success_count, fail_count, messages)
     """
@@ -183,7 +188,7 @@ def import_training_folder(
 
 def get_available_files(folder_path: Optional[Path] = None) -> List[dict]:
     """Get list of available CSV files with their info.
-    
+
     Returns:
         List of dicts with 'name', 'size', 'date' keys
     """
@@ -202,13 +207,8 @@ def get_available_files(folder_path: Optional[Path] = None) -> List[dict]:
         date = extract_date_from_filename(f.name)
         if not date:
             mod_time = datetime.fromtimestamp(f.stat().st_mtime)
-            date = mod_time.strftime('%Y-%m-%d')
+            date = mod_time.strftime("%Y-%m-%d")
 
-        result.append({
-            'name': f.name,
-            'size': f.stat().st_size,
-            'date': date,
-            'path': str(f)
-        })
+        result.append({"name": f.name, "size": f.stat().st_size, "date": date, "path": str(f)})
 
-    return sorted(result, key=lambda x: x['date'], reverse=True)
+    return sorted(result, key=lambda x: x["date"], reverse=True)

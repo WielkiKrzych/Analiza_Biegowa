@@ -176,18 +176,18 @@ def render_hemo_tab(target_df):
         # 4. Teoria dla Fizjologii
         st.info("""
         **💡 Interpretacja Hemodynamiczna (THb + SmO2):**
-        
+
         THb (Total Hemoglobin) to wskaźnik objętości krwi ("tHb = pompa paliwowa"). SmO2 to wskaźnik zużycia ("SmO2 = bak").
-        
+
         * **Scenariusz 1: Dobra praca (Wazodylatacja)**
             * **SmO2 SPADA 📉 | THb ROŚNIE 📈**
             * *Co to znaczy:* Mięsień pracuje mocno, metabolizm zużywa tlen, ale układ krążenia reaguje prawidłowo, rozszerzając naczynia i pompując więcej krwi. To zdrowy limit metaboliczny.
-        
+
         * **Scenariusz 2: Okluzja / Limit Mechaniczny (UWAGA!)**
             * **SmO2 SPADA 📉 | THb SPADA 📉 (lub płaskie)**
             * *Co to znaczy:* "Wyżymanie gąbki". Napięcie mięśnia jest tak duże (lub kadencja za niska), że ciśnienie wewnątrzmięśniowe blokuje dopływ świeżej krwi.
             * *Działanie:* Zwiększ kadencję, sprawdź siodełko (czy nie uciska tętnic), popraw fit.
-        
+
         * **Scenariusz 3: Venous Pooling (Zastój)**
             * **SmO2 ROŚNIE 📈 | THb ROŚNIE 📈**
             * *Kiedy:* Często podczas nagłego zatrzymania po wysiłku. Krew napływa, ale pompa mięśniowa nie odprowadza jej z powrotem.

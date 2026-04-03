@@ -3,6 +3,7 @@ Genetics UI.
 
 Display genetic profile analysis and personalized recommendations.
 """
+
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -15,7 +16,7 @@ def render_genetics_tab():
 
     st.info("""
     **Analiza genetyczna** pozwala zrozumieć Twoje predyspozycje do różnych typów wysiłku.
-    
+
     Możesz wgrać plik z 23andMe lub Ancestry DNA, lub ręcznie wprowadzić znane warianty.
     """)
 
@@ -34,39 +35,36 @@ def render_genetics_tab():
             actn3 = st.selectbox(
                 "ACTN3 (rs1815739)",
                 options=["Nieznany", "RR", "RX", "XX"],
-                help="RR = włókna szybkie, XX = włókna wolne"
+                help="RR = włókna szybkie, XX = włókna wolne",
             )
 
         with col2:
             ace = st.selectbox(
                 "ACE (rs1799752)",
                 options=["Nieznany", "II", "ID", "DD"],
-                help="II = wytrzymałość, DD = siła"
+                help="II = wytrzymałość, DD = siła",
             )
 
         with col3:
             ppargc1a = st.selectbox(
                 "PPARGC1A (rs8192678)",
                 options=["Nieznany", "GG", "GA", "AA"],
-                help="AA = lepsza biogeneza mitochondriów"
+                help="AA = lepsza biogeneza mitochondriów",
             )
 
         if st.button("🔬 Analizuj profil"):
             profile = GeneticProfile(
                 actn3=actn3 if actn3 != "Nieznany" else None,
                 ace=ace if ace != "Nieznany" else None,
-                ppargc1a=ppargc1a if ppargc1a != "Nieznany" else None
+                ppargc1a=ppargc1a if ppargc1a != "Nieznany" else None,
             )
 
     with tab_upload:
-        uploaded = st.file_uploader(
-            "Wgraj plik raw data z 23andMe/Ancestry",
-            type=['txt', 'csv']
-        )
+        uploaded = st.file_uploader("Wgraj plik raw data z 23andMe/Ancestry", type=["txt", "csv"])
 
         if uploaded:
             try:
-                raw_data = uploaded.read().decode('utf-8')
+                raw_data = uploaded.read().decode("utf-8")
                 profile = analyzer.parse_23andme(raw_data)
                 st.success("✅ Plik przeanalizowany!")
             except Exception as e:
@@ -100,7 +98,11 @@ def _display_profile(profile: GeneticProfile, analyzer: GeneticAnalyzer):
 
     variants = []
     if profile.actn3:
-        desc = {"RR": "Włókna szybkie (sprint)", "RX": "Mieszany", "XX": "Włókna wolne (wytrzymałość)"}
+        desc = {
+            "RR": "Włókna szybkie (sprint)",
+            "RX": "Mieszany",
+            "XX": "Włókna wolne (wytrzymałość)",
+        }
         variants.append(f"**ACTN3:** {profile.actn3} - {desc.get(profile.actn3, '')}")
 
     if profile.ace:
@@ -125,32 +127,30 @@ def _display_profile(profile: GeneticProfile, analyzer: GeneticAnalyzer):
 
     for rec in recommendations:
         with st.expander(f"{rec['title']}", expanded=True):
-            st.markdown(rec['description'])
+            st.markdown(rec["description"])
 
 
 def _create_score_gauge(label: str, value: float, color: str):
     """Create a score gauge chart."""
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=value,
-        title={'text': label, 'font': {'size': 14}},
-        number={'suffix': '/100', 'font': {'size': 20}},
-        gauge={
-            'axis': {'range': [0, 100]},
-            'bar': {'color': color},
-            'bgcolor': 'rgba(0,0,0,0)',
-            'steps': [
-                {'range': [0, 33], 'color': 'rgba(255,255,255,0.1)'},
-                {'range': [33, 66], 'color': 'rgba(255,255,255,0.15)'},
-                {'range': [66, 100], 'color': 'rgba(255,255,255,0.2)'},
-            ]
-        }
-    ))
-
-    fig.update_layout(
-        template="plotly_dark",
-        height=180,
-        margin=dict(t=40, b=0, l=20, r=20)
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=value,
+            title={"text": label, "font": {"size": 14}},
+            number={"suffix": "/100", "font": {"size": 20}},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": color},
+                "bgcolor": "rgba(0,0,0,0)",
+                "steps": [
+                    {"range": [0, 33], "color": "rgba(255,255,255,0.1)"},
+                    {"range": [33, 66], "color": "rgba(255,255,255,0.15)"},
+                    {"range": [66, 100], "color": "rgba(255,255,255,0.2)"},
+                ],
+            },
+        )
     )
+
+    fig.update_layout(template="plotly_dark", height=180, margin=dict(t=40, b=0, l=20, r=20))
 
     st.plotly_chart(fig, use_container_width=True)

@@ -113,9 +113,7 @@ def calculate_normalized_pace(df: Union[pd.DataFrame, Any], rolling_window_sec: 
 
 
 def calculate_running_stress_score(
-    df: pd.DataFrame,
-    threshold_pace: float,
-    duration_sec: float
+    df: pd.DataFrame, threshold_pace: float, duration_sec: float
 ) -> float:
     """
     Calculate Running Stress Score (rTSS) - running equivalent of TSS.

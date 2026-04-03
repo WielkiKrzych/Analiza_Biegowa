@@ -33,6 +33,7 @@ data/*.db
 
 # Pytest
 .pytest_cache/
+htmlcov/
 
 # Streamlit
 .streamlit/

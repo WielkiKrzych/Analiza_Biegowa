@@ -25,7 +25,7 @@ def render_history_import_tab(cp: float = 280):
 
     st.info(f"""
     **Folder źródłowy:** `{TRAINING_FOLDER}`
-    
+
     **Aktualne sesje w bazie:** {current_count}
     """)
 

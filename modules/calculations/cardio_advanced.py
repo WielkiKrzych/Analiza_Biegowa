@@ -12,6 +12,7 @@ Classifies cardiovascular efficiency:
 - Compensating
 - Decompensating
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,22 +27,24 @@ logger = logging.getLogger("Tri_Dashboard.CardioAdvanced")
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class CardiovascularMetrics:
     """Container for cardiovascular cost metrics."""
+
     # Core metrics
-    pulse_power: float = 0.0              # W/bpm average
-    efficiency_factor: float = 0.0        # EF = NP / HR_avg
-    hr_drift_pct: float = 0.0             # Pa:Hr cardiac decoupling %
+    pulse_power: float = 0.0  # W/bpm average
+    efficiency_factor: float = 0.0  # EF = NP / HR_avg
+    hr_drift_pct: float = 0.0  # Pa:Hr cardiac decoupling %
     hr_recovery_1min: Optional[float] = None  # HR drop in 1st min of recovery
 
     # CCI - Cardiovascular Cost Index
-    cci_avg: float = 0.0                  # Average CCI during test
+    cci_avg: float = 0.0  # Average CCI during test
     cci_breakpoint_watts: Optional[float] = None  # Power at CCI breakpoint
-    cci_breakpoint_hr: Optional[float] = None     # HR at breakpoint
+    cci_breakpoint_hr: Optional[float] = None  # HR at breakpoint
 
     # Classification
-    efficiency_status: str = "unknown"    # efficient, compensating, decompensating
+    efficiency_status: str = "unknown"  # efficient, compensating, decompensating
     efficiency_confidence: float = 0.0
 
     # Interpretation
@@ -56,14 +59,13 @@ class CardiovascularMetrics:
 # METRIC CALCULATIONS
 # =============================================================================
 
+
 def calculate_pulse_power(
-    df: pd.DataFrame,
-    power_col: str = "watts",
-    hr_col: str = "hr"
+    df: pd.DataFrame, power_col: str = "watts", hr_col: str = "hr"
 ) -> Tuple[float, pd.Series]:
     """
     Calculate Pulse Power (W/bpm) - power generated per heartbeat.
-    
+
     Returns:
         (average_pulse_power, pulse_power_series)
     """
@@ -84,13 +86,11 @@ def calculate_pulse_power(
 
 
 def calculate_efficiency_factor(
-    df: pd.DataFrame,
-    power_col: str = "watts",
-    hr_col: str = "hr"
+    df: pd.DataFrame, power_col: str = "watts", hr_col: str = "hr"
 ) -> float:
     """
     Calculate Efficiency Factor (NP / avg HR).
-    
+
     For ramp tests, we use average power instead of NP.
     """
     if power_col not in df.columns or hr_col not in df.columns:
@@ -115,14 +115,14 @@ def calculate_hr_drift(
     power_col: str = "watts",
     hr_col: str = "hr",
     window_pct: float = 0.5,
-    speed_col: str = None
+    speed_col: str = None,
 ) -> float:
     """
     Calculate HR Drift (Pa:Hr) - cardiac decoupling percentage.
-    
+
     CRITICAL FIX: EF = Power/HR (not HR/Power which gives inverted sign).
     Also supports pace-based drift for running.
-    
+
     Compares Efficiency Factor (Power/HR or Speed/HR) in first half vs second half.
     """
     # Try pace/speed-based if no power
@@ -163,14 +163,11 @@ def calculate_hr_drift(
 
 
 def calculate_hr_recovery(
-    df: pd.DataFrame,
-    hr_col: str = "hr",
-    power_col: str = "watts",
-    recovery_window_sec: int = 60
+    df: pd.DataFrame, hr_col: str = "hr", power_col: str = "watts", recovery_window_sec: int = 60
 ) -> Optional[float]:
     """
     Calculate HR Recovery - drop in HR in first minute after peak.
-    
+
     FIX: Use HR peak (not power peak) to find recovery start point.
     Also supports HR-only analysis when no power meter available.
     """
@@ -195,17 +192,14 @@ def calculate_hr_recovery(
 
 
 def calculate_cci(
-    df: pd.DataFrame,
-    power_col: str = "watts",
-    hr_col: str = "hr",
-    window: int = 30
+    df: pd.DataFrame, power_col: str = "watts", hr_col: str = "hr", window: int = 30
 ) -> Tuple[float, Optional[float], Optional[float], List[Dict[str, float]]]:
     """
     Calculate Cardiovascular Cost Index (CCI).
-    
+
     CCI = d(HR) / d(Power) - rate of HR increase per watt
     Lower is better (more efficient).
-    
+
     Returns:
         (avg_cci, breakpoint_watts, breakpoint_hr, cci_profile)
     """
@@ -240,11 +234,13 @@ def calculate_cci(
     profile = []
     for i in range(0, len(filtered), 10):
         if i < len(power_smooth) and i < len(cci):
-            profile.append({
-                "power": float(power_smooth.iloc[i]),
-                "hr": float(hr_smooth.iloc[i]),
-                "cci": float(cci.iloc[i]) if i < len(cci) else avg_cci
-            })
+            profile.append(
+                {
+                    "power": float(power_smooth.iloc[i]),
+                    "hr": float(hr_smooth.iloc[i]),
+                    "cci": float(cci.iloc[i]) if i < len(cci) else avg_cci,
+                }
+            )
 
     # Find breakpoint (where CCI increases significantly)
     breakpoint_watts = None
@@ -268,10 +264,11 @@ def calculate_cci(
 # EFFICIENCY CLASSIFICATION
 # =============================================================================
 
+
 def classify_cardiovascular_efficiency(metrics: CardiovascularMetrics) -> Tuple[str, float, str]:
     """
     Classify cardiovascular efficiency status.
-    
+
     Returns:
         (status, confidence, interpretation)
     """
@@ -334,9 +331,7 @@ def classify_cardiovascular_efficiency(metrics: CardiovascularMetrics) -> Tuple[
 
 
 def _generate_cardio_interpretation(
-    status: str,
-    metrics: CardiovascularMetrics,
-    scores: Dict[str, float]
+    status: str, metrics: CardiovascularMetrics, scores: Dict[str, float]
 ) -> str:
     """Generate coach-oriented interpretation text."""
 
@@ -375,8 +370,7 @@ def _generate_cardio_interpretation(
 
 
 def generate_cardio_recommendations(
-    status: str,
-    metrics: CardiovascularMetrics
+    status: str, metrics: CardiovascularMetrics
 ) -> List[Dict[str, str]]:
     """Generate training and environmental recommendations."""
 
@@ -388,14 +382,14 @@ def generate_cardio_recommendations(
                 "type": "TRENINGOWA",
                 "action": "Utrzymanie treningu spolaryzowanego 80/20",
                 "expected": "Stabilizacja PP i EF na obecnym poziomie",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "PERFORMANCE",
                 "action": "Można zwiększyć intensywność interwałów",
                 "expected": "Wzrost PP o 5-10% w 4-6 tygodni",
-                "risk": "low"
-            }
+                "risk": "low",
+            },
         ]
     elif status == "compensating":
         recommendations = [
@@ -403,20 +397,20 @@ def generate_cardio_recommendations(
                 "type": "TRENINGOWA",
                 "action": "Więcej objętości Z2 (3-4h sesje)",
                 "expected": "Poprawa PP o 0.1-0.2 W/bpm",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "ŚRODOWISKOWA",
                 "action": "Nawadnianie 500-750ml/h + elektrolity",
                 "expected": "Redukcja Drift o 2-3%",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "RECOVERY",
                 "action": "Dłuższe przerwy między sesjami intensywnymi",
                 "expected": "Lepsza adaptacja sercowa",
-                "risk": "low"
-            }
+                "risk": "low",
+            },
         ]
     else:  # decompensating
         recommendations = [
@@ -424,20 +418,20 @@ def generate_cardio_recommendations(
                 "type": "TRENINGOWA",
                 "action": "Redukcja TSS o 20-30%, focus na Z2",
                 "expected": "Spadek Drift poniżej 5%",
-                "risk": "medium"
+                "risk": "medium",
             },
             {
                 "type": "ŚRODOWISKOWA",
                 "action": "Adaptacja termiczna (10-14 dni w cieple)",
                 "expected": "Spadek HR o 10-15 bpm w cieple",
-                "risk": "medium"
+                "risk": "medium",
             },
             {
                 "type": "DIAGNOSTYCZNA",
                 "action": "Rozważ badanie kardiologiczne (EKG, echo)",
                 "expected": "Wykluczenie patologii",
-                "risk": "high"
-            }
+                "risk": "high",
+            },
         ]
 
     return recommendations
@@ -447,10 +441,9 @@ def generate_cardio_recommendations(
 # MAIN ANALYSIS FUNCTION
 # =============================================================================
 
+
 def analyze_cardiovascular(
-    df: pd.DataFrame,
-    power_col: str = "watts",
-    hr_col: str = "hr"
+    df: pd.DataFrame, power_col: str = "watts", hr_col: str = "hr"
 ) -> CardiovascularMetrics:
     """
     Perform complete cardiovascular cost analysis.
@@ -496,15 +489,21 @@ def format_cardio_metrics_for_report(metrics: CardiovascularMetrics) -> Dict[str
         "pulse_power": round(metrics.pulse_power, 3),
         "efficiency_factor": round(metrics.efficiency_factor, 3),
         "hr_drift_pct": round(metrics.hr_drift_pct, 2),
-        "hr_recovery_1min": round(metrics.hr_recovery_1min, 0) if metrics.hr_recovery_1min else None,
+        "hr_recovery_1min": round(metrics.hr_recovery_1min, 0)
+        if metrics.hr_recovery_1min
+        else None,
         "cci_avg": round(metrics.cci_avg, 4),
-        "cci_breakpoint_watts": round(metrics.cci_breakpoint_watts, 0) if metrics.cci_breakpoint_watts else None,
-        "cci_breakpoint_hr": round(metrics.cci_breakpoint_hr, 0) if metrics.cci_breakpoint_hr else None,
+        "cci_breakpoint_watts": round(metrics.cci_breakpoint_watts, 0)
+        if metrics.cci_breakpoint_watts
+        else None,
+        "cci_breakpoint_hr": round(metrics.cci_breakpoint_hr, 0)
+        if metrics.cci_breakpoint_hr
+        else None,
         "efficiency_status": metrics.efficiency_status,
         "efficiency_confidence": round(metrics.efficiency_confidence, 2),
         "interpretation": metrics.interpretation,
         "recommendations": metrics.recommendations,
-        "cci_profile": metrics.cci_profile[:20]  # Limit for JSON size
+        "cci_profile": metrics.cci_profile[:20],  # Limit for JSON size
     }
 
 

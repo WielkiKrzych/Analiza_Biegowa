@@ -1,6 +1,7 @@
 """
 Common types and dataclasses for threshold detection.
 """
+
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -8,20 +9,21 @@ from typing import List, Optional, Tuple
 @dataclass
 class TransitionZone:
     """Represents a transition zone (intensity range) instead of a single point.
-    
+
     Thresholds are not single values - they represent a physiological
     transition that occurs over a range of intensities.
     """
-    range_watts: Tuple[float, float]                    # (min, max) power range
-    range_hr: Optional[Tuple[float, float]] = None      # (min, max) HR range
-    midpoint_ve: Optional[float] = None                 # Midpoint VE (L/min)
-    range_ve: Optional[List[float]] = None              # (min, max) VE range
-    confidence: float = 0.0                             # 0.0-1.0 detection confidence
-    stability_score: float = 0.0                        # 0.0-1.0 temporal stability
-    method: str = ""                                    # Detection method used
-    description: str = ""                               # Human-readable description
+
+    range_watts: Tuple[float, float]  # (min, max) power range
+    range_hr: Optional[Tuple[float, float]] = None  # (min, max) HR range
+    midpoint_ve: Optional[float] = None  # Midpoint VE (L/min)
+    range_ve: Optional[List[float]] = None  # (min, max) VE range
+    confidence: float = 0.0  # 0.0-1.0 detection confidence
+    stability_score: float = 0.0  # 0.0-1.0 temporal stability
+    method: str = ""  # Detection method used
+    description: str = ""  # Human-readable description
     detection_sources: List[str] = field(default_factory=list)  # ["VE", "SmO2", "HR"]
-    variability_watts: float = 0.0                      # Std dev of detections
+    variability_watts: float = 0.0  # Std dev of detections
 
     @property
     def midpoint_watts(self) -> float:
@@ -48,9 +50,11 @@ class TransitionZone:
         """Check if stability score exceeds threshold."""
         return self.stability_score >= threshold
 
+
 @dataclass
 class ThresholdResult:
     """Result of threshold detection (Legacy/Simple)."""
+
     zone_name: str
     zone_type: str  # info, success, warning, error
     description: str
@@ -58,9 +62,11 @@ class ThresholdResult:
     power_at_threshold: Optional[float] = None
     hr_at_threshold: Optional[float] = None
 
+
 @dataclass
 class HysteresisResult:
     """Result of directional analysis (hysteresis)."""
+
     vt1_inc_zone: Optional[TransitionZone] = None
     vt1_dec_zone: Optional[TransitionZone] = None
     vt2_inc_zone: Optional[TransitionZone] = None
@@ -71,9 +77,11 @@ class HysteresisResult:
 
     warnings: List[str] = field(default_factory=list)
 
+
 @dataclass
 class SensitivityResult:
     """Result of sensitivity/stability analysis."""
+
     vt1_stability_score: float = 0.0
     vt2_stability_score: float = 0.0
     vt1_variability_watts: float = 0.0
@@ -82,9 +90,11 @@ class SensitivityResult:
     is_vt2_unreliable: bool = False
     details: List[str] = field(default_factory=list)
 
+
 @dataclass
 class StepTestResult:
     """Complete result of step test analysis."""
+
     vt1_watts: Optional[float] = None
     vt2_watts: Optional[float] = None
     lt1_watts: Optional[float] = None
@@ -109,11 +119,13 @@ class StepTestResult:
     smo2_1_value: Optional[float] = None
     smo2_2_value: Optional[float] = None
     step_smo2_analysis: List[dict] = field(default_factory=list)
-    step_range: Optional['StepTestRange'] = None
+    step_range: Optional["StepTestRange"] = None
+
 
 @dataclass
 class DetectedStep:
     """Represents a detected step in the step test."""
+
     step_number: int
     start_time: float
     end_time: float
@@ -121,9 +133,11 @@ class DetectedStep:
     avg_power: float
     power_diff_from_prev: float = 0.0
 
+
 @dataclass
 class StepTestRange:
     """Detected range of a valid step test."""
+
     start_time: float
     end_time: float
     steps: List[DetectedStep]
@@ -132,13 +146,15 @@ class StepTestRange:
     is_valid: bool = True
     notes: List[str] = field(default_factory=list)
 
+
 @dataclass
 class StepVTResult:
     """Result of step-by-step VT detection.
-    
+
     NEW: vt1_zone and vt2_zone provide range-based thresholds with confidence.
     Legacy point fields (vt1_watts, vt2_watts) kept for backward compatibility.
     """
+
     # NEW: Range-based thresholds (preferred)
     vt1_zone: Optional[TransitionZone] = None
     vt2_zone: Optional[TransitionZone] = None
@@ -170,30 +186,32 @@ class StepVTResult:
         """Get VT2 confidence from zone or default."""
         return self.vt2_zone.confidence if self.vt2_zone else 0.5
 
+
 @dataclass
 class StepSmO2Result:
     """Result of step-by-step SmO2 detection.
-    
+
     IMPORTANT LIMITATIONS - SmO₂ is a LOCAL/REGIONAL signal:
-    
+
     1. SmO₂ reflects oxygen saturation in ONE muscle group (e.g., vastus lateralis).
        It does NOT represent whole-body oxygen dynamics like VO₂ or VE.
-       
+
     2. Sensor placement significantly affects readings:
        - Different muscles show different responses
        - Subcutaneous fat thickness affects signal
        - Movement artifacts are common
-       
-    3. SmO₂ thresholds should SUPPORT ventilatory thresholds (VT1/VT2), 
+
+    3. SmO₂ thresholds should SUPPORT ventilatory thresholds (VT1/VT2),
        NOT replace them. Use SmO₂ as confirmatory evidence only.
-       
+
     4. Inter-individual variability is HIGH:
        - Baseline SmO₂ varies 60-80% between athletes
        - Response patterns differ based on training/fiber type
-    
+
     Set is_supporting_only=True by default - SmO₂ should influence
     interpretation of other thresholds, never be the sole decision maker.
     """
+
     # NEW: Range-based thresholds (preferred)
     smo2_1_zone: Optional[TransitionZone] = None
     smo2_2_zone: Optional[TransitionZone] = None
@@ -217,16 +235,18 @@ class StepSmO2Result:
     is_supporting_only: bool = True  # Should NOT generate standalone decisions
 
     # Documented limitations for UI display
-    limitations: List[str] = field(default_factory=lambda: [
-        "SmO₂ odzwierciedla utlenowanie JEDNEGO mięśnia, nie całego ciała",
-        "Pozycja sensora znacząco wpływa na odczyty",
-        "Użyj SmO₂ do potwierdzenia VT1/VT2 z wentylacji, nie jako samodzielny próg",
-        "Zmienność międzyosobnicza jest wysoka (baseline 60-80%)"
-    ])
+    limitations: List[str] = field(
+        default_factory=lambda: [
+            "SmO₂ odzwierciedla utlenowanie JEDNEGO mięśnia, nie całego ciała",
+            "Pozycja sensora znacząco wpływa na odczyty",
+            "Użyj SmO₂ do potwierdzenia VT1/VT2 z wentylacji, nie jako samodzielny próg",
+            "Zmienność międzyosobnicza jest wysoka (baseline 60-80%)",
+        ]
+    )
 
     def get_confidence_modifier(self) -> float:
         """Return confidence modifier for combined threshold detection.
-        
+
         SmO₂ should only slightly boost confidence when it agrees with VT,
         not be used alone for threshold detection.
         """
@@ -241,7 +261,9 @@ class StepSmO2Result:
     def get_interpretation_note(self) -> str:
         """Get interpretation guidance for UI."""
         if self.is_supporting_only:
-            return "⚠️ SmO₂ to sygnał LOKALNY - używaj do potwierdzenia VT, nie jako samodzielny próg"
+            return (
+                "⚠️ SmO₂ to sygnał LOKALNY - używaj do potwierdzenia VT, nie jako samodzielny próg"
+            )
         return ""
 
 
@@ -249,19 +271,19 @@ class StepSmO2Result:
 # Helper Functions for Confidence and Stability
 # ============================================================
 
+
 def calculate_detection_confidence(
-    detections: List[float],
-    agreement_threshold: float = 20.0
+    detections: List[float], agreement_threshold: float = 20.0
 ) -> Tuple[float, Tuple[float, float], float]:
     """
     Calculate confidence based on agreement between multiple detection methods.
-    
+
     Confidence is higher when different methods agree on similar values.
-    
+
     Args:
         detections: List of threshold values from different methods (e.g., VE, SmO2)
         agreement_threshold: Maximum W difference for perfect agreement (default: 20W)
-    
+
     Returns:
         Tuple of (confidence 0-1, range_watts, variability)
     """
@@ -284,6 +306,7 @@ def calculate_detection_confidence(
     range_width = max_val - min_val
 
     import numpy as np
+
     variability = float(np.std(valid_detections))
 
     # Calculate confidence based on agreement
@@ -304,18 +327,17 @@ def calculate_detection_confidence(
 
 
 def calculate_temporal_stability(
-    threshold_history: List[float],
-    max_cv_for_stable: float = 0.05
+    threshold_history: List[float], max_cv_for_stable: float = 0.05
 ) -> Tuple[float, float]:
     """
     Calculate stability score based on historical threshold values.
-    
+
     Uses coefficient of variation (CV) - lower CV means higher stability.
-    
+
     Args:
         threshold_history: List of historical threshold values
         max_cv_for_stable: CV threshold for "stable" classification (default: 5%)
-    
+
     Returns:
         Tuple of (stability_score 0-1, variability_watts)
     """
@@ -328,6 +350,7 @@ def calculate_temporal_stability(
         return 0.0, 0.0
 
     import numpy as np
+
     mean_val = np.mean(valid_history)
     std_val = np.std(valid_history)
 
@@ -354,11 +377,11 @@ def create_transition_zone(
     hr_detections: Optional[List[float]] = None,
     historical_values: Optional[List[float]] = None,
     method: str = "multi-source",
-    agreement_threshold: float = 20.0
+    agreement_threshold: float = 20.0,
 ) -> TransitionZone:
     """
     Create a TransitionZone from multiple detection sources.
-    
+
     Args:
         detections: List of power threshold values from different methods
         detection_sources: Names of detection sources (e.g., ["VE", "SmO2"])
@@ -366,7 +389,7 @@ def create_transition_zone(
         historical_values: Optional historical threshold values for stability
         method: Description of detection method
         agreement_threshold: Max W difference for agreement
-    
+
     Returns:
         TransitionZone with confidence, stability, and range
     """
@@ -405,6 +428,5 @@ def create_transition_zone(
         method=method,
         description=desc,
         detection_sources=detection_sources,
-        variability_watts=variability
+        variability_watts=variability,
     )
-

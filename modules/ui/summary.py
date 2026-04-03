@@ -14,7 +14,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
-from typing import Optional
 
 from modules.calculations.smo2_advanced import detect_smo2_thresholds_moxy
 from modules.calculations.thresholds import analyze_step_test
@@ -96,10 +95,9 @@ def render_summary_tab(
         time_column="time",
     )
 
-    smo2_result = None
     if "smo2" in df_plot.columns:
         hr_max = int(df_plot[hr_col].max()) if hr_col else None
-        smo2_result = detect_smo2_thresholds_moxy(
+        detect_smo2_thresholds_moxy(
             df=df_plot,
             step_duration_sec=180,
             smo2_col="smo2",
@@ -111,27 +109,6 @@ def render_summary_tab(
             vt1_watts=threshold_result.vt1_watts,
             rcp_onset_watts=threshold_result.vt2_watts,
         )
-
-    eff_vt1 = (
-        vt1_watts
-        if vt1_watts > 0
-        else (threshold_result.vt1_watts if threshold_result.vt1_watts else 0)
-    )
-    eff_vt2 = (
-        vt2_watts
-        if vt2_watts > 0
-        else (threshold_result.vt2_watts if threshold_result.vt2_watts else 0)
-    )
-    eff_lt1 = (
-        lt1_watts
-        if lt1_watts > 0
-        else (smo2_result.t1_watts if smo2_result and smo2_result.t1_watts else 0)
-    )
-    eff_lt2 = (
-        lt2_watts
-        if lt2_watts > 0
-        else (smo2_result.t2_onset_watts if smo2_result and smo2_result.t2_onset_watts else 0)
-    )
 
     # =========================================================================
     # 1. WYKRES PRZEBIEG TRENINGU (CACHED)

@@ -13,15 +13,35 @@ import numpy as np
 # Table: grade (%) -> relative cost compared to flat (cost_grade / cost_0%)
 # Source: "Energy cost of walking and running at extreme uphill and downhill slopes"
 # J Appl Physiol 93:1039-1046, 2002
-_MINETTI_GRADES = np.array([
-    -45, -40, -35, -30, -25, -20, -15, -10, -5, 0,
-    5, 10, 15, 20, 25, 30, 35, 40, 45
-], dtype=np.float64)
+_MINETTI_GRADES = np.array(
+    [-45, -40, -35, -30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45],
+    dtype=np.float64,
+)
 
-_MINETTI_COSTS = np.array([
-    5.20, 4.00, 3.10, 2.40, 1.80, 1.40, 1.05, 0.78, 0.68, 1.00,
-    1.50, 2.10, 2.90, 3.80, 4.80, 5.90, 7.10, 8.40, 9.80
-], dtype=np.float64)
+_MINETTI_COSTS = np.array(
+    [
+        5.20,
+        4.00,
+        3.10,
+        2.40,
+        1.80,
+        1.40,
+        1.05,
+        0.78,
+        0.68,
+        1.00,
+        1.50,
+        2.10,
+        2.90,
+        3.80,
+        4.80,
+        5.90,
+        7.10,
+        8.40,
+        9.80,
+    ],
+    dtype=np.float64,
+)
 
 # Pre-compute: GAP factor = cost_flat / cost_grade
 # factor < 1 means uphill -> faster equivalent flat pace (lower sec/km)
@@ -36,7 +56,9 @@ def calculate_grade(elevation_change_m, distance_m):
     return np.where(distance_m > 0, (elevation_change_m / distance_m) * 100, 0.0)
 
 
-def smooth_elevation(elevation: np.ndarray, distance_m: np.ndarray, smooth_distance_m: float = 20.0) -> np.ndarray:
+def smooth_elevation(
+    elevation: np.ndarray, distance_m: np.ndarray, smooth_distance_m: float = 20.0
+) -> np.ndarray:
     """Smooth elevation data over a horizontal distance window.
 
     GPS elevation is noisy at 1-second resolution. Smoothing over 10-30m
@@ -96,7 +118,9 @@ def pace_to_gap_factor(grade: Union[float, np.ndarray]) -> Union[float, np.ndarr
     return np.clip(factor, 0.2, 2.0)
 
 
-def calculate_gap(pace_sec_per_km: Union[float, np.ndarray], grade: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+def calculate_gap(
+    pace_sec_per_km: Union[float, np.ndarray], grade: Union[float, np.ndarray]
+) -> Union[float, np.ndarray]:
     """
     Calculate Grade-Adjusted Pace using Minetti (2002) model.
     GAP shows what the pace would be on flat ground equivalent.

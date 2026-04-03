@@ -12,6 +12,7 @@ Classifies breathing patterns:
 - Compensatory (shallow/panic)
 - Unstable (hyperventilation)
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,24 +28,26 @@ logger = logging.getLogger("Tri_Dashboard.VentilationAdvanced")
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class VentilationMetrics:
     """Container for ventilation metrics."""
+
     # Core metrics
-    ve_avg: float = 0.0                   # Average VE (L/min)
-    ve_max: float = 0.0                   # Max VE
-    rr_avg: float = 0.0                   # Average respiratory rate
-    rr_max: float = 0.0                   # Max RR
-    ve_rr_ratio: float = 0.0              # VE/RR = tidal volume proxy
-    ve_slope: float = 0.0                 # VE change per 100W
+    ve_avg: float = 0.0  # Average VE (L/min)
+    ve_max: float = 0.0  # Max VE
+    rr_avg: float = 0.0  # Average respiratory rate
+    rr_max: float = 0.0  # Max RR
+    ve_rr_ratio: float = 0.0  # VE/RR = tidal volume proxy
+    ve_slope: float = 0.0  # VE change per 100W
 
     # Breakpoints
     ve_breakpoint_watts: Optional[float] = None  # VE inflection (VT1/VT2)
     rr_breakpoint_watts: Optional[float] = None  # RR inflection
 
     # Pattern classification
-    breathing_pattern: str = "unknown"    # controlled, shallow, hyperventilation
-    control_status: str = "unknown"       # controlled, compensatory, unstable
+    breathing_pattern: str = "unknown"  # controlled, shallow, hyperventilation
+    control_status: str = "unknown"  # controlled, compensatory, unstable
     control_confidence: float = 0.0
 
     # Interpretation
@@ -60,14 +63,13 @@ class VentilationMetrics:
 # METRIC CALCULATIONS
 # =============================================================================
 
+
 def calculate_ve_metrics(
-    df: pd.DataFrame,
-    ve_col: str = "ve",
-    power_col: str = "watts"
+    df: pd.DataFrame, ve_col: str = "ve", power_col: str = "watts"
 ) -> Tuple[float, float, float]:
     """
     Calculate VE metrics.
-    
+
     Returns:
         (ve_avg, ve_max, ve_slope_per_100w)
     """
@@ -103,27 +105,33 @@ def calculate_ve_metrics(
 
 
 def calculate_rr_metrics(
-    df: pd.DataFrame,
-    rr_col: str = "rr",
-    power_col: str = "watts"
+    df: pd.DataFrame, rr_col: str = "rr", power_col: str = "watts"
 ) -> Tuple[float, float]:
     """
     Calculate respiratory rate metrics.
-    
+
     Returns:
         (rr_avg, rr_max)
     """
     # Try multiple column names - including Tyme/Garmin variations
     rr_cols = [
-        "rr", "resprate", "respiratory_rate", "breaths",
-        "respiration_rate", "breathing_rate", "bf",  # Common aliases
-        "tymerespirationrate", "respirationrate",  # Tyme wear
-        "tymebreathrate", "breathrate",  # Tyme breath rate (CONFIRMED)
-        "enhancedresprate", "enhanced_resp_rate",  # Garmin
+        "rr",
+        "resprate",
+        "respiratory_rate",
+        "breaths",
+        "respiration_rate",
+        "breathing_rate",
+        "bf",  # Common aliases
+        "tymerespirationrate",
+        "respirationrate",  # Tyme wear
+        "tymebreathrate",
+        "breathrate",  # Tyme breath rate (CONFIRMED)
+        "enhancedresprate",
+        "enhanced_resp_rate",  # Garmin
     ]
     rr_data = None
     for col in rr_cols:
-        matching = [c for c in df.columns if c.lower().replace('_', '') == col.replace('_', '')]
+        matching = [c for c in df.columns if c.lower().replace("_", "") == col.replace("_", "")]
         if matching:
             rr_data = df[matching[0]]
             break
@@ -143,7 +151,7 @@ def calculate_rr_metrics(
 def calculate_ve_rr_ratio(ve_avg: float, rr_avg: float) -> float:
     """
     Calculate VE/RR ratio (proxy for tidal volume).
-    
+
     VE = TV × RR, so TV ≈ VE/RR
     """
     if rr_avg > 0:
@@ -152,14 +160,11 @@ def calculate_ve_rr_ratio(ve_avg: float, rr_avg: float) -> float:
 
 
 def find_ve_breakpoint(
-    df: pd.DataFrame,
-    ve_col: str = "ve",
-    power_col: str = "watts",
-    window: int = 30
+    df: pd.DataFrame, ve_col: str = "ve", power_col: str = "watts", window: int = 30
 ) -> Optional[float]:
     """
     Find VE inflection point (ventilatory threshold).
-    
+
     Uses slope change detection.
     """
     # Try multiple column names
@@ -188,12 +193,12 @@ def find_ve_breakpoint(
     n = len(ve_smooth)
     slopes = []
     for i in range(0, n - 20, 10):
-        segment_power = power[i:i+20]
-        segment_ve = ve_smooth[i:i+20]
+        segment_power = power[i : i + 20]
+        segment_ve = ve_smooth[i : i + 20]
         if len(segment_power) > 5 and np.unique(segment_power).size > 1:
             try:
                 s, _, _, _, _ = stats.linregress(segment_power, segment_ve)
-                slopes.append((power[i+10], s))
+                slopes.append((power[i + 10], s))
             except Exception as e:
                 logger.debug(f"Linregress failed in segment: {e}")
                 pass
@@ -213,14 +218,11 @@ def find_ve_breakpoint(
 
 
 def classify_breathing_pattern(
-    rr_avg: float,
-    rr_max: float,
-    ve_rr_ratio: float,
-    ve_slope: float
+    rr_avg: float, rr_max: float, ve_rr_ratio: float, ve_slope: float
 ) -> Tuple[str, str]:
     """
     Classify breathing pattern based on metrics.
-    
+
     Returns:
         (pattern, description)
     """
@@ -243,14 +245,13 @@ def classify_breathing_pattern(
 def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, float, str]:
     """
     Classify overall ventilatory control status.
-    
+
     Returns:
         (status, confidence, interpretation)
     """
     scores = {"controlled": 0.0, "compensatory": 0.0, "unstable": 0.0}
 
     ve_slope = metrics.ve_slope
-    rr_avg = metrics.rr_avg
     rr_max = metrics.rr_max
     ve_rr = metrics.ve_rr_ratio
     pattern = metrics.breathing_pattern
@@ -335,10 +336,7 @@ def _generate_vent_interpretation(status: str, metrics: VentilationMetrics) -> s
     return f"{base}\n{detail}"
 
 
-def generate_vent_recommendations(
-    status: str,
-    metrics: VentilationMetrics
-) -> List[Dict[str, str]]:
+def generate_vent_recommendations(status: str, metrics: VentilationMetrics) -> List[Dict[str, str]]:
     """Generate training recommendations for ventilatory improvement."""
 
     if status == "controlled":
@@ -347,14 +345,14 @@ def generate_vent_recommendations(
                 "type": "PERFORMANCE",
                 "action": "Utrzymanie obecnego treningu polaryzowanego",
                 "expected": "Stabilny VE/RR ratio, brak zmian",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "INTENSYWNOŚĆ",
                 "action": "Można zwiększyć objętość interwałów VO₂max",
                 "expected": "Poprawa VE peak o 5-10%",
-                "risk": "low"
-            }
+                "risk": "low",
+            },
         ]
 
     elif status == "compensatory":
@@ -363,20 +361,20 @@ def generate_vent_recommendations(
                 "type": "TRENINGOWA",
                 "action": "Tempo 2×20min z kontrolowanym oddechem",
                 "expected": "Wzrost VE/RR o 0.3-0.5",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "TECHNICZNA",
                 "action": "Praca nad tolerancją CO₂ (box breathing)",
                 "expected": "Spadek RR o 5-10/min przy tej samej mocy",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "DIAGNOSTYKA",
                 "action": "Kontrola spirometryczna (FEV1, FVC)",
                 "expected": "Wykluczenie ograniczeń mechanicznych",
-                "risk": "low"
-            }
+                "risk": "low",
+            },
         ]
 
     else:  # unstable
@@ -385,20 +383,20 @@ def generate_vent_recommendations(
                 "type": "PILNA",
                 "action": "Redukcja intensywności o 15-20%",
                 "expected": "Spadek RR max poniżej 50/min",
-                "risk": "medium"
+                "risk": "medium",
             },
             {
                 "type": "TECHNICZNA",
                 "action": "Nauka oddychania przeponowego pod wysiłkiem",
                 "expected": "Wzrost TV, spadek RR",
-                "risk": "low"
+                "risk": "low",
             },
             {
                 "type": "MEDYCZNA",
                 "action": "Konsultacja pulmonologiczna",
                 "expected": "Wykluczenie EIB/astmy wysiłkowej",
-                "risk": "high"
-            }
+                "risk": "high",
+            },
         ]
 
 
@@ -406,11 +404,9 @@ def generate_vent_recommendations(
 # MAIN ANALYSIS FUNCTION
 # =============================================================================
 
+
 def analyze_ventilation(
-    df: pd.DataFrame,
-    ve_col: str = "ve",
-    rr_col: str = "rr",
-    power_col: str = "watts"
+    df: pd.DataFrame, ve_col: str = "ve", rr_col: str = "rr", power_col: str = "watts"
 ) -> VentilationMetrics:
     """
     Perform complete ventilation analysis.
@@ -444,13 +440,17 @@ def analyze_ventilation(
     ve_cols = ["ve", "tymeventilation", "ventilation"]
     for col in ve_cols:
         if col in df.columns:
-            mask = df[power_col] > 50 if power_col in df.columns else pd.Series(True, index=df.index)
+            mask = (
+                df[power_col] > 50 if power_col in df.columns else pd.Series(True, index=df.index)
+            )
             for i in range(0, mask.sum(), 20):
                 idx = df.index[mask][i] if i < mask.sum() else df.index[mask][-1]
-                metrics.ve_profile.append({
-                    "power": float(df.loc[idx, power_col]) if power_col in df.columns else i,
-                    "ve": float(df.loc[idx, col])
-                })
+                metrics.ve_profile.append(
+                    {
+                        "power": float(df.loc[idx, power_col]) if power_col in df.columns else i,
+                        "ve": float(df.loc[idx, col]),
+                    }
+                )
             break
 
     return metrics
@@ -465,13 +465,15 @@ def format_vent_metrics_for_report(metrics: VentilationMetrics) -> Dict[str, Any
         "rr_max": round(metrics.rr_max, 1),
         "ve_rr_ratio": round(metrics.ve_rr_ratio, 2),
         "ve_slope": round(metrics.ve_slope, 3),
-        "ve_breakpoint_watts": round(metrics.ve_breakpoint_watts, 0) if metrics.ve_breakpoint_watts else None,
+        "ve_breakpoint_watts": round(metrics.ve_breakpoint_watts, 0)
+        if metrics.ve_breakpoint_watts
+        else None,
         "breathing_pattern": metrics.breathing_pattern,
         "control_status": metrics.control_status,
         "control_confidence": round(metrics.control_confidence, 2),
         "interpretation": metrics.interpretation,
         "recommendations": metrics.recommendations,
-        "ve_profile": metrics.ve_profile[:15]
+        "ve_profile": metrics.ve_profile[:15],
     }
 
 

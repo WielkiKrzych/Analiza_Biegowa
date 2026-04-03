@@ -24,13 +24,11 @@ if NUMBA_AVAILABLE:
 
 
 def calculate_pace_zones_time(
-    df_pl: Union[pd.DataFrame, Any],
-    threshold_pace: float,
-    zones: dict = None
+    df_pl: Union[pd.DataFrame, Any], threshold_pace: float, zones: dict = None
 ) -> dict:
     """
     Calculate time spent in each pace zone.
-    
+
     Default zones based on % of threshold pace:
     - Z1 Recovery: >115% threshold (slower)
     - Z2 Aerobic: 105-115% threshold
@@ -38,14 +36,14 @@ def calculate_pace_zones_time(
     - Z4 Threshold: 88-95% threshold
     - Z5 Interval: 75-88% threshold
     - Z6 Repetition: <75% threshold (faster)
-    
+
     Note: For pace, LOWER is FASTER, so percentages are inverted vs power.
-    
+
     Args:
         df_pl: DataFrame with 'pace' column (sec/km)
         threshold_pace: Threshold pace in sec/km
         zones: Optional custom zone definitions (as % of threshold)
-        
+
     Returns:
         Dict mapping zone name to seconds spent
     """
@@ -59,11 +57,11 @@ def calculate_pace_zones_time(
         # Lower pace % = faster = higher zone
         # FIX: Z1 upper limit is infinity to catch ALL slow paces (walk/jog)
         zones = {
-            "Z1 Recovery": (1.15, float('inf')),  # >15% slower than threshold (all slow paces)
-            "Z2 Aerobic": (1.05, 1.15),    # 5-15% slower
-            "Z3 Tempo": (0.95, 1.05),      # Within 5%
+            "Z1 Recovery": (1.15, float("inf")),  # >15% slower than threshold (all slow paces)
+            "Z2 Aerobic": (1.05, 1.15),  # 5-15% slower
+            "Z3 Tempo": (0.95, 1.05),  # Within 5%
             "Z4 Threshold": (0.88, 0.95),  # 5-12% faster
-            "Z5 Interval": (0.75, 0.88),   # 12-25% faster
+            "Z5 Interval": (0.75, 0.88),  # 12-25% faster
             "Z6 Repetition": (0.0, 0.75),  # >25% faster
         }
 
@@ -89,6 +87,7 @@ DEFAULT_PDC_DURATIONS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200]
 
 
 if NUMBA_AVAILABLE:
+
     @njit(cache=True)
     def _calculate_pdc_numba(pace: np.ndarray, durations: np.ndarray) -> np.ndarray:
         n = len(pace)
@@ -103,7 +102,7 @@ if NUMBA_AVAILABLE:
 
             best_pace = np.inf
             for j in range(n - duration + 1):
-                window_mean = np.mean(pace[j:j + duration])
+                window_mean = np.mean(pace[j : j + duration])
                 if window_mean < best_pace:
                     best_pace = window_mean
 
@@ -115,12 +114,9 @@ if NUMBA_AVAILABLE:
         return results
 
 
-def calculate_pace_duration_curve(
-    df_pl: Union[pd.DataFrame, Any],
-    durations: list = None
-) -> dict:
+def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: list = None) -> dict:
     """Calculate Pace Duration Curve (best pace for each duration).
-    
+
     Similar to Power Duration Curve but for pace.
     Returns the BEST (lowest) pace achieved for each duration.
     """
@@ -168,18 +164,18 @@ def calculate_pace_duration_curve(
 def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     """
     Classify runner phenotype based on Pace Duration Curve.
-    
+
     Phenotypes:
     - sprinter: Strong short distances (400m-1km)
     - middle_distance: Strong 5K-10K
     - marathoner: Strong half to full marathon
     - ultra_runner: Strong ultra distances
     - all_rounder: Balanced profile
-    
+
     Args:
         pdc: Pace Duration Curve (duration sec -> pace sec/km)
         weight: Runner weight in kg
-        
+
     Returns:
         Phenotype string identifier
     """
@@ -188,9 +184,9 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
 
     # Get key pace values - PDC durations are in SECONDS (time-based)
     # These represent best pace sustained for a given duration, NOT distance
-    p60s = pdc.get(60)      # best pace over 60-second effort
-    p5min = pdc.get(300)    # best pace over 5-minute effort
-    p10min = pdc.get(600)   # best pace over 10-minute effort
+    p60s = pdc.get(60)  # best pace over 60-second effort
+    p5min = pdc.get(300)  # best pace over 5-minute effort
+    p10min = pdc.get(600)  # best pace over 10-minute effort
     p20min = pdc.get(1200)  # best pace over 20-minute effort
     p60min = pdc.get(3600)  # best pace over 60-minute effort
 
@@ -216,7 +212,7 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
         "middle_distance": 0,
         "marathoner": 0,
         "ultra_runner": 0,
-        "all_rounder": 0
+        "all_rounder": 0,
     }
 
     # Sprinter: High drop from short to mid effort (fast short, slow long)
@@ -256,10 +252,10 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
 def get_phenotype_description(phenotype: str) -> tuple:
     """
     Get phenotype emoji, name, and description.
-    
+
     Args:
         phenotype: Phenotype identifier
-        
+
     Returns:
         Tuple of (emoji, name, description)
     """
@@ -267,33 +263,25 @@ def get_phenotype_description(phenotype: str) -> tuple:
         "sprinter": (
             "⚡",
             "Sprinter",
-            "Mocny w krótkich dystansach (400m-1km). Wysoka prędkość maksymalna."
+            "Mocny w krótkich dystansach (400m-1km). Wysoka prędkość maksymalna.",
         ),
         "middle_distance": (
             "🏃",
             "Średnie dystanse",
-            "Specjalista 5K-10K. Dobre połączenie szybkości i wytrzymałości."
+            "Specjalista 5K-10K. Dobre połączenie szybkości i wytrzymałości.",
         ),
         "marathoner": (
             "🏃‍♂️",
             "Maratończyk",
-            "Specjalista maratonu. Doskonała wytrzymałość i ekonomia biegu."
+            "Specjalista maratonu. Doskonała wytrzymałość i ekonomia biegu.",
         ),
         "ultra_runner": (
             "🦶",
             "Ultra-biegacz",
-            "Specjalista ultra. Niesamowita wytrzymałość i odporność."
+            "Specjalista ultra. Niesamowita wytrzymałość i odporność.",
         ),
-        "all_rounder": (
-            "🔄",
-            "Wszechstronny",
-            "Zbalansowany profil. Dobry na różnych dystansach."
-        ),
-        "unknown": (
-            "❓",
-            "Nieznany",
-            "Za mało danych do klasyfikacji."
-        )
+        "all_rounder": ("🔄", "Wszechstronny", "Zbalansowany profil. Dobry na różnych dystansach."),
+        "unknown": ("❓", "Nieznany", "Za mało danych do klasyfikacji."),
     }
 
     return phenotypes.get(phenotype, phenotypes["unknown"])
@@ -332,6 +320,7 @@ def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float = 0.0) -> float
 
     # Fractional utilisation for ~5-6 min effort (t ≈ 5.5 min)
     import math
+
     t = 5.5  # minutes
     frac_util = 0.8 + 0.1894393 * math.exp(-0.012778 * t) + 0.2989558 * math.exp(-0.1932605 * t)
 
@@ -347,23 +336,21 @@ def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float = 0.0) -> float
     return round(vo2max, 1)
 
 
-def calculate_fatigue_resistance_index_pace(
-    pdc: Dict[int, float]
-) -> float:
+def calculate_fatigue_resistance_index_pace(pdc: Dict[int, float]) -> float:
     """
     Calculate Fatigue Resistance Index for pace.
-    
+
     FRI = pace_10k / pace_5k
     Lower is better (closer to 1.0 = better endurance)
-    
+
     Args:
         pdc: Pace Duration Curve
-        
+
     Returns:
         FRI ratio (typically 1.02-1.15)
     """
     # FRI uses time-based PDC: 300s (5-min) and 600s (10-min) efforts
-    p5min = pdc.get(300)   # 5-min effort pace
+    p5min = pdc.get(300)  # 5-min effort pace
     p10min = pdc.get(600)  # 10-min effort pace
 
     if p5min is None or p10min is None or p5min <= 0:
@@ -375,10 +362,10 @@ def calculate_fatigue_resistance_index_pace(
 def get_fri_interpretation_pace(fri: float) -> str:
     """
     Get human-readable interpretation of FRI for pace.
-    
+
     Args:
         fri: Fatigue Resistance Index
-        
+
     Returns:
         Polish interpretation string
     """
@@ -420,14 +407,18 @@ def fit_critical_speed_from_pdc(
     for dur, best_pace in pdc.items():
         if best_pace is None or best_pace <= 0:
             continue
-        speed = 1000.0 / best_pace          # m/s
+        speed = 1000.0 / best_pace  # m/s
         times.append(dur)
-        distances.append(speed * dur)        # meters
+        distances.append(speed * dur)  # meters
 
     if len(times) < 2:
         return {
-            "cs_m_s": 0.0, "cs_pace_s_km": 0.0, "cs_pace_str": "--:--",
-            "d_prime_m": 0.0, "r_squared": 0.0, "data_points": len(times),
+            "cs_m_s": 0.0,
+            "cs_pace_s_km": 0.0,
+            "cs_pace_str": "--:--",
+            "d_prime_m": 0.0,
+            "r_squared": 0.0,
+            "data_points": len(times),
             "is_valid": False,
         }
 
@@ -438,7 +429,7 @@ def fit_critical_speed_from_pdc(
 
     cs = max(slope, 0.0)
     d_prime = max(intercept, 0.0)
-    r_sq = r_value ** 2
+    r_sq = r_value**2
     cs_pace = speed_to_pace(cs) if cs > 0 else 0.0
     cs_str = format_pace(cs_pace) + " /km" if cs > 0 else "--:-- /km"
 
@@ -478,8 +469,7 @@ def calculate_wbal_running(
 
     # Convert pace (s/km) -> speed (m/s); guard against zero / nan
     with np.errstate(divide="ignore", invalid="ignore"):
-        speed_arr = np.where((pace_arr > 0) & np.isfinite(pace_arr),
-                             1000.0 / pace_arr, 0.0)
+        speed_arr = np.where((pace_arr > 0) & np.isfinite(pace_arr), 1000.0 / pace_arr, 0.0)
 
     cs_speed = 1000.0 / cs_pace if cs_pace > 0 else 0.0
     dt = 1.0  # 1 Hz sampling

@@ -62,7 +62,7 @@ def normalize_columns_pandas(df_pd: pd.DataFrame) -> pd.DataFrame:
 
     # Apply standard mappings using cached reverse index for O(m) complexity
     mapping = {}
-    cols = set(df_pd.columns)  # O(1) lookup
+    set(df_pd.columns)  # O(1) lookup
     cols_lower = {c.lower().strip() for c in df_pd.columns}
 
     # Pre-built reverse index: canonical -> set of aliases (module-level constant)
@@ -272,11 +272,7 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
         elif "velocity_smooth" in df_pd.columns:
             speed_source = "velocity_smooth"
         if speed_source is not None:
-            df_pd["pace"] = np.where(
-                df_pd[speed_source] > 0,
-                1000.0 / df_pd[speed_source],
-                np.nan
-            )
+            df_pd["pace"] = np.where(df_pd[speed_source] > 0, 1000.0 / df_pd[speed_source], np.nan)
 
     # 2b. Running cadence doubling (Intervals.icu exports half-cadence ~80 strides/min)
     if "cadence" in df_pd.columns:
@@ -305,19 +301,19 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
         df_pd["gct"] = np.where(
             cad > 0,
             60000.0 / cad * 0.65,  # duty cycle ~65%
-            np.nan
+            np.nan,
         )
         df_pd.loc[(df_pd["gct"] < 150) | (df_pd["gct"] > 400), "gct"] = np.nan
 
     # 2d. Stride length derivation from speed and cadence
-    if "pace" in df_pd.columns and "cadence" in df_pd.columns and "stride_length" not in df_pd.columns:
+    if (
+        "pace" in df_pd.columns
+        and "cadence" in df_pd.columns
+        and "stride_length" not in df_pd.columns
+    ):
         speed = np.where(df_pd["pace"] > 0, 1000.0 / df_pd["pace"], 0.0)
         cadence_hz = df_pd["cadence"] / 60.0
-        df_pd["stride_length"] = np.where(
-            cadence_hz > 0,
-            speed / cadence_hz,
-            np.nan
-        )
+        df_pd["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)
 
     # 3. Data Cleaning (HRV)
     df_pd = _process_hrv_column(df_pd)
@@ -355,9 +351,7 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
         chunk = normalize_columns_pandas(chunk)
         if "pace" not in chunk.columns and "velocity_smooth" in chunk.columns:
             chunk["pace"] = np.where(
-                chunk["velocity_smooth"] > 0,
-                1000.0 / chunk["velocity_smooth"],
-                np.nan
+                chunk["velocity_smooth"] > 0, 1000.0 / chunk["velocity_smooth"], np.nan
             )
 
         # Running cadence doubling (Garmin exports half-steps as RPM)
@@ -371,15 +365,15 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
         has_gct = any(col in chunk.columns for col in gct_columns)
         if not has_gct and "cadence" in chunk.columns:
             cad = chunk["cadence"]
-            chunk["gct"] = np.where(
-                cad > 0,
-                60000.0 / cad * 0.65,
-                np.nan
-            )
+            chunk["gct"] = np.where(cad > 0, 60000.0 / cad * 0.65, np.nan)
             chunk.loc[(chunk["gct"] < 150) | (chunk["gct"] > 400), "gct"] = np.nan
 
         # Stride length derivation
-        if "pace" in chunk.columns and "cadence" in chunk.columns and "stride_length" not in chunk.columns:
+        if (
+            "pace" in chunk.columns
+            and "cadence" in chunk.columns
+            and "stride_length" not in chunk.columns
+        ):
             speed = np.where(chunk["pace"] > 0, 1000.0 / chunk["pace"], 0.0)
             cadence_hz = chunk["cadence"] / 60.0
             chunk["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)

@@ -36,6 +36,7 @@ from .session_analysis import apply_smo2_smoothing, calculate_extended_metrics, 
 def _serialize_df_for_cache(df: pd.DataFrame) -> bytes:
     """Serialize DataFrame to bytes for stable cache key."""
     import io
+
     bio = io.BytesIO()
     df.to_parquet(bio, index=False)
     return bio.getvalue()
@@ -56,16 +57,17 @@ def _process_session_cached(
     vt2_watts: float,
 ) -> Tuple[bytes, bytes, Dict[str, Any]]:
     """Cached session processing - internal implementation.
-    
+
     Takes serialized DataFrame bytes for stable hashing.
     Returns serialized DataFrames for cache stability.
     """
     import io
+
     df_raw = pd.read_parquet(io.BytesIO(df_bytes))
 
     is_valid, error_msg = validate_dataframe(df_raw)
     if not is_valid:
-        return b'', b'', {'_error': error_msg}
+        return b"", b"", {"_error": error_msg}
 
     df_clean_pl = process_data(df_raw)
     metrics = calculate_metrics(df_clean_pl, cp_input)
@@ -80,12 +82,12 @@ def _process_session_cached(
     df_plot = apply_smo2_smoothing(df_plot)
     df_plot_resampled = resample_dataframe(df_plot)
 
-    metrics['_decoupling_percent'] = decoupling_percent
-    metrics['_drift_z2'] = drift_z2
+    metrics["_decoupling_percent"] = decoupling_percent
+    metrics["_drift_z2"] = drift_z2
 
     # FIX: Add _df_clean_pl to cached metrics for HRV analysis
     df_clean_pl_bytes = _serialize_df_for_cache(df_clean_pl)
-    metrics['_df_clean_pl_bytes'] = df_clean_pl_bytes
+    metrics["_df_clean_pl_bytes"] = df_clean_pl_bytes
 
     df_plot_bytes = _serialize_df_for_cache(df_plot)
     df_resampled_bytes = _serialize_df_for_cache(df_plot_resampled)
@@ -99,10 +101,10 @@ def process_uploaded_session(
     w_prime_input: float = 0,
     rider_weight: float = 75.0,
     vt1_watts: float = 0,
-    vt2_watts: float = 0
+    vt2_watts: float = 0,
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[Dict[str, Any]], Optional[str]]:
     """Process an uploaded session file through the full analysis pipeline.
-    
+
     Orchestrates:
     1. Data validation
     2. Data processing
@@ -112,7 +114,7 @@ def process_uploaded_session(
     6. Extended metrics
     7. SmO2 smoothing
     8. Resampling
-    
+
     Returns:
     (df_plot, df_plot_resampled, metrics, error_message)
     """
@@ -123,23 +125,25 @@ def process_uploaded_session(
             df_bytes, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
         )
 
-        if metrics.get('_error'):
-            return None, None, None, metrics['_error']
+        if metrics.get("_error"):
+            return None, None, None, metrics["_error"]
 
         import io
+
         df_plot = pd.read_parquet(io.BytesIO(df_plot_bytes))
         df_plot_resampled = pd.read_parquet(io.BytesIO(df_resampled_bytes))
 
         # FIX: Deserialize _df_clean_pl_bytes to _df_clean_pl for HRV analysis
-        if '_df_clean_pl_bytes' in metrics:
-            metrics['_df_clean_pl'] = pd.read_parquet(io.BytesIO(metrics['_df_clean_pl_bytes']))
-            del metrics['_df_clean_pl_bytes']  # Remove bytes to save memory
+        if "_df_clean_pl_bytes" in metrics:
+            metrics["_df_clean_pl"] = pd.read_parquet(io.BytesIO(metrics["_df_clean_pl_bytes"]))
+            del metrics["_df_clean_pl_bytes"]  # Remove bytes to save memory
 
         return df_plot, df_plot_resampled, metrics, None
 
     except Exception as e:
         logger.warning("Cached session processing failed, falling back to uncached: %s", e)
         import io
+
         df_raw = pd.read_parquet(io.BytesIO(df_bytes))
         is_valid, error_msg = validate_dataframe(df_raw)
         if not is_valid:
@@ -158,9 +162,9 @@ def process_uploaded_session(
         df_plot = apply_smo2_smoothing(df_plot)
         df_plot_resampled = resample_dataframe(df_plot)
 
-        metrics['_decoupling_percent'] = decoupling_percent
-        metrics['_drift_z2'] = drift_z2
-        metrics['_df_clean_pl'] = df_clean_pl
+        metrics["_decoupling_percent"] = decoupling_percent
+        metrics["_drift_z2"] = drift_z2
+        metrics["_df_clean_pl"] = df_clean_pl
 
         return df_plot, df_plot_resampled, metrics, None
 
@@ -180,31 +184,28 @@ def prepare_session_record(
         session_date: Date of the session. Defaults to today if not provided.
     """
     return {
-        'date': (session_date or date.today()).isoformat(),
-        'filename': filename,
-        'duration_sec': len(df_plot),
-        'tss': tss_header,
-        'np': np_header,
-        'if_factor': if_header,
-        'avg_watts': metrics.get('avg_watts', 0),
-        'avg_hr': metrics.get('avg_hr', 0),
-        'max_hr': df_plot['heartrate'].max() if 'heartrate' in df_plot.columns else 0,
-        'work_kj': metrics.get('work_kj', 0),
-        'avg_cadence': metrics.get('avg_cadence', 0),
-        'avg_rmssd': metrics.get('avg_rmssd'),
+        "date": (session_date or date.today()).isoformat(),
+        "filename": filename,
+        "duration_sec": len(df_plot),
+        "tss": tss_header,
+        "np": np_header,
+        "if_factor": if_header,
+        "avg_watts": metrics.get("avg_watts", 0),
+        "avg_hr": metrics.get("avg_hr", 0),
+        "max_hr": df_plot["heartrate"].max() if "heartrate" in df_plot.columns else 0,
+        "work_kj": metrics.get("work_kj", 0),
+        "avg_cadence": metrics.get("avg_cadence", 0),
+        "avg_rmssd": metrics.get("avg_rmssd"),
     }
 
 
-def prepare_sticky_header_data(
-    df_plot: pd.DataFrame,
-    metrics: Dict[str, Any]
-) -> Dict[str, Any]:
+def prepare_sticky_header_data(df_plot: pd.DataFrame, metrics: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare data for the sticky header display."""
     return {
-        'avg_power': metrics.get('avg_watts', 0),
-        'avg_hr': metrics.get('avg_hr', 0),
-        'avg_smo2': df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0,
-        'avg_cadence': metrics.get('avg_cadence', 0),
-        'avg_ve': metrics.get('avg_vent', 0),
-        'duration_min': len(df_plot) / 60 if len(df_plot) > 0 else 0,
+        "avg_power": metrics.get("avg_watts", 0),
+        "avg_hr": metrics.get("avg_hr", 0),
+        "avg_smo2": df_plot["smo2"].mean() if "smo2" in df_plot.columns else 0,
+        "avg_cadence": metrics.get("avg_cadence", 0),
+        "avg_ve": metrics.get("avg_vent", 0),
+        "duration_min": len(df_plot) / 60 if len(df_plot) > 0 else 0,
     }

@@ -11,8 +11,6 @@ from pathlib import Path
 
 import numpy as np
 
-from .persistence_constants import INDEX_COLUMNS
-
 logger = logging.getLogger(__name__)
 
 

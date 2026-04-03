@@ -24,18 +24,27 @@ _METABOLIC_COST_PER_PCT = 3.7  # Seminati 2020: ~3.7% extra cost per 1% asymmetr
 
 
 def calculate_running_effectiveness(
-    speed_ms: float, power_w: float, weight_kg: float,
+    speed_ms: float,
+    power_w: float,
+    weight_kg: float,
 ) -> Optional[float]:
     """RE = speed (m/s) / specific_power (W/kg). Range: 0.95-1.10 trained.
     Ref: Coggan/Tredict analysis."""
-    if (np.isnan(speed_ms) or np.isnan(power_w) or np.isnan(weight_kg)
-            or weight_kg <= 0 or power_w < _MIN_POWER or speed_ms < _MIN_SPEED):
+    if (
+        np.isnan(speed_ms)
+        or np.isnan(power_w)
+        or np.isnan(weight_kg)
+        or weight_kg <= 0
+        or power_w < _MIN_POWER
+        or speed_ms < _MIN_SPEED
+    ):
         return None
     return speed_ms / (power_w / weight_kg)
 
 
 def calculate_running_effectiveness_series(
-    df: pd.DataFrame, weight_kg: float,
+    df: pd.DataFrame,
+    weight_kg: float,
 ) -> pd.Series:
     """Rolling 30s RE from DataFrame. Uses velocity_smooth/pace + watts columns.
     Returns pd.Series; input df is not mutated."""
@@ -50,8 +59,11 @@ def calculate_running_effectiveness_series(
         return nan_series
     safe_specific = (power / weight_kg).replace(0, np.nan)
     re_raw = speed / safe_specific
-    return re_raw.rolling(window=_RE_WINDOW, min_periods=1, center=True).mean().rename(
-        "running_effectiveness")
+    return (
+        re_raw.rolling(window=_RE_WINDOW, min_periods=1, center=True)
+        .mean()
+        .rename("running_effectiveness")
+    )
 
 
 def calculate_gct_asymmetry_index(stance_time_balance: pd.Series) -> Dict[str, object]:
@@ -59,13 +71,21 @@ def calculate_gct_asymmetry_index(stance_time_balance: pd.Series) -> Dict[str, o
     Ref: Seminati et al. 2020 (PMC7241633)."""
     clean = stance_time_balance.dropna()
     if clean.empty:
-        return {k: None for k in
-                ("mean_balance", "asymmetry_pct", "dominant_side",
-                 "metabolic_cost_pct", "classification")}
+        return {
+            k: None
+            for k in (
+                "mean_balance",
+                "asymmetry_pct",
+                "dominant_side",
+                "metabolic_cost_pct",
+                "classification",
+            )
+        }
     mean_bal = float(clean.mean())
     asym = abs(mean_bal - 50.0) * 2
-    classification = ("excellent" if asym < 1 else "good" if asym < 2
-                       else "moderate" if asym < 3 else "poor")
+    classification = (
+        "excellent" if asym < 1 else "good" if asym < 2 else "moderate" if asym < 3 else "poor"
+    )
     return {
         "mean_balance": round(mean_bal, 2),
         "asymmetry_pct": round(asym, 2),
@@ -76,16 +96,23 @@ def calculate_gct_asymmetry_index(stance_time_balance: pd.Series) -> Dict[str, o
 
 
 def calculate_leg_spring_stiffness(
-    gct_ms: float, vertical_oscillation_cm: float, body_mass_kg: float,
+    gct_ms: float,
+    vertical_oscillation_cm: float,
+    body_mass_kg: float,
     cadence_spm: Optional[float] = None,
 ) -> Dict[str, object]:
     """Vertical stiffness via Dalleau/Morin spring-mass: kvert = m * omega^2.
     Ref: Morin et al. 2005; Dalleau et al. 1998; Sports Med 2024."""
     empty = {"kvert_kn_m": None, "kleg_kn_m": None, "classification": None}
     try:
-        if (gct_ms <= 0 or body_mass_kg <= 0 or vertical_oscillation_cm <= 0
-                or np.isnan(gct_ms) or np.isnan(vertical_oscillation_cm)
-                or np.isnan(body_mass_kg)):
+        if (
+            gct_ms <= 0
+            or body_mass_kg <= 0
+            or vertical_oscillation_cm <= 0
+            or np.isnan(gct_ms)
+            or np.isnan(vertical_oscillation_cm)
+            or np.isnan(body_mass_kg)
+        ):
             return empty
     except TypeError:
         return empty
@@ -97,13 +124,14 @@ def calculate_leg_spring_stiffness(
         return empty
 
     omega = 2.0 * pi / (tc + tf)
-    kvert = body_mass_kg * omega ** 2 / 1000.0  # N/m -> kN/m
+    kvert = body_mass_kg * omega**2 / 1000.0  # N/m -> kN/m
     cls = "elite" if kvert >= 35 else "trained" if kvert >= 25 else "recreational"
     return {"kvert_kn_m": round(kvert, 2), "kleg_kn_m": None, "classification": cls}
 
 
 def calculate_leg_spring_stiffness_series(
-    df: pd.DataFrame, body_mass_kg: float,
+    df: pd.DataFrame,
+    body_mass_kg: float,
 ) -> pd.DataFrame:
     """Per-row kvert from stance_time (ms), vertical_oscillation (cm), cadence.
     Returns new DataFrame with 'kvert' column. Input df is not mutated."""
@@ -118,8 +146,7 @@ def calculate_leg_spring_stiffness_series(
 
     def _row_kvert(row: pd.Series) -> float:
         cad = row[cad_col] if cad_col and not np.isnan(row[cad_col]) else None
-        out = calculate_leg_spring_stiffness(
-            row[gct_col], row[vo_col], body_mass_kg, cad)
+        out = calculate_leg_spring_stiffness(row[gct_col], row[vo_col], body_mass_kg, cad)
         val = out["kvert_kn_m"]
         return val if val is not None else np.nan
 
@@ -128,6 +155,7 @@ def calculate_leg_spring_stiffness_series(
 
 
 # --- Private helpers --------------------------------------------------------
+
 
 def _extract_speed(df: pd.DataFrame) -> Optional[pd.Series]:
     for col in ("velocity_smooth", "speed", "enhanced_speed"):
@@ -140,7 +168,9 @@ def _extract_speed(df: pd.DataFrame) -> Optional[pd.Series]:
 
 
 def _estimate_flight_time(
-    tc: float, vo_m: float, cadence_spm: Optional[float],
+    tc: float,
+    vo_m: float,
+    cadence_spm: Optional[float],
 ) -> Optional[float]:
     """Estimate flight time from cadence or vertical oscillation (ballistic)."""
     if cadence_spm is not None and cadence_spm > 0:

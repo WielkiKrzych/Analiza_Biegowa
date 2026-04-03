@@ -13,6 +13,7 @@ Output:
 - Adaptation direction (central, peripheral, thermal)
 - Engine Map data
 """
+
 import logging
 import os
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ logger = logging.getLogger("Tri_Dashboard.TrendEngine")
 @dataclass
 class MetricTrend:
     """Single metric trend data."""
+
     name: str
     values: List[float] = field(default_factory=list)
     dates: List[datetime] = field(default_factory=list)
@@ -39,6 +41,7 @@ class MetricTrend:
 @dataclass
 class TrendAnalysis:
     """Complete trend analysis result."""
+
     # Individual metrics
     vt1: MetricTrend = field(default_factory=lambda: MetricTrend("VT1"))
     vt2: MetricTrend = field(default_factory=lambda: MetricTrend("VT2"))
@@ -59,10 +62,12 @@ class TrendAnalysis:
     engine_map: Dict[str, float] = field(default_factory=dict)
 
 
-def load_ramp_test_history(index_path: str = "reports/ramp_tests/index.csv") -> List[Dict[str, Any]]:
+def load_ramp_test_history(
+    index_path: str = "reports/ramp_tests/index.csv",
+) -> List[Dict[str, Any]]:
     """
     Load all ramp test reports from the archive.
-    
+
     Returns:
         List of report data dictionaries sorted by date (oldest first)
     """
@@ -82,17 +87,17 @@ def load_ramp_test_history(index_path: str = "reports/ramp_tests/index.csv") -> 
         return []
 
     # Sort by date ascending
-    if 'test_date' in df.columns:
-        df['test_date'] = pd.to_datetime(df['test_date'])
-        df = df.sort_values(by='test_date', ascending=True)
+    if "test_date" in df.columns:
+        df["test_date"] = pd.to_datetime(df["test_date"])
+        df = df.sort_values(by="test_date", ascending=True)
 
     # Vectorized approach - avoid iterrows()
     def load_report_safe(row):
-        json_path = row.get('json_path')
+        json_path = row.get("json_path")
         if json_path and os.path.exists(json_path):
             try:
                 report = load_ramp_test_report(json_path)
-                report['_test_date'] = row['test_date']
+                report["_test_date"] = row["test_date"]
                 return report
             except Exception as e:
                 logger.warning(f"Error loading report {json_path}: {e}")
@@ -107,38 +112,38 @@ def load_ramp_test_history(index_path: str = "reports/ramp_tests/index.csv") -> 
 def extract_metrics_from_report(report: Dict[str, Any]) -> Dict[str, float]:
     """
     Extract key metrics from a ramp test report.
-    
+
     Returns dict with: vt1, vt2, cp, w_prime, ef, smo2_slope, occlusion_index, hsi
     """
     metrics = {}
 
     # VT1/VT2 from thresholds
-    thresholds = report.get('thresholds', {})
-    vt = thresholds.get('ventilatory', {})
-    metrics['vt1'] = vt.get('vt1', {}).get('midpoint_watts', 0)
-    metrics['vt2'] = vt.get('vt2', {}).get('midpoint_watts', 0)
+    thresholds = report.get("thresholds", {})
+    vt = thresholds.get("ventilatory", {})
+    metrics["vt1"] = vt.get("vt1", {}).get("midpoint_watts", 0)
+    metrics["vt2"] = vt.get("vt2", {}).get("midpoint_watts", 0)
 
     # CP from physiological markers or metadata
-    physio = report.get('physiological_markers', {})
-    metrics['cp'] = physio.get('cp', 0) or thresholds.get('cp_watts', 0)
+    physio = report.get("physiological_markers", {})
+    metrics["cp"] = physio.get("cp", 0) or thresholds.get("cp_watts", 0)
 
     # W'
-    metrics['w_prime'] = physio.get('w_prime', 0) or thresholds.get('w_prime_kj', 0)
+    metrics["w_prime"] = physio.get("w_prime", 0) or thresholds.get("w_prime_kj", 0)
 
     # Efficiency Factor
-    metrics['ef'] = physio.get('efficiency_factor', 0)
+    metrics["ef"] = physio.get("efficiency_factor", 0)
 
     # SmO2 slope from SmO2 thresholds
-    smo2 = thresholds.get('smo2', {})
-    metrics['smo2_slope'] = smo2.get('regression_slope', 0) or smo2.get('slope', 0)
+    smo2 = thresholds.get("smo2", {})
+    metrics["smo2_slope"] = smo2.get("regression_slope", 0) or smo2.get("slope", 0)
 
     # Occlusion Index from biomech
-    biomech = report.get('biomechanical_analysis', {})
-    metrics['occlusion_index'] = biomech.get('occlusion_index', 0)
+    biomech = report.get("biomechanical_analysis", {})
+    metrics["occlusion_index"] = biomech.get("occlusion_index", 0)
 
     # HSI from thermal
-    thermal = report.get('thermal_analysis', {})
-    metrics['hsi'] = thermal.get('max_hsi', 0) or thermal.get('avg_hsi', 0)
+    thermal = report.get("thermal_analysis", {})
+    metrics["hsi"] = thermal.get("max_hsi", 0) or thermal.get("avg_hsi", 0)
 
     return metrics
 
@@ -146,7 +151,7 @@ def extract_metrics_from_report(report: Dict[str, Any]) -> Dict[str, float]:
 def calculate_rate_per_week(values: List[float], dates: List[datetime]) -> float:
     """
     Calculate rate of change per week using linear regression.
-    
+
     Returns % change per week relative to first value.
     """
     if len(values) < 2 or len(dates) < 2:
@@ -181,7 +186,7 @@ def calculate_rate_per_week(values: List[float], dates: List[datetime]) -> float
 def classify_direction(rate: float, is_inverse: bool = False) -> str:
     """
     Classify trend direction based on rate.
-    
+
     Args:
         rate: % change per week
         is_inverse: True if lower is better (e.g., occlusion index)
@@ -202,7 +207,7 @@ def classify_direction(rate: float, is_inverse: bool = False) -> str:
 def analyze_trends(reports: List[Dict[str, Any]]) -> TrendAnalysis:
     """
     Analyze trends across multiple ramp test reports.
-    
+
     Returns TrendAnalysis with all metrics and classifications.
     """
     analysis = TrendAnalysis()
@@ -219,7 +224,7 @@ def analyze_trends(reports: List[Dict[str, Any]]) -> TrendAnalysis:
 
     for report in reports:
         metrics = extract_metrics_from_report(report)
-        test_date = report.get('_test_date')
+        test_date = report.get("_test_date")
         if test_date:
             all_metrics.append(metrics)
             dates.append(pd.to_datetime(test_date))
@@ -232,20 +237,20 @@ def analyze_trends(reports: List[Dict[str, Any]]) -> TrendAnalysis:
 
     # Populate each metric trend
     metric_map = {
-        'vt1': (analysis.vt1, False),
-        'vt2': (analysis.vt2, False),
-        'cp': (analysis.cp, False),
-        'w_prime': (analysis.w_prime, False),
-        'ef': (analysis.ef, False),
-        'smo2_slope': (analysis.smo2_slope, True),  # More negative is worse
-        'occlusion_index': (analysis.occlusion_index, True),  # Lower is better
-        'hsi': (analysis.hsi, True),  # Lower is better
+        "vt1": (analysis.vt1, False),
+        "vt2": (analysis.vt2, False),
+        "cp": (analysis.cp, False),
+        "w_prime": (analysis.w_prime, False),
+        "ef": (analysis.ef, False),
+        "smo2_slope": (analysis.smo2_slope, True),  # More negative is worse
+        "occlusion_index": (analysis.occlusion_index, True),  # Lower is better
+        "hsi": (analysis.hsi, True),  # Lower is better
     }
 
     for metric_key, (trend, is_inverse) in metric_map.items():
         values = [m.get(metric_key, 0) for m in all_metrics]
         # Filter out zeros for proper trend calculation
-        valid_pairs = [(v, d) for v, d in zip(values, dates) if v != 0]
+        valid_pairs = [(v, d) for v, d in zip(values, dates, strict=False) if v != 0]
 
         if len(valid_pairs) >= 2:
             trend.values = [p[0] for p in valid_pairs]
@@ -268,7 +273,7 @@ def analyze_trends(reports: List[Dict[str, Any]]) -> TrendAnalysis:
 def _classify_adaptation_direction(analysis: TrendAnalysis) -> str:
     """
     Classify overall adaptation direction based on metric trends.
-    
+
     Returns: central, peripheral, thermal, or balanced
     """
     scores = {"central": 0, "peripheral": 0, "thermal": 0}
@@ -311,7 +316,7 @@ def _classify_adaptation_direction(analysis: TrendAnalysis) -> str:
 def _calculate_engine_map(analysis: TrendAnalysis) -> Dict[str, float]:
     """
     Calculate normalized engine map values for radar chart.
-    
+
     Returns dict with values 0-100 for each metric.
     """
     engine_map = {}
@@ -331,7 +336,9 @@ def _calculate_engine_map(analysis: TrendAnalysis) -> Dict[str, float]:
     engine_map["W'"] = normalize_rate(analysis.w_prime.rate_per_week)
     engine_map["EF"] = normalize_rate(analysis.ef.rate_per_week)
     engine_map["SmO2"] = normalize_rate(analysis.smo2_slope.rate_per_week, is_inverse=True)
-    engine_map["Occlusion"] = normalize_rate(analysis.occlusion_index.rate_per_week, is_inverse=True)
+    engine_map["Occlusion"] = normalize_rate(
+        analysis.occlusion_index.rate_per_week, is_inverse=True
+    )
     engine_map["HSI"] = normalize_rate(analysis.hsi.rate_per_week, is_inverse=True)
 
     return engine_map
@@ -340,7 +347,7 @@ def _calculate_engine_map(analysis: TrendAnalysis) -> Dict[str, float]:
 def _calculate_adaptation_score(analysis: TrendAnalysis) -> float:
     """
     Calculate overall adaptation score (0-100).
-    
+
     Higher = better overall adaptation.
     """
     # Weight each metric
@@ -361,8 +368,14 @@ def _calculate_adaptation_score(analysis: TrendAnalysis) -> float:
     for metric, weight in weights.items():
         # Map metric name to engine map key
         key_map = {
-            "cp": "CP", "vt1": "VT1", "vt2": "VT2", "w_prime": "W'",
-            "ef": "EF", "smo2_slope": "SmO2", "occlusion_index": "Occlusion", "hsi": "HSI"
+            "cp": "CP",
+            "vt1": "VT1",
+            "vt2": "VT2",
+            "w_prime": "W'",
+            "ef": "EF",
+            "smo2_slope": "SmO2",
+            "occlusion_index": "Occlusion",
+            "hsi": "HSI",
         }
         key = key_map.get(metric, metric)
         score += engine_map.get(key, 50) * weight

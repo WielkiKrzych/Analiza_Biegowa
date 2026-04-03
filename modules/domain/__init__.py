@@ -3,12 +3,13 @@ Domain Module.
 
 Contains domain-level concepts and value objects.
 """
+
 from .session_type import (
-                           RAMP_CONFIDENCE_THRESHOLD,
-                           RampClassificationResult,
-                           SessionType,
-                           classify_ramp_test,
-                           classify_session_type,
+    RAMP_CONFIDENCE_THRESHOLD,
+    RampClassificationResult,
+    SessionType,
+    classify_ramp_test,
+    classify_session_type,
 )
 
 __all__ = [

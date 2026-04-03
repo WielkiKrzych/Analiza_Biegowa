@@ -4,10 +4,7 @@ import os
 import numpy as np  # FIX: Added for distance calculation
 import streamlit as st
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
 
 # --- FRONTEND IMPORTS ---
@@ -55,10 +52,11 @@ class TabRegistry:
     @classmethod
     def render(cls, tab_name: str, *args, **kwargs):
         """Dynamic dispatcher for tab rendering (Lazy loading).
-        
+
         Includes error boundary - tabs fail gracefully without crashing app.
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         if tab_name not in cls._tabs:
@@ -68,6 +66,7 @@ class TabRegistry:
         module_path, func_name = cls._tabs[tab_name]
         try:
             import importlib
+
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
             return func(*args, **kwargs)
@@ -165,10 +164,7 @@ if uploaded_file is not None:
             from services.session_orchestrator import process_uploaded_session
 
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw,
-                rider_weight=runner_weight,
-                vt1_watts=0,
-                vt2_watts=0
+                df_raw, rider_weight=runner_weight, vt1_watts=0, vt2_watts=0
             )
 
             if error_msg:
@@ -182,7 +178,7 @@ if uploaded_file is not None:
             df_clean_pl = metrics.get("_df_clean_pl", df_raw)
 
             # If _df_clean_pl is in metrics, use it; otherwise use df_raw for HRV
-            if df_clean_pl is None or (hasattr(df_clean_pl, 'empty') and df_clean_pl.empty):
+            if df_clean_pl is None or (hasattr(df_clean_pl, "empty") and df_clean_pl.empty):
                 df_clean_pl = df_raw
 
             state.set_data_loaded()
@@ -204,6 +200,7 @@ if uploaded_file is not None:
 
     # 1. Header Metrics — Running only
     from modules.calculations.dual_mode import calculate_normalized_pace
+
     np_header = calculate_normalized_pace(df_plot)
     if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
     tss_header = 0.0
@@ -284,7 +281,7 @@ if uploaded_file is not None:
 
         st.markdown(
             f"""
-        <div style="background: linear-gradient(90deg, {bg_color}, transparent); 
+        <div style="background: linear-gradient(90deg, {bg_color}, transparent);
                     padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
             <span style="font-size: 1.1em;">{session_type.emoji} {msg}</span>
         </div>
@@ -295,7 +292,7 @@ if uploaded_file is not None:
     # Sport Type Indicator - Running only
     st.markdown(
         """
-        <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent); 
+        <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent);
                     padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
             <span style="font-size: 1em;">🏃 Analiza Biegowa</span>
         </div>

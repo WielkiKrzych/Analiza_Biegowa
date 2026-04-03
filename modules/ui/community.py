@@ -6,21 +6,16 @@ Displays anonymized comparisons with other athletes:
 - VO2max rankings
 - Category placement
 """
+
 import plotly.graph_objects as go
 import streamlit as st
 
 from modules.social.comparison import ComparisonService
 
 
-def render_community_tab(
-    ftp: float,
-    weight: float,
-    vo2max: float,
-    age: int,
-    gender: str
-):
+def render_community_tab(ftp: float, weight: float, vo2max: float, age: int, gender: str):
     """Render community comparison tab.
-    
+
     Args:
         ftp: FTP in watts
         weight: Weight in kg
@@ -49,40 +44,38 @@ def render_community_tab(
     for i, ranking in enumerate(rankings):
         with col1 if i == 0 else col2:
             # Percentile gauge
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=ranking.percentile,
-                title={'text': ranking.metric},
-                gauge={
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': _get_percentile_color(ranking.percentile)},
-                    'steps': [
-                        {'range': [0, 25], 'color': 'rgba(255, 0, 0, 0.2)'},
-                        {'range': [25, 50], 'color': 'rgba(255, 165, 0, 0.2)'},
-                        {'range': [50, 75], 'color': 'rgba(255, 255, 0, 0.2)'},
-                        {'range': [75, 100], 'color': 'rgba(0, 255, 0, 0.2)'},
-                    ],
-                    'threshold': {
-                        'line': {'color': 'white', 'width': 2},
-                        'thickness': 0.75,
-                        'value': ranking.percentile
-                    }
-                }
-            ))
-
-            fig.update_layout(
-                template="plotly_dark",
-                height=200,
-                margin=dict(t=50, b=0)
+            fig = go.Figure(
+                go.Indicator(
+                    mode="gauge+number",
+                    value=ranking.percentile,
+                    title={"text": ranking.metric},
+                    gauge={
+                        "axis": {"range": [0, 100]},
+                        "bar": {"color": _get_percentile_color(ranking.percentile)},
+                        "steps": [
+                            {"range": [0, 25], "color": "rgba(255, 0, 0, 0.2)"},
+                            {"range": [25, 50], "color": "rgba(255, 165, 0, 0.2)"},
+                            {"range": [50, 75], "color": "rgba(255, 255, 0, 0.2)"},
+                            {"range": [75, 100], "color": "rgba(0, 255, 0, 0.2)"},
+                        ],
+                        "threshold": {
+                            "line": {"color": "white", "width": 2},
+                            "thickness": 0.75,
+                            "value": ranking.percentile,
+                        },
+                    },
+                )
             )
+
+            fig.update_layout(template="plotly_dark", height=200, margin=dict(t=50, b=0))
 
             st.plotly_chart(fig, use_container_width=True)
 
             st.markdown(f"""
             **{ranking.metric}:** {ranking.value:.2f}
-            
+
             🏆 **Kategoria:** {ranking.category}
-            
+
             📊 Lepszy od **{ranking.percentile:.0f}%** zawodników
             """)
 
@@ -111,8 +104,8 @@ def render_community_tab(
     # Privacy notice
     st.divider()
     st.caption("""
-    ℹ️ **Prywatność:** Wszystkie porównania są wykonywane lokalnie. 
-    Twoje dane nie są wysyłane na zewnętrzne serwery. 
+    ℹ️ **Prywatność:** Wszystkie porównania są wykonywane lokalnie.
+    Twoje dane nie są wysyłane na zewnętrzne serwery.
     Percentyle oparte są na opublikowanych badaniach naukowych.
     """)
 

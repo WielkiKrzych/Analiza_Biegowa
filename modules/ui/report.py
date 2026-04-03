@@ -14,7 +14,7 @@ from modules.config import Config
 ZONE_LABELS = ["Z1", "Z2", "Z3", "Z4", "Z5", "Z6"]
 ZONE_COLORS = ["#808080", "#32CD32", "#FFD700", "#FF8C00", "#FF4500", "#8B0000"]
 # O(1) lookup instead of O(k) list.index() calls
-ZONE_COLOR_MAP: Dict[str, str] = dict(zip(ZONE_LABELS, ZONE_COLORS))
+ZONE_COLOR_MAP: Dict[str, str] = dict(zip(ZONE_LABELS, ZONE_COLORS, strict=False))
 
 # Pre-defined MMP windows (sorted by size for potential rolling optimization)
 MMP_WINDOWS = {"5s": 5, "1m": 60, "5m": 300, "20m": 1200, "60m": 3600}
@@ -96,7 +96,9 @@ def render_report_tab(
     c1.metric("Średnia Moc", f"{metrics.get('avg_watts', 0):.0f} W")
     c2.metric("Średnie Tętno", f"{metrics.get('avg_hr', 0):.0f} BPM")
     c3.metric("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f} %")
-    c4.metric("Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM")  # FIX: SPM (steps/min) for running, not RPM
+    c4.metric(
+        "Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM"
+    )  # FIX: SPM (steps/min) for running, not RPM
 
     vo2max_est = calculate_vo2max(
         df_plot["watts"].rolling(window=300).mean().max() if "watts" in df_plot.columns else 0,
@@ -220,7 +222,13 @@ def render_report_tab(
             range=[0, 100],
         ),
         yaxis4=dict(title="VE", overlaying="y", side="right", showgrid=False, showticklabels=False),
-        yaxis5=dict(title="Tempo [min/km]", overlaying="y", side="right", showgrid=False, autorange="reversed"),
+        yaxis5=dict(
+            title="Tempo [min/km]",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            autorange="reversed",
+        ),
         legend=dict(orientation="h", y=1.05, x=0),
         hovermode="x unified",
     )
@@ -428,7 +436,7 @@ def render_report_tab(
 
             st.info("""
             **💡 Hemodynamika Mięśniowa (SmO2) - Lokalny Monitoring:**
-            
+
             SmO2 to "wskaźnik paliwa" bezpośrednio w pracującym mięśniu (zazwyczaj czworogłowym uda).
             * **Równowaga (Linia Płaska):** Podaż tlenu = Zapotrzebowanie. To stan zrównoważony (Steady State).
             * **Desaturacja (Spadek):** Popyt > Podaż. Wchodzisz w dług tlenowy. Jeśli dzieje się to przy stałej mocy -> zmęczenie metaboliczne.
@@ -466,7 +474,7 @@ def render_report_tab(
 
         st.info("""
         **💡 Reakcja Sercowo-Naczyniowa (HR) - Globalny System:**
-        
+
         Serce to pompa centralna. Jego reakcja jest **opóźniona** względem wysiłku.
         * **Lag (Opóźnienie):** W krótkich interwałach (np. 30s) tętno nie zdąży wzrosnąć, mimo że moc jest max. Nie steruj sprintami na tętno!
         * **Decoupling (Rozjazd):** Jeśli moc jest stała, a tętno rośnie (dryfuje) -> organizm walczy z przegrzaniem lub odwodnieniem.

@@ -160,7 +160,7 @@ def rolling_tte(history: List[Dict], window_days: int = 30) -> Dict[str, float]:
     }
 
 
-def compute_trend_data(history: List[Dict], windows: List[int] = [30, 90]) -> Dict[int, Dict]:
+def compute_trend_data(history: List[Dict], windows: List[int] = None) -> Dict[int, Dict]:
     """Compute trend data for multiple rolling windows.
 
     Args:
@@ -170,6 +170,8 @@ def compute_trend_data(history: List[Dict], windows: List[int] = [30, 90]) -> Di
     Returns:
         Dict mapping window_days to rolling stats
     """
+    if windows is None:
+        windows = [30, 90]
     return {w: rolling_tte(history, w) for w in windows}
 
 
@@ -191,8 +193,8 @@ def get_tte_history_from_db(days: int = 90, target_pct: float = 100.0) -> List[D
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """
-                SELECT id, date, filename, extra_metrics 
-                FROM sessions 
+                SELECT id, date, filename, extra_metrics
+                FROM sessions
                 WHERE date >= date('now', ?)
                 ORDER BY date ASC
             """,
@@ -294,7 +296,7 @@ def _compute_single_session_tte(
 
 def batch_compute_tte_for_all_sessions(
     ftp: float,
-    target_pcts: List[float] = [100.0],
+    target_pcts: List[float] = None,
     tol_pct: float = 5.0,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> Tuple[int, int]:
@@ -306,6 +308,8 @@ def batch_compute_tte_for_all_sessions(
       N=Sessions, G=Directory Glob, L=Load, P=Process, C=Compute
     - Expected Big O: O(N_files + (N * (L + P + C)) / Cores)
     """
+    if target_pcts is None:
+        target_pcts = [100.0]
     db_path = Config.DB_PATH
     training_folder = Path(Config.BASE_DIR) / "treningi_csv"
 
@@ -327,7 +331,6 @@ def batch_compute_tte_for_all_sessions(
             # Using ProcessPoolExecutor for CPU-bound load_data and compute_tte
             with ProcessPoolExecutor() as executor:
                 futures = {}
-                row_map = {}  # future -> row_id
 
                 for i, row in enumerate(sessions):
                     filename = row["filename"]

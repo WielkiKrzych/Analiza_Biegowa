@@ -9,6 +9,7 @@ Per methodology/ramp_test/06_signal_conflicts.md:
 This module DETECTS and DESCRIBES conflicts.
 It does NOT attempt to resolve them.
 """
+
 from typing import List, Optional
 
 import pandas as pd
@@ -26,64 +27,64 @@ CONFLICT_DESCRIPTIONS = {
         "description": "HR rośnie przy stałej mocy",
         "interpretation": "Termoregulacja, odwodnienie lub zmęczenie - HR może nie odzwierciedlać obciążenia",
         "recommendation": "Używaj mocy, nie HR, do definiowania stref",
-        "penalty": 0.1
+        "penalty": 0.1,
     },
     ConflictType.HR_PLATEAU: {
         "name": "HR Plateau",
         "description": "HR przestaje rosnąć mimo wzrostu mocy",
         "interpretation": "Osiągnięcie limitu chronotropowego - potwierdza zbliżenie do maksimum",
         "recommendation": "Może wskazywać na osiągnięcie VT2",
-        "penalty": 0.0  # This is informative, not problematic
+        "penalty": 0.0,  # This is informative, not problematic
     },
     ConflictType.HR_LAG: {
         "name": "HR Lag",
         "description": "HR opóźnione względem mocy",
         "interpretation": "Wolna kinetyka sercowa lub zbyt szybka rampa",
         "recommendation": "Rozważ korektę czasową lub wolniejszy protokół",
-        "penalty": 0.05
+        "penalty": 0.05,
     },
     ConflictType.SMO2_FLAT: {
         "name": "SmO₂ Flat",
         "description": "SmO₂ nie wykazuje spadku mimo wzrostu mocy",
         "interpretation": "Wysoka kapilaryzacja mięśnia, problem z sensorem, lub nieaktywny mięsień pod sensorem",
         "recommendation": "SmO₂ nie może potwierdzić VT - używaj tylko sygnałów systemowych",
-        "penalty": 0.1
+        "penalty": 0.1,
     },
     ConflictType.SMO2_EARLY: {
         "name": "SmO₂ Early",
         "description": "SmO₂ reaguje WCZEŚNIEJ niż VT",
         "interpretation": "Niska kapilaryzacja mięśnia pod sensorem - limit lokalny przed systemowym",
         "recommendation": "VT prawidłowe, SmO₂ wskazuje na potencjał poprawy kapilaryzacji",
-        "penalty": 0.1
+        "penalty": 0.1,
     },
     ConflictType.SMO2_LATE: {
         "name": "SmO₂ Late",
         "description": "SmO₂ reaguje PÓŹNIEJ niż VT",
         "interpretation": "Wysoka rezerwa ekstrakcyjna mięśnia - dobry znak wytrenowania",
         "recommendation": "VT prawidłowe, SmO₂ wskazuje na dobrą lokalną adaptację",
-        "penalty": 0.05  # Lower penalty - positive finding
+        "penalty": 0.05,  # Lower penalty - positive finding
     },
     ConflictType.DFA_ANOMALY: {
         "name": "DFA Anomaly",
         "description": "DFA α1 > 1.0 przy wysokim HR",
         "interpretation": "Artefakty w sygnale RR - ektopie lub problemy z detekcją R-peaks",
         "recommendation": "Wyklucz DFA z analizy VT",
-        "penalty": 0.15
+        "penalty": 0.15,
     },
     ConflictType.DFA_STABLE: {
         "name": "DFA Stable",
         "description": "DFA nie wykazuje typowego spadku",
         "interpretation": "Bardzo wysoki próg lub niewystarczające obciążenie testu",
         "recommendation": "Rozważ dłuższy test lub wyższe obciążenie",
-        "penalty": 0.1
+        "penalty": 0.1,
     },
     ConflictType.DFA_FAST_DROP: {
         "name": "DFA Fast Drop",
         "description": "DFA spada szybciej niż oczekiwano na podstawie HR",
         "interpretation": "Wysoka wrażliwość autonomiczna - VT może być niższe niż sugeruje HR",
         "recommendation": "Uwzględnij wcześniejszy próg niż wskazuje HR",
-        "penalty": 0.05
-    }
+        "penalty": 0.05,
+    },
 }
 
 
@@ -91,29 +92,30 @@ CONFLICT_DESCRIPTIONS = {
 # CONFLICT DETECTION FUNCTIONS
 # ============================================================
 
+
 def detect_conflicts(
     vt_result: Optional[StepVTResult],
     smo2_result: Optional[StepSmO2Result],
     df: Optional[pd.DataFrame] = None,
-    power_column: str = 'watts',
-    hr_column: str = 'hr',
-    time_column: str = 'time'
+    power_column: str = "watts",
+    hr_column: str = "hr",
+    time_column: str = "time",
 ) -> ConflictReport:
     """
     Detect all conflicts in Ramp Test data.
-    
+
     DOES NOT RESOLVE conflicts - only DETECTS and DESCRIBES them.
     Each conflict includes:
     - Type (enum)
     - Description
     - Physiological interpretation
     - Confidence penalty
-    
+
     Args:
         vt_result: VT detection result (from VE)
         smo2_result: SmO₂ analysis result
         df: Optional DataFrame for HR/Power analysis
-        
+
     Returns:
         ConflictReport with all detected conflicts
     """
@@ -147,8 +149,7 @@ def detect_conflicts(
 
 
 def _detect_smo2_vs_vt_conflicts(
-    vt_result: Optional[StepVTResult],
-    smo2_result: Optional[StepSmO2Result]
+    vt_result: Optional[StepVTResult], smo2_result: Optional[StepSmO2Result]
 ) -> List[SignalConflict]:
     """Detect conflicts between SmO₂ and VT."""
     conflicts = []
@@ -163,15 +164,17 @@ def _detect_smo2_vs_vt_conflicts(
     # Check if SmO₂ shows no drop (FLAT)
     if smo2_result.smo2_1_zone is None:
         info = CONFLICT_DESCRIPTIONS[ConflictType.SMO2_FLAT]
-        conflicts.append(SignalConflict(
-            conflict_type=ConflictType.SMO2_FLAT,
-            severity=ConflictSeverity.WARNING,
-            signal_a="SmO2 (LOCAL)",
-            signal_b="VE",
-            description=info["description"],
-            physiological_interpretation=info["interpretation"],
-            confidence_penalty=info["penalty"]
-        ))
+        conflicts.append(
+            SignalConflict(
+                conflict_type=ConflictType.SMO2_FLAT,
+                severity=ConflictSeverity.WARNING,
+                signal_a="SmO2 (LOCAL)",
+                signal_b="VE",
+                description=info["description"],
+                physiological_interpretation=info["interpretation"],
+                confidence_penalty=info["penalty"],
+            )
+        )
         return conflicts
 
     # Check SmO₂ timing vs VT
@@ -180,37 +183,38 @@ def _detect_smo2_vs_vt_conflicts(
 
     if deviation < -20:  # SmO₂ drops >20W BEFORE VT
         info = CONFLICT_DESCRIPTIONS[ConflictType.SMO2_EARLY]
-        conflicts.append(SignalConflict(
-            conflict_type=ConflictType.SMO2_EARLY,
-            severity=ConflictSeverity.WARNING,
-            signal_a="SmO2 (LOCAL)",
-            signal_b="VE",
-            description=f"{info['description']} ({abs(deviation):.0f} W wcześniej)",
-            physiological_interpretation=info["interpretation"],
-            magnitude=abs(deviation),
-            confidence_penalty=info["penalty"]
-        ))
+        conflicts.append(
+            SignalConflict(
+                conflict_type=ConflictType.SMO2_EARLY,
+                severity=ConflictSeverity.WARNING,
+                signal_a="SmO2 (LOCAL)",
+                signal_b="VE",
+                description=f"{info['description']} ({abs(deviation):.0f} W wcześniej)",
+                physiological_interpretation=info["interpretation"],
+                magnitude=abs(deviation),
+                confidence_penalty=info["penalty"],
+            )
+        )
     elif deviation > 20:  # SmO₂ drops >20W AFTER VT
         info = CONFLICT_DESCRIPTIONS[ConflictType.SMO2_LATE]
-        conflicts.append(SignalConflict(
-            conflict_type=ConflictType.SMO2_LATE,
-            severity=ConflictSeverity.INFO,  # Positive finding
-            signal_a="SmO2 (LOCAL)",
-            signal_b="VE",
-            description=f"{info['description']} ({deviation:.0f} W później)",
-            physiological_interpretation=info["interpretation"],
-            magnitude=deviation,
-            confidence_penalty=info["penalty"]
-        ))
+        conflicts.append(
+            SignalConflict(
+                conflict_type=ConflictType.SMO2_LATE,
+                severity=ConflictSeverity.INFO,  # Positive finding
+                signal_a="SmO2 (LOCAL)",
+                signal_b="VE",
+                description=f"{info['description']} ({deviation:.0f} W później)",
+                physiological_interpretation=info["interpretation"],
+                magnitude=deviation,
+                confidence_penalty=info["penalty"],
+            )
+        )
 
     return conflicts
 
 
 def _detect_hr_vs_power_conflicts(
-    df: pd.DataFrame,
-    power_column: str,
-    hr_column: str,
-    time_column: str
+    df: pd.DataFrame, power_column: str, hr_column: str, time_column: str
 ) -> List[SignalConflict]:
     """Detect conflicts between HR and Power."""
     conflicts = []
@@ -223,31 +227,35 @@ def _detect_hr_vs_power_conflicts(
     drift = _detect_cardiac_drift(df, power_column, hr_column, time_column)
     if drift is not None:
         info = CONFLICT_DESCRIPTIONS[ConflictType.CARDIAC_DRIFT]
-        conflicts.append(SignalConflict(
-            conflict_type=ConflictType.CARDIAC_DRIFT,
-            severity=ConflictSeverity.WARNING,
-            signal_a="HR",
-            signal_b="Power",
-            description=f"{info['description']} (+{drift:.0f} bpm)",
-            physiological_interpretation=info["interpretation"],
-            magnitude=drift,
-            confidence_penalty=info["penalty"]
-        ))
+        conflicts.append(
+            SignalConflict(
+                conflict_type=ConflictType.CARDIAC_DRIFT,
+                severity=ConflictSeverity.WARNING,
+                signal_a="HR",
+                signal_b="Power",
+                description=f"{info['description']} (+{drift:.0f} bpm)",
+                physiological_interpretation=info["interpretation"],
+                magnitude=drift,
+                confidence_penalty=info["penalty"],
+            )
+        )
 
     # HR Plateau detection (HR stops rising)
     plateau = _detect_hr_plateau(df, power_column, hr_column, time_column)
     if plateau is not None:
         info = CONFLICT_DESCRIPTIONS[ConflictType.HR_PLATEAU]
-        conflicts.append(SignalConflict(
-            conflict_type=ConflictType.HR_PLATEAU,
-            severity=ConflictSeverity.INFO,  # Informative, not problematic
-            signal_a="HR",
-            signal_b="Power",
-            description=f"{info['description']} (przy {plateau:.0f} W)",
-            physiological_interpretation=info["interpretation"],
-            magnitude=plateau,
-            confidence_penalty=info["penalty"]
-        ))
+        conflicts.append(
+            SignalConflict(
+                conflict_type=ConflictType.HR_PLATEAU,
+                severity=ConflictSeverity.INFO,  # Informative, not problematic
+                signal_a="HR",
+                signal_b="Power",
+                description=f"{info['description']} (przy {plateau:.0f} W)",
+                physiological_interpretation=info["interpretation"],
+                magnitude=plateau,
+                confidence_penalty=info["penalty"],
+            )
+        )
 
     return conflicts
 
@@ -259,11 +267,11 @@ def _detect_cardiac_drift(
     time_column: str,
     min_duration_sec: int = 60,
     power_tolerance: float = 10.0,
-    drift_threshold_bpm: float = 5.0
+    drift_threshold_bpm: float = 5.0,
 ) -> Optional[float]:
     """
     Detect cardiac drift: HR rising at constant power.
-    
+
     Returns drift in bpm if detected, else None.
     """
     # Look at the middle portion of the test (avoid warmup/cooldown)
@@ -286,8 +294,8 @@ def _detect_cardiac_drift(
 
     max_drift = 0.0
     for i in range(0, len(power) - window_size, window_size // 2):
-        segment_power = power[i:i+window_size]
-        segment_hr = hr[i:i+window_size]
+        segment_power = power[i : i + window_size]
+        segment_hr = hr[i : i + window_size]
 
         # Check if power is stable
         if segment_power.std() < power_tolerance:
@@ -308,11 +316,11 @@ def _detect_hr_plateau(
     power_column: str,
     hr_column: str,
     time_column: str,
-    plateau_threshold: float = 3.0
+    plateau_threshold: float = 3.0,
 ) -> Optional[float]:
     """
     Detect HR plateau: HR stops rising despite power increase.
-    
+
     Returns power at plateau if detected, else None.
     """
     n = len(df)
@@ -320,7 +328,7 @@ def _detect_hr_plateau(
         return None
 
     # Look at the last portion of the test
-    end_portion = df.iloc[-n//4:]
+    end_portion = df.iloc[-n // 4 :]
 
     power = end_portion[power_column].values
     hr = end_portion[hr_column].values
@@ -359,20 +367,20 @@ def _generate_recommendations(conflicts: List[SignalConflict]) -> List[str]:
 # CONFIDENCE CALCULATION
 # ============================================================
 
+
 def calculate_conflict_adjusted_confidence(
-    base_confidence: float,
-    conflicts: ConflictReport
+    base_confidence: float, conflicts: ConflictReport
 ) -> float:
     """
     Adjust confidence based on detected conflicts.
-    
+
     Each conflict reduces confidence by its penalty.
     Does NOT attempt to resolve conflicts.
-    
+
     Args:
         base_confidence: Starting confidence (0-1)
         conflicts: Detected conflicts
-    
+
     Returns:
         Adjusted confidence (0-1)
     """
@@ -384,7 +392,7 @@ def calculate_conflict_adjusted_confidence(
 def get_conflict_summary(conflicts: ConflictReport) -> str:
     """
     Generate human-readable summary of conflicts.
-    
+
     For report display.
     """
     if not conflicts.has_conflicts:
@@ -404,8 +412,8 @@ def get_conflict_summary(conflicts: ConflictReport) -> str:
 # ============================================================
 
 __all__ = [
-    'detect_conflicts',
-    'calculate_conflict_adjusted_confidence',
-    'get_conflict_summary',
-    'CONFLICT_DESCRIPTIONS',
+    "detect_conflicts",
+    "calculate_conflict_adjusted_confidence",
+    "get_conflict_summary",
+    "CONFLICT_DESCRIPTIONS",
 ]

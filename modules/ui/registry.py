@@ -4,6 +4,7 @@ UI Plugin Registry.
 Automatically discovers and registers UI tab plugins.
 Provides centralized access to all available tabs.
 """
+
 import importlib
 import logging
 import threading
@@ -33,7 +34,7 @@ class PluginRegistry:
                 tab.render(df, **context)
     """
 
-    _instance: Optional['PluginRegistry'] = None
+    _instance: Optional["PluginRegistry"] = None
     _lock = threading.Lock()
 
     def __new__(cls):
@@ -53,7 +54,7 @@ class PluginRegistry:
 
     def register(self, plugin: UITabPlugin) -> None:
         """Register a plugin instance.
-        
+
         Args:
             plugin: Instance of UITabPlugin subclass
         """
@@ -72,33 +73,24 @@ class PluginRegistry:
         """Get plugin by ID."""
         return self._plugins.get(plugin_id)
 
-    def get_available_tabs(
-        self,
-        df: Optional[pd.DataFrame] = None
-    ) -> List[UITabPlugin]:
+    def get_available_tabs(self, df: Optional[pd.DataFrame] = None) -> List[UITabPlugin]:
         """Get list of tabs available for current data.
-        
+
         Args:
             df: Current DataFrame to check requirements against
-            
+
         Returns:
             List of available UITabPlugin instances, sorted by order
         """
-        available = [
-            plugin for plugin in self._plugins.values()
-            if plugin.is_available(df)
-        ]
+        available = [plugin for plugin in self._plugins.values() if plugin.is_available(df)]
         return sorted(available, key=lambda p: p.config.order)
 
-    def get_grouped_tabs(
-        self,
-        df: Optional[pd.DataFrame] = None
-    ) -> Dict[str, List[UITabPlugin]]:
+    def get_grouped_tabs(self, df: Optional[pd.DataFrame] = None) -> Dict[str, List[UITabPlugin]]:
         """Get tabs grouped by their group configuration.
-        
+
         Args:
             df: Current DataFrame
-            
+
         Returns:
             Dict mapping group_id to list of plugins
         """
@@ -119,12 +111,12 @@ class PluginRegistry:
 
     def discover(self, package_path: str = "modules.ui") -> int:
         """Auto-discover plugins in a package.
-        
+
         Scans the package for UITabPlugin subclasses and registers them.
-        
+
         Args:
             package_path: Dotted path to package (e.g., "modules.ui")
-            
+
         Returns:
             Number of plugins discovered
         """
@@ -135,6 +127,7 @@ class PluginRegistry:
         try:
             # Get the ui module directory
             import modules.ui as ui_module
+
             ui_path = Path(ui_module.__file__).parent
 
             # Scan for Python files
@@ -151,9 +144,11 @@ class PluginRegistry:
                     # Look for UITabPlugin subclasses
                     for attr_name in dir(module):
                         attr = getattr(module, attr_name)
-                        if (isinstance(attr, type) and
-                            issubclass(attr, UITabPlugin) and
-                            attr is not UITabPlugin):
+                        if (
+                            isinstance(attr, type)
+                            and issubclass(attr, UITabPlugin)
+                            and attr is not UITabPlugin
+                        ):
                             try:
                                 plugin_instance = attr()
                                 self.register(plugin_instance)

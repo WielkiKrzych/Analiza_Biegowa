@@ -5,6 +5,7 @@ Defines the SessionType enum and classification logic.
 Every CSV analysis MUST go through session type classification
 before any physiological pipeline runs.
 """
+
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List, Optional, Tuple
@@ -18,6 +19,7 @@ RAMP_CONFIDENCE_THRESHOLD = 0.75
 
 class SessionType(Enum):
     """Domain enum for classifying training session types."""
+
     RAMP_TEST = auto()
     RAMP_TEST_CONDITIONAL = auto()
     TRAINING = auto()
@@ -42,7 +44,7 @@ class SessionType(Enum):
 @dataclass
 class RampClassificationResult:
     """Result of deterministic ramp test classification.
-    
+
     Attributes:
         is_ramp: True if classified as ramp test
         confidence: Confidence score 0.0-1.0
@@ -50,30 +52,33 @@ class RampClassificationResult:
         criteria_met: List of criteria that were met
         criteria_failed: List of criteria that failed
     """
+
     is_ramp: bool
     confidence: float
     reason: str
     criteria_met: List[str]
     criteria_failed: List[str]
-    suggested_type: Optional['SessionType'] = None
+    suggested_type: Optional["SessionType"] = None
 
 
-def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = (30, 60)) -> RampClassificationResult:
+def classify_ramp_test(
+    power: pd.Series, step_duration_range: Tuple[int, int] = (30, 60)
+) -> RampClassificationResult:
     """Deterministic, rule-based ramp test classifier.
-    
+
     Does NOT use ML. Does NOT guess.
     Returns explicit confidence based on criteria fulfillment.
-    
+
     Criteria:
         1. Monotonic power increase (steps must generally go up)
         2. Constant time steps (~30-60s per step)
         3. No recovery phases (no significant power drops mid-test)
         4. Ends with exhaustion (power drops at the end)
-    
+
     Args:
         power: Power series (assumed 1Hz sampling)
         step_duration_range: Expected step duration (min, max) in seconds
-        
+
     Returns:
         RampClassificationResult with is_ramp, confidence, and reason
     """
@@ -88,7 +93,7 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
             confidence=0.0,
             reason=f"Za mało danych ({len(power)}s < {MIN_DURATION_SEC}s minimum)",
             criteria_met=[],
-            criteria_failed=["min_duration"]
+            criteria_failed=["min_duration"],
         )
 
     # Clean and smooth power data
@@ -99,7 +104,7 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
             confidence=0.0,
             reason="Za dużo brakujących danych mocy",
             criteria_met=[],
-            criteria_failed=["valid_data"]
+            criteria_failed=["valid_data"],
         )
 
     power_arr = power_clean.values
@@ -113,13 +118,14 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
             confidence=0.0,
             reason=f"Wykryto tylko {len(steps)} kroków (minimum 3)",
             criteria_met=[],
-            criteria_failed=["min_steps"]
+            criteria_failed=["min_steps"],
         )
 
     # Check monotonicity
-    step_powers = [s['mean_power'] for s in steps]
-    monotonic_increases = sum(1 for i in range(1, len(step_powers))
-                               if step_powers[i] > step_powers[i-1])
+    step_powers = [s["mean_power"] for s in steps]
+    monotonic_increases = sum(
+        1 for i in range(1, len(step_powers)) if step_powers[i] > step_powers[i - 1]
+    )
     monotonicity_ratio = monotonic_increases / (len(step_powers) - 1)
 
     if monotonicity_ratio >= 0.8:
@@ -128,7 +134,7 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
         criteria_failed.append("monotonic_increase")
 
     # --- CRITERION 2: Constant step duration ---
-    step_durations = [s['duration'] for s in steps]
+    step_durations = [s["duration"] for s in steps]
     mean_duration = np.mean(step_durations)
     duration_std = np.std(step_durations)
     duration_cv = duration_std / mean_duration if mean_duration > 0 else 1
@@ -176,7 +182,9 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
         reason = f"Ramp Test wykryty ({met_count}/{total_criteria} kryteriów)"
     elif met_count == 2:
         status = SessionType.RAMP_TEST_CONDITIONAL
-        reason = f"Wykryto Ramp Test (warunkowo) - odchylenia w profilu ({met_count}/{total_criteria})"
+        reason = (
+            f"Wykryto Ramp Test (warunkowo) - odchylenia w profilu ({met_count}/{total_criteria})"
+        )
     else:
         status = SessionType.TRAINING
         failed_str = ", ".join(criteria_failed)
@@ -188,17 +196,17 @@ def classify_ramp_test(power: pd.Series, step_duration_range: Tuple[int, int] = 
         reason=reason,
         criteria_met=criteria_met,
         criteria_failed=criteria_failed,
-        suggested_type=status
+        suggested_type=status,
     )
 
 
 def _detect_power_steps(power_arr: np.ndarray, duration_range: Tuple[int, int]) -> List[dict]:
     """Detect distinct power steps in the data.
-    
+
     Args:
         power_arr: Power values array (1Hz)
         duration_range: Expected (min, max) step duration
-        
+
     Returns:
         List of step dicts with 'start', 'end', 'mean_power', 'duration'
     """
@@ -208,7 +216,14 @@ def _detect_power_steps(power_arr: np.ndarray, duration_range: Tuple[int, int]) 
         window = 5
 
     # Smooth to find plateaus
-    smoothed = pd.Series(power_arr).rolling(window=window, center=True).mean().fillna(method='bfill').fillna(method='ffill').values
+    smoothed = (
+        pd.Series(power_arr)
+        .rolling(window=window, center=True)
+        .mean()
+        .fillna(method="bfill")
+        .fillna(method="ffill")
+        .values
+    )
 
     # Detect step changes using gradient
     gradient = np.gradient(smoothed)
@@ -235,28 +250,32 @@ def _detect_power_steps(power_arr: np.ndarray, duration_range: Tuple[int, int]) 
 
         if duration >= min_dur:
             mean_power = np.mean(power_arr[start:end])
-            steps.append({
-                'start': start,
-                'end': end,
-                'mean_power': mean_power,
-                'duration': duration
-            })
+            steps.append(
+                {"start": start, "end": end, "mean_power": mean_power, "duration": duration}
+            )
 
     return steps
 
 
 def _detect_recovery_phases(power_arr: np.ndarray, threshold_pct: float = 0.20) -> int:
     """Detect recovery phases (significant power drops).
-    
+
     Args:
         power_arr: Power values
         threshold_pct: Drop threshold as percentage
-        
+
     Returns:
         Number of recovery phases detected
     """
     window = 30
-    smoothed = pd.Series(power_arr).rolling(window=window, center=True).mean().fillna(method='bfill').fillna(method='ffill').values
+    smoothed = (
+        pd.Series(power_arr)
+        .rolling(window=window, center=True)
+        .mean()
+        .fillna(method="bfill")
+        .fillna(method="ffill")
+        .values
+    )
 
     recovery_count = 0
     i = 0
@@ -264,15 +283,15 @@ def _detect_recovery_phases(power_arr: np.ndarray, threshold_pct: float = 0.20) 
         current = smoothed[i]
         if current > 50:  # Only check when power is meaningful
             # Look ahead for drops
-            future = smoothed[i:i+window]
+            future = smoothed[i : i + window]
             min_future = np.min(future)
             if min_future < current * (1 - threshold_pct):
                 # Check if it recovers back up
-                if i + 2*window < len(smoothed):
-                    recovery = smoothed[i+window:i+2*window]
+                if i + 2 * window < len(smoothed):
+                    recovery = smoothed[i + window : i + 2 * window]
                     if np.mean(recovery) > min_future * 1.1:
                         recovery_count += 1
-                        i += 2*window
+                        i += 2 * window
                         continue
         i += 1
 
@@ -281,10 +300,10 @@ def _detect_recovery_phases(power_arr: np.ndarray, threshold_pct: float = 0.20) 
 
 def _detect_exhaustion_end(power_arr: np.ndarray) -> bool:
     """Detect if the test ends with exhaustion (power failure).
-    
+
     Args:
         power_arr: Power values
-        
+
     Returns:
         True if exhaustion pattern detected at end
     """
@@ -314,18 +333,15 @@ def _detect_exhaustion_end(power_arr: np.ndarray) -> bool:
     return drop_pct > 0.30
 
 
-def classify_session_type(
-    df: pd.DataFrame,
-    filename: str = ""
-) -> SessionType:
+def classify_session_type(df: pd.DataFrame, filename: str = "") -> SessionType:
     """Classify the session type based on filename and data patterns.
-    
+
     This function MUST be called before any physiological pipeline runs.
-    
+
     Args:
         df: Raw DataFrame loaded from CSV
         filename: Original filename (used for heuristic matching)
-        
+
     Returns:
         SessionType enum value
     """
@@ -374,6 +390,7 @@ def classify_session_type(
 @dataclass
 class ProgressiveClassificationResult:
     """Result of progressive run classification."""
+
     is_progressive: bool
     confidence: float
     reason: str
@@ -383,8 +400,8 @@ class ProgressiveClassificationResult:
 
 def classify_progressive_run(
     pace: pd.Series,
-    step_duration_range: tuple = (300, 900)  # 5-15 min per step
-) -> 'ProgressiveClassificationResult':
+    step_duration_range: tuple = (300, 900),  # 5-15 min per step
+) -> "ProgressiveClassificationResult":
     """Deterministic progressive run classifier."""
     criteria_met = []
     criteria_failed = []
@@ -396,7 +413,7 @@ def classify_progressive_run(
             confidence=0.0,
             reason=f"Za malo danych ({len(pace)}s < {MIN_DURATION_SEC}s minimum)",
             criteria_met=[],
-            criteria_failed=["min_duration"]
+            criteria_failed=["min_duration"],
         )
 
     pace_clean = pace.dropna()
@@ -406,7 +423,7 @@ def classify_progressive_run(
             confidence=0.0,
             reason="Za duzo brakujacych danych",
             criteria_met=[],
-            criteria_failed=["valid_data"]
+            criteria_failed=["valid_data"],
         )
 
     pace_arr = pace_clean.values
@@ -420,13 +437,12 @@ def classify_progressive_run(
             confidence=0.0,
             reason=f"Wykryto tylko {len(steps)} segmentow (minimum 2)",
             criteria_met=[],
-            criteria_failed=["min_steps"]
+            criteria_failed=["min_steps"],
         )
 
     # Check if pace generally decreases (gets faster)
-    step_paces = [s['mean_pace'] for s in steps]
-    decreases = sum(1 for i in range(1, len(step_paces))
-                   if step_paces[i] < step_paces[i-1])
+    step_paces = [s["mean_pace"] for s in steps]
+    decreases = sum(1 for i in range(1, len(step_paces)) if step_paces[i] < step_paces[i - 1])
     monotonicity_ratio = decreases / (len(step_paces) - 1)
 
     if monotonicity_ratio >= 0.7:
@@ -435,8 +451,10 @@ def classify_progressive_run(
         criteria_failed.append("pace_decreasing")
 
     # Check consistent step duration
-    step_durations = [s['duration'] for s in steps]
-    duration_cv = np.std(step_durations) / np.mean(step_durations) if np.mean(step_durations) > 0 else 1
+    step_durations = [s["duration"] for s in steps]
+    duration_cv = (
+        np.std(step_durations) / np.mean(step_durations) if np.mean(step_durations) > 0 else 1
+    )
 
     if duration_cv < 0.5:
         criteria_met.append("consistent_duration")
@@ -460,7 +478,7 @@ def classify_progressive_run(
         confidence=confidence,
         reason=reason,
         criteria_met=criteria_met,
-        criteria_failed=criteria_failed
+        criteria_failed=criteria_failed,
     )
 
 
@@ -499,11 +517,6 @@ def _detect_pace_steps(pace_arr: np.ndarray, duration_range: tuple) -> List[dict
 
         if duration >= min_dur:
             mean_pace = np.mean(pace_arr[start:end])
-            steps.append({
-                'start': start,
-                'end': end,
-                'mean_pace': mean_pace,
-                'duration': duration
-            })
+            steps.append({"start": start, "end": end, "mean_pace": mean_pace, "duration": duration})
 
     return steps

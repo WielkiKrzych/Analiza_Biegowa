@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SmO2PhaseResult:
     """Results from 4-phase SmO2 temporal analysis."""
+
     phases: List[Dict] = field(default_factory=list)
     phase_boundaries: List[int] = field(default_factory=list)
     min_smo2: float = 0.0
@@ -57,7 +58,7 @@ def detect_smo2_phases(
         result.notes.append("Insufficient data for phase detection")
         return result
 
-    time = time_series.values[:len(smo2)] if time_series is not None else np.arange(len(smo2))
+    time = time_series.values[: len(smo2)] if time_series is not None else np.arange(len(smo2))
 
     # Smooth for phase detection (60s rolling median — robust to spikes)
     window = min(61, len(smo2) // 4)
@@ -80,12 +81,12 @@ def detect_smo2_phases(
     # Phase 4: dsmo2 > 0 after minimum (recovery)
 
     n = len(smo2_smooth)
-    min_idx = int(np.argmin(smo2_smooth[n // 4:]) + n // 4)  # skip first quarter for min search
+    min_idx = int(np.argmin(smo2_smooth[n // 4 :]) + n // 4)  # skip first quarter for min search
 
     # Find Phase 1→2 boundary: first sustained negative slope after start
     phase1_end = min_phase_duration_sec
     for i in range(min_phase_duration_sec, min(min_idx, n)):
-        segment = dsmo2_smooth[i:i + min_phase_duration_sec]
+        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
         if len(segment) >= min_phase_duration_sec and np.mean(segment) < -0.01:
             phase1_end = i
             break
@@ -94,7 +95,7 @@ def detect_smo2_phases(
     threshold_flat = 0.005  # near-zero derivative
     phase2_end = min_idx
     for i in range(max(phase1_end + min_phase_duration_sec, min_idx - 300), min_idx + 1):
-        segment = dsmo2_smooth[i:i + min_phase_duration_sec]
+        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
         if len(segment) >= min_phase_duration_sec and abs(np.mean(segment)) < threshold_flat:
             phase2_end = i
             break
@@ -102,7 +103,7 @@ def detect_smo2_phases(
     # Find Phase 3→4 boundary: sustained positive slope after minimum
     phase3_end = min(min_idx + min_phase_duration_sec, n - 1)
     for i in range(min_idx, n - min_phase_duration_sec):
-        segment = dsmo2_smooth[i:i + min_phase_duration_sec]
+        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
         if len(segment) >= min_phase_duration_sec and np.mean(segment) > 0.02:
             phase3_end = i
             break
@@ -110,22 +111,33 @@ def detect_smo2_phases(
     boundaries = sorted(set([0, phase1_end, phase2_end, phase3_end, n - 1]))
     result.phase_boundaries = boundaries
 
-    phase_names = ["Phase 1: Rise", "Phase 2: Desaturation", "Phase 3: Plateau", "Phase 4: Recovery"]
+    phase_names = [
+        "Phase 1: Rise",
+        "Phase 2: Desaturation",
+        "Phase 3: Plateau",
+        "Phase 4: Recovery",
+    ]
     for idx in range(min(len(boundaries) - 1, 4)):
         start, end = boundaries[idx], boundaries[idx + 1]
         if end <= start:
             continue
         seg = smo2_smooth[start:end]
-        slope, _, r, _, _ = stats.linregress(np.arange(len(seg)), seg) if len(seg) > 2 else (0, 0, 0, 0, 0)
-        result.phases.append({
-            "name": phase_names[idx] if idx < len(phase_names) else f"Phase {idx + 1}",
-            "start_sec": int(time[start]) if start < len(time) else start,
-            "end_sec": int(time[min(end, len(time) - 1)]),
-            "duration_sec": int(time[min(end, len(time) - 1)] - time[start]) if start < len(time) else end - start,
-            "mean_smo2": float(np.mean(seg)),
-            "slope_pct_per_sec": float(slope),
-            "r_squared": float(r ** 2),
-        })
+        slope, _, r, _, _ = (
+            stats.linregress(np.arange(len(seg)), seg) if len(seg) > 2 else (0, 0, 0, 0, 0)
+        )
+        result.phases.append(
+            {
+                "name": phase_names[idx] if idx < len(phase_names) else f"Phase {idx + 1}",
+                "start_sec": int(time[start]) if start < len(time) else start,
+                "end_sec": int(time[min(end, len(time) - 1)]),
+                "duration_sec": int(time[min(end, len(time) - 1)] - time[start])
+                if start < len(time)
+                else end - start,
+                "mean_smo2": float(np.mean(seg)),
+                "slope_pct_per_sec": float(slope),
+                "r_squared": float(r**2),
+            }
+        )
 
     # Recovery rate: SmO2 rise in Phase 4
     if len(result.phases) >= 4:
@@ -167,10 +179,10 @@ def classify_smo2_slope(
     x = np.arange(window_sec, dtype=float)
 
     for i in range(half_w, n - half_w):
-        y = smo2.iloc[i - half_w:i + half_w].values
+        y = smo2.iloc[i - half_w : i + half_w].values
         valid = ~np.isnan(y)
         if valid.sum() > window_sec // 2:
-            s, _, _, _, _ = stats.linregress(x[:valid.sum()], y[valid])
+            s, _, _, _, _ = stats.linregress(x[: valid.sum()], y[valid])
             slopes[i] = s
 
     slopes_series = pd.Series(slopes, index=smo2_series.index)
@@ -215,7 +227,7 @@ def calculate_smo2_recovery_halftime(
         return {"halftime_sec": None, "is_valid": False}
 
     # Baseline: mean of last 30s of recovery (or available data)
-    baseline = float(np.mean(recovery[-min(30, len(recovery)):]))
+    baseline = float(np.mean(recovery[-min(30, len(recovery)) :]))
     target = nadir + (baseline - nadir) * 0.5
 
     # Find halftime: first index where SmO2 >= target
@@ -232,9 +244,12 @@ def calculate_smo2_recovery_halftime(
         "recovery_magnitude_pct": baseline - nadir,
         "is_valid": halftime_sec is not None,
         "classification": (
-            "excellent" if halftime_sec is not None and halftime_sec < 30
-            else "good" if halftime_sec is not None and halftime_sec < 60
-            else "average" if halftime_sec is not None and halftime_sec < 120
+            "excellent"
+            if halftime_sec is not None and halftime_sec < 30
+            else "good"
+            if halftime_sec is not None and halftime_sec < 60
+            else "average"
+            if halftime_sec is not None and halftime_sec < 120
             else "slow"
         ),
     }

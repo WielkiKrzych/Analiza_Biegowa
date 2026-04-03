@@ -5,18 +5,16 @@ import pytest
 
 from signals.conflicts import (
     ConflictAnalysisResult,
-    ConflictSeverity,
     ConflictType,
-    SignalConflict,
     detect_cardiac_drift,
-    detect_dfa_anomaly,
     detect_decoupling,
+    detect_dfa_anomaly,
     detect_signal_conflicts,
     detect_smo2_power_conflict,
 )
 from signals.preprocessing import (
-    SignalQualityFlags,
     SeriesResult,
+    SignalQualityFlags,
     detrend_linear,
     detrend_polynomial,
     exponential_smooth,
@@ -27,14 +25,12 @@ from signals.preprocessing import (
 from signals.validation import (
     Severity,
     ValidationResult,
-    ValidationWarning,
     check_data_range,
     check_minimum_length,
     detect_artifacts,
     detect_missing_data,
     validate_signal,
 )
-
 
 # ============================================================
 # Fixtures

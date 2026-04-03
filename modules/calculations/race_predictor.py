@@ -11,7 +11,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 STANDARD_DISTANCES: Dict[str, float] = {
-    "5K": 5.0, "10K": 10.0, "Half Marathon": 21.0975, "Marathon": 42.195,
+    "5K": 5.0,
+    "10K": 10.0,
+    "Half Marathon": 21.0975,
+    "Marathon": 42.195,
 }
 
 _WEIGHT_VDOT = 0.4
@@ -79,9 +82,9 @@ def vdot_from_race(distance_km: float, time_sec: float) -> float:
     v = distance_km * 1000.0 / t_min  # meters per minute
 
     vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v
-    fraction = (0.8
-                + 0.1894393 * math.exp(-0.012778 * t_min)
-                + 0.2989558 * math.exp(-0.1932605 * t_min))
+    fraction = (
+        0.8 + 0.1894393 * math.exp(-0.012778 * t_min) + 0.2989558 * math.exp(-0.1932605 * t_min)
+    )
 
     if fraction <= 0:
         raise ValueError("Invalid fraction -- check inputs.")
@@ -93,8 +96,8 @@ def vdot_predict(vdot: float, target_distance_km: float) -> float:
     if vdot <= 0 or target_distance_km <= 0:
         raise ValueError("VDOT and target distance must be positive.")
 
-    lo = target_distance_km * 120.0   # 2 min/km
-    hi = target_distance_km * 900.0   # 15 min/km
+    lo = target_distance_km * 120.0  # 2 min/km
+    hi = target_distance_km * 900.0  # 15 min/km
 
     for _ in range(100):
         mid = (lo + hi) / 2.0
@@ -108,7 +111,8 @@ def vdot_predict(vdot: float, target_distance_km: float) -> float:
 
 
 def fit_critical_speed(
-    distances_km: List[float], times_sec: List[float],
+    distances_km: List[float],
+    times_sec: List[float],
 ) -> Dict[str, float]:
     """Fit CS and D' from 2+ time trials. Returns cs_m_s, d_prime_m, r_squared."""
     if len(distances_km) < 2 or len(distances_km) != len(times_sec):
@@ -130,7 +134,9 @@ def fit_critical_speed(
 
 
 def critical_speed_predict(
-    cs_m_s: float, d_prime_m: float, target_distance_km: float,
+    cs_m_s: float,
+    d_prime_m: float,
+    target_distance_km: float,
 ) -> float:
     """Predict time (seconds) via Critical Speed model with fatigue correction."""
     if cs_m_s <= 0:
@@ -146,7 +152,8 @@ def critical_speed_predict(
 
 
 def individualized_riegel_exponent(
-    distances_km: List[float], times_sec: List[float],
+    distances_km: List[float],
+    times_sec: List[float],
 ) -> float:
     """Fit Riegel exponent from race history on log-log scale (George 2017)."""
     if len(distances_km) < 2 or len(distances_km) != len(times_sec):
@@ -180,14 +187,14 @@ def multi_model_predict(
         cs_time: Optional[float] = None
         if cs_params is not None:
             cs_time = critical_speed_predict(
-                cs_params["cs_m_s"], cs_params["d_prime_m"], dist_km,
+                cs_params["cs_m_s"],
+                cs_params["d_prime_m"],
+                dist_km,
             )
 
         if cs_time is not None:
             consensus = (
-                _WEIGHT_VDOT * vdot_time
-                + _WEIGHT_RIEGEL * riegel_time
-                + _WEIGHT_CS * cs_time
+                _WEIGHT_VDOT * vdot_time + _WEIGHT_RIEGEL * riegel_time + _WEIGHT_CS * cs_time
             )
         else:
             w = _WEIGHT_VDOT + _WEIGHT_RIEGEL

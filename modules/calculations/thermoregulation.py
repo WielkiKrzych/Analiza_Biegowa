@@ -9,6 +9,7 @@ Key metrics:
 - Time to critical thresholds (38.0°C, 38.5°C)
 - Peak HSI (Heat Strain Index)
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -21,22 +22,23 @@ logger = logging.getLogger("Tri_Dashboard.Thermoregulation")
 @dataclass
 class ThermoProfile:
     """Thermoregulation analysis results."""
+
     # Core metrics
-    max_core_temp: float = 0.0           # Max core temperature [°C]
-    min_core_temp: float = 0.0           # Baseline temperature [°C]
-    delta_core_temp: float = 0.0         # Total temperature rise [°C]
-    delta_per_10min: float = 0.0         # Temperature rise rate [°C / 10min]
+    max_core_temp: float = 0.0  # Max core temperature [°C]
+    min_core_temp: float = 0.0  # Baseline temperature [°C]
+    delta_core_temp: float = 0.0  # Total temperature rise [°C]
+    delta_per_10min: float = 0.0  # Temperature rise rate [°C / 10min]
 
     # Critical thresholds crossing times (minutes from start)
-    time_to_38_0: Optional[float] = None   # Time to reach 38.0°C
-    time_to_38_5: Optional[float] = None   # Time to reach 38.5°C (critical)
+    time_to_38_0: Optional[float] = None  # Time to reach 38.0°C
+    time_to_38_5: Optional[float] = None  # Time to reach 38.5°C (critical)
 
     # Heat strain
-    peak_hsi: float = 0.0                # Peak Heat Strain Index
-    mean_hsi: float = 0.0                # Mean HSI
+    peak_hsi: float = 0.0  # Peak Heat Strain Index
+    mean_hsi: float = 0.0  # Mean HSI
 
     # Classification
-    heat_tolerance: str = "unknown"       # good, moderate, poor
+    heat_tolerance: str = "unknown"  # good, moderate, poor
     classification_color: str = "#808080"
 
     # Interpretation
@@ -56,14 +58,14 @@ def analyze_thermoregulation(
     power: Optional[np.ndarray] = None,
     hsi: Optional[np.ndarray] = None,
     cardiac_drift_pct: Optional[float] = None,
-    ef_drop_pct: Optional[float] = None
+    ef_drop_pct: Optional[float] = None,
 ) -> ThermoProfile:
     """
     Analyze thermoregulation from core temperature data.
-    
+
     ENHANCED: Now considers physiological cost (cardiac drift, EF drop) in addition
     to temperature rise rate. A slow temp rise but high EF drop = POOR tolerance.
-    
+
     Args:
         core_temp: Core temperature values [°C]
         time_seconds: Time array [seconds]
@@ -72,7 +74,7 @@ def analyze_thermoregulation(
         hsi: Optional pre-calculated HSI
         cardiac_drift_pct: Cardiac drift percentage (decoupling)
         ef_drop_pct: Efficiency Factor drop percentage (EF first half vs last half)
-        
+
     Returns:
         ThermoProfile with analysis results
     """
@@ -92,7 +94,9 @@ def analyze_thermoregulation(
 
     # === CORE METRICS ===
     profile.max_core_temp = float(np.max(temp_valid))
-    profile.min_core_temp = float(np.min(temp_valid[:min(60, len(temp_valid))]))  # First minute baseline
+    profile.min_core_temp = float(
+        np.min(temp_valid[: min(60, len(temp_valid))])
+    )  # First minute baseline
     profile.delta_core_temp = profile.max_core_temp - profile.min_core_temp
 
     # Temperature rise rate (°C per 10 minutes)
@@ -176,13 +180,19 @@ def analyze_thermoregulation(
         profile.heat_tolerance = "good"
         profile.classification_color = "#27AE60"  # Green
 
-    logger.info(f"Thermal tolerance: {profile.heat_tolerance} (score={tolerance_score}, "
-                f"delta={profile.delta_per_10min:.2f}, HSI={profile.peak_hsi:.1f}, "
-                f"drift={cardiac_drift_pct}, ef_drop={ef_drop_pct})")
+    logger.info(
+        f"Thermal tolerance: {profile.heat_tolerance} (score={tolerance_score}, "
+        f"delta={profile.delta_per_10min:.2f}, HSI={profile.peak_hsi:.1f}, "
+        f"drift={cardiac_drift_pct}, ef_drop={ef_drop_pct})"
+    )
 
     # === INTERPRETATION ===
-    profile.mechanism_description = _generate_thermo_mechanism(profile, cardiac_drift_pct, ef_drop_pct)
-    profile.hr_ef_connection = _generate_hr_ef_connection(profile, hr, power, cardiac_drift_pct, ef_drop_pct)
+    profile.mechanism_description = _generate_thermo_mechanism(
+        profile, cardiac_drift_pct, ef_drop_pct
+    )
+    profile.hr_ef_connection = _generate_hr_ef_connection(
+        profile, hr, power, cardiac_drift_pct, ef_drop_pct
+    )
     profile.recommendations = _generate_thermo_recommendations(profile)
 
     # Confidence
@@ -194,11 +204,17 @@ def analyze_thermoregulation(
 def _generate_thermo_mechanism(
     profile: ThermoProfile,
     cardiac_drift_pct: Optional[float] = None,
-    ef_drop_pct: Optional[float] = None
+    ef_drop_pct: Optional[float] = None,
 ) -> str:
     """Generate thermoregulation mechanism description."""
-    drift_text = f"Dryf HR: {abs(cardiac_drift_pct):.1f}%. " if cardiac_drift_pct and abs(cardiac_drift_pct) > 5 else ""
-    ef_text = f"Spadek EF: {abs(ef_drop_pct):.1f}%. " if ef_drop_pct and abs(ef_drop_pct) > 5 else ""
+    drift_text = (
+        f"Dryf HR: {abs(cardiac_drift_pct):.1f}%. "
+        if cardiac_drift_pct and abs(cardiac_drift_pct) > 5
+        else ""
+    )
+    ef_text = (
+        f"Spadek EF: {abs(ef_drop_pct):.1f}%. " if ef_drop_pct and abs(ef_drop_pct) > 5 else ""
+    )
 
     if profile.heat_tolerance == "poor":
         return (
@@ -227,11 +243,13 @@ def _generate_hr_ef_connection(
     hr: Optional[np.ndarray],
     power: Optional[np.ndarray],
     cardiac_drift_pct: Optional[float] = None,
-    ef_drop_pct: Optional[float] = None
+    ef_drop_pct: Optional[float] = None,
 ) -> str:
     """Generate connection between thermoregulation and HR/EF."""
     if profile.heat_tolerance == "poor":
-        actual_drift = f" (rzeczywisty dryf: {abs(cardiac_drift_pct):.1f}%)" if cardiac_drift_pct else ""
+        actual_drift = (
+            f" (rzeczywisty dryf: {abs(cardiac_drift_pct):.1f}%)" if cardiac_drift_pct else ""
+        )
         actual_ef = f" Spadek EF: {abs(ef_drop_pct):.1f}%." if ef_drop_pct else ""
         return (
             f"KRYTYCZNE polaczenie z dryfem HR{actual_drift}:{actual_ef} "
@@ -295,18 +313,15 @@ def format_thermo_for_report(profile: ThermoProfile) -> Dict[str, Any]:
             "thresholds": {
                 "good": "<0.3 C/10min",
                 "moderate": "0.3-0.5 C/10min",
-                "poor": ">0.5 C/10min"
-            }
+                "poor": ">0.5 C/10min",
+            },
         },
         "interpretation": {
             "mechanism": profile.mechanism_description,
             "hr_ef_connection": profile.hr_ef_connection,
-            "recommendations": profile.recommendations
+            "recommendations": profile.recommendations,
         },
-        "quality": {
-            "data_points": profile.data_points,
-            "confidence": round(profile.confidence, 2)
-        }
+        "quality": {"data_points": profile.data_points, "confidence": round(profile.confidence, 2)},
     }
 
 

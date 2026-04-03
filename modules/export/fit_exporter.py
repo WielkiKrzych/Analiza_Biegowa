@@ -7,6 +7,7 @@ Creates Garmin FIT format files for compatibility with:
 - Garmin Connect
 - Intervals.icu
 """
+
 import struct
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -53,16 +54,16 @@ class FitExporter:
         df: pd.DataFrame,
         metrics: dict,
         start_time: Optional[datetime] = None,
-        sport: str = "cycling"
+        sport: str = "cycling",
     ) -> bytes:
         """Export DataFrame to FIT format.
-        
+
         Args:
             df: Training data with time, watts, heartrate, cadence, etc.
             metrics: Calculated metrics dict
             start_time: Activity start time (default: now)
             sport: Sport type (cycling, running, etc.)
-            
+
         Returns:
             FIT file bytes
         """
@@ -98,20 +99,20 @@ class FitExporter:
     def _write_header_placeholder(self):
         """Write 14-byte FIT header placeholder."""
         header = struct.pack(
-            '<BBHI4sH',
-            FIT_HEADER_SIZE,    # Header size
+            "<BBHI4sH",
+            FIT_HEADER_SIZE,  # Header size
             FIT_PROTOCOL_VERSION,
             FIT_PROFILE_VERSION,
-            0,                  # Data size (placeholder)
-            b'.FIT',            # Signature
-            0                   # CRC (placeholder)
+            0,  # Data size (placeholder)
+            b".FIT",  # Signature
+            0,  # CRC (placeholder)
         )
         self._buffer.write(header)
 
     def _update_header(self):
         """Update header with actual data size."""
         self._buffer.seek(4)
-        self._buffer.write(struct.pack('<I', self._data_size))
+        self._buffer.write(struct.pack("<I", self._data_size))
         self._buffer.seek(0, 2)  # Return to end
 
     def _add_crc(self):
@@ -120,13 +121,27 @@ class FitExporter:
         self._buffer.seek(0)
         data = self._buffer.read()
         crc = self._calculate_crc(data)
-        self._buffer.write(struct.pack('<H', crc))
+        self._buffer.write(struct.pack("<H", crc))
 
     def _calculate_crc(self, data: bytes) -> int:
         """Calculate FIT CRC16."""
         crc_table = [
-            0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
-            0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400
+            0x0000,
+            0xCC01,
+            0xD801,
+            0x1400,
+            0xF001,
+            0x3C00,
+            0x2800,
+            0xE401,
+            0xA001,
+            0x6C00,
+            0x7800,
+            0xB401,
+            0x5000,
+            0x9C01,
+            0x8801,
+            0x4400,
         ]
 
         crc = 0
@@ -146,32 +161,36 @@ class FitExporter:
         timestamp = int((start_time - self.FIT_EPOCH).total_seconds())
 
         # Definition message
-        definition = self._create_definition(MSG_FILE_ID, [
-            (0, FIT_UINT8, 1),   # type (activity = 4)
-            (1, FIT_UINT16, 1),  # manufacturer
-            (2, FIT_UINT16, 1),  # product
-            (3, FIT_UINT32, 1),  # serial number
-            (4, FIT_UINT32, 1),  # time created
-        ])
+        definition = self._create_definition(
+            MSG_FILE_ID,
+            [
+                (0, FIT_UINT8, 1),  # type (activity = 4)
+                (1, FIT_UINT16, 1),  # manufacturer
+                (2, FIT_UINT16, 1),  # product
+                (3, FIT_UINT32, 1),  # serial number
+                (4, FIT_UINT32, 1),  # time created
+            ],
+        )
         self._write_message(definition)
 
         # Data message
-        data = struct.pack('<BHHII',
-            4,          # type = activity
-            1,          # manufacturer = Garmin
-            1,          # product
-            12345678,   # serial number
-            timestamp   # time created
+        data = struct.pack(
+            "<BHHII",
+            4,  # type = activity
+            1,  # manufacturer = Garmin
+            1,  # product
+            12345678,  # serial number
+            timestamp,  # time created
         )
         self._write_data(MSG_FILE_ID, data)
 
     def _write_records(self, df: pd.DataFrame, start_time: datetime):
         """Write record messages for each data point."""
         # Determine available fields
-        has_power = 'watts' in df.columns
-        has_hr = 'heartrate' in df.columns
-        has_cadence = 'cadence' in df.columns
-        has_speed = 'velocity_smooth' in df.columns or 'speed' in df.columns
+        has_power = "watts" in df.columns
+        has_hr = "heartrate" in df.columns
+        has_cadence = "cadence" in df.columns
+        has_speed = "velocity_smooth" in df.columns or "speed" in df.columns
 
         # Create definition based on available fields
         fields = [
@@ -179,19 +198,19 @@ class FitExporter:
         ]
 
         if has_power:
-            fields.append((7, FIT_UINT16, 1))    # power
+            fields.append((7, FIT_UINT16, 1))  # power
         if has_hr:
-            fields.append((3, FIT_UINT8, 1))     # heart_rate
+            fields.append((3, FIT_UINT8, 1))  # heart_rate
         if has_cadence:
-            fields.append((4, FIT_UINT8, 1))     # cadence
+            fields.append((4, FIT_UINT8, 1))  # cadence
         if has_speed:
-            fields.append((6, FIT_UINT16, 1))    # speed (m/s * 1000)
+            fields.append((6, FIT_UINT16, 1))  # speed (m/s * 1000)
 
         definition = self._create_definition(MSG_RECORD, fields)
         self._write_message(definition)
 
         # Write each record
-        time_col = 'time' if 'time' in df.columns else None
+        time_col = "time" if "time" in df.columns else None
 
         for idx, row in df.iterrows():
             if time_col:
@@ -199,74 +218,74 @@ class FitExporter:
             else:
                 elapsed = idx
 
-            timestamp = int((start_time + timedelta(seconds=elapsed) - self.FIT_EPOCH).total_seconds())
+            timestamp = int(
+                (start_time + timedelta(seconds=elapsed) - self.FIT_EPOCH).total_seconds()
+            )
 
             # Build data based on available fields
-            data_parts = [struct.pack('<I', timestamp)]
+            data_parts = [struct.pack("<I", timestamp)]
 
             if has_power:
-                power = int(row.get('watts', 0))
-                data_parts.append(struct.pack('<H', max(0, min(65535, power))))
+                power = int(row.get("watts", 0))
+                data_parts.append(struct.pack("<H", max(0, min(65535, power))))
 
             if has_hr:
-                hr = int(row.get('heartrate', 0))
-                data_parts.append(struct.pack('<B', max(0, min(255, hr))))
+                hr = int(row.get("heartrate", 0))
+                data_parts.append(struct.pack("<B", max(0, min(255, hr))))
 
             if has_cadence:
-                cadence = int(row.get('cadence', 0))
-                data_parts.append(struct.pack('<B', max(0, min(255, cadence))))
+                cadence = int(row.get("cadence", 0))
+                data_parts.append(struct.pack("<B", max(0, min(255, cadence))))
 
             if has_speed:
-                speed_col = 'velocity_smooth' if 'velocity_smooth' in df.columns else 'speed'
+                speed_col = "velocity_smooth" if "velocity_smooth" in df.columns else "speed"
                 speed = row.get(speed_col, 0) * 1000  # Convert m/s to mm/s
-                data_parts.append(struct.pack('<H', max(0, min(65535, int(speed)))))
+                data_parts.append(struct.pack("<H", max(0, min(65535, int(speed)))))
 
-            self._write_data(MSG_RECORD, b''.join(data_parts))
+            self._write_data(MSG_RECORD, b"".join(data_parts))
 
-    def _write_session(
-        self,
-        df: pd.DataFrame,
-        metrics: dict,
-        start_time: datetime,
-        sport: str
-    ):
+    def _write_session(self, df: pd.DataFrame, metrics: dict, start_time: datetime, sport: str):
         """Write session summary message."""
-        sport_num = {'cycling': 2, 'running': 1, 'swimming': 5}.get(sport, 2)
+        sport_num = {"cycling": 2, "running": 1, "swimming": 5}.get(sport, 2)
 
         timestamp = int((start_time - self.FIT_EPOCH).total_seconds())
         duration = len(df)  # seconds
 
-        avg_power = int(metrics.get('avg_watts', 0))
-        avg_hr = int(metrics.get('avg_hr', 0))
-        max_hr = int(df['heartrate'].max()) if 'heartrate' in df.columns else 0
-        total_work = int(metrics.get('work_kj', 0) * 1000)  # kJ to J
-        np_val = int(metrics.get('np', avg_power))
-        tss = int(metrics.get('tss', 0) * 10)  # TSS * 10
+        avg_power = int(metrics.get("avg_watts", 0))
+        avg_hr = int(metrics.get("avg_hr", 0))
+        max_hr = int(df["heartrate"].max()) if "heartrate" in df.columns else 0
+        total_work = int(metrics.get("work_kj", 0) * 1000)  # kJ to J
+        np_val = int(metrics.get("np", avg_power))
+        tss = int(metrics.get("tss", 0) * 10)  # TSS * 10
 
         # Simplified session message
-        definition = self._create_definition(MSG_SESSION, [
-            (253, FIT_UINT32, 1),  # timestamp
-            (2, FIT_UINT32, 1),    # start_time
-            (7, FIT_UINT32, 1),    # total_elapsed_time
-            (8, FIT_UINT32, 1),    # total_timer_time
-            (5, FIT_UINT8, 1),     # sport
-            (20, FIT_UINT16, 1),   # avg_power
-            (21, FIT_UINT16, 1),   # max_power
-            (16, FIT_UINT8, 1),    # avg_heart_rate
-            (17, FIT_UINT8, 1),    # max_heart_rate
-            (48, FIT_UINT32, 1),   # total_work (joules)
-            (34, FIT_UINT16, 1),   # normalized_power
-            (35, FIT_UINT16, 1),   # training_stress_score
-        ])
+        definition = self._create_definition(
+            MSG_SESSION,
+            [
+                (253, FIT_UINT32, 1),  # timestamp
+                (2, FIT_UINT32, 1),  # start_time
+                (7, FIT_UINT32, 1),  # total_elapsed_time
+                (8, FIT_UINT32, 1),  # total_timer_time
+                (5, FIT_UINT8, 1),  # sport
+                (20, FIT_UINT16, 1),  # avg_power
+                (21, FIT_UINT16, 1),  # max_power
+                (16, FIT_UINT8, 1),  # avg_heart_rate
+                (17, FIT_UINT8, 1),  # max_heart_rate
+                (48, FIT_UINT32, 1),  # total_work (joules)
+                (34, FIT_UINT16, 1),  # normalized_power
+                (35, FIT_UINT16, 1),  # training_stress_score
+            ],
+        )
         self._write_message(definition)
 
-        max_power = int(df['watts'].max()) if 'watts' in df.columns else 0
+        max_power = int(df["watts"].max()) if "watts" in df.columns else 0
 
-        data = struct.pack('<IIIIBBHBBIHHH',
+        data = struct.pack(
+            "<IIIIBBHBBIHHH",
             timestamp,
             timestamp,
-            duration * 1000,   # milliseconds
-            duration * 1000,   # milliseconds
+            duration * 1000,  # milliseconds
+            duration * 1000,  # milliseconds
             sport_num,
             avg_power,
             max_power,
@@ -274,7 +293,7 @@ class FitExporter:
             max_hr,
             total_work,
             np_val,
-            tss
+            tss,
         )
         self._write_data(MSG_SESSION, data)
 
@@ -282,41 +301,41 @@ class FitExporter:
         """Write activity message."""
         timestamp = int((start_time - self.FIT_EPOCH).total_seconds())
 
-        definition = self._create_definition(MSG_ACTIVITY, [
-            (253, FIT_UINT32, 1),  # timestamp
-            (1, FIT_UINT32, 1),    # total_timer_time
-            (2, FIT_UINT16, 1),    # num_sessions
-            (3, FIT_UINT8, 1),     # type (manual = 0)
-            (4, FIT_UINT8, 1),     # event (activity = 26)
-            (5, FIT_UINT8, 1),     # event_type (stop = 1)
-        ])
+        definition = self._create_definition(
+            MSG_ACTIVITY,
+            [
+                (253, FIT_UINT32, 1),  # timestamp
+                (1, FIT_UINT32, 1),  # total_timer_time
+                (2, FIT_UINT16, 1),  # num_sessions
+                (3, FIT_UINT8, 1),  # type (manual = 0)
+                (4, FIT_UINT8, 1),  # event (activity = 26)
+                (5, FIT_UINT8, 1),  # event_type (stop = 1)
+            ],
+        )
         self._write_message(definition)
 
-        data = struct.pack('<IIHBBB',
+        data = struct.pack(
+            "<IIHBBB",
             timestamp,
-            0,       # total_timer_time (already in session)
-            1,       # num_sessions
-            0,       # type = manual
-            26,      # event = activity
-            1        # event_type = stop
+            0,  # total_timer_time (already in session)
+            1,  # num_sessions
+            0,  # type = manual
+            26,  # event = activity
+            1,  # event_type = stop
         )
         self._write_data(MSG_ACTIVITY, data)
 
-    def _create_definition(
-        self,
-        global_msg_num: int,
-        fields: List[tuple]
-    ) -> bytes:
+    def _create_definition(self, global_msg_num: int, fields: List[tuple]) -> bytes:
         """Create definition message for a global message type."""
         num_fields = len(fields)
 
         # Definition header: reserved, arch (little endian), global msg num, num fields
-        header = struct.pack('<xBHB', 0, global_msg_num, num_fields)
+        header = struct.pack("<xBHB", 0, global_msg_num, num_fields)
 
         # Field definitions
-        field_defs = b''
+        field_defs = b""
         for field_num, field_type, field_size in fields:
-            field_defs += struct.pack('<BBB', field_num, field_size, field_type)
+            field_defs += struct.pack("<BBB", field_num, field_size, field_type)
 
         return header + field_defs
 
@@ -324,14 +343,14 @@ class FitExporter:
         """Write a definition message."""
         # Local message 0, definition bit set
         header = 0x40
-        self._buffer.write(struct.pack('B', header))
+        self._buffer.write(struct.pack("B", header))
         self._buffer.write(definition)
         self._data_size += 1 + len(definition)
 
     def _write_data(self, local_msg: int, data: bytes):
         """Write a data message."""
         header = local_msg & 0x0F  # Local message, data bit clear
-        self._buffer.write(struct.pack('B', header))
+        self._buffer.write(struct.pack("B", header))
         self._buffer.write(data)
         self._data_size += 1 + len(data)
 
@@ -343,39 +362,32 @@ class PlatformSync:
         self.fit_exporter = FitExporter()
 
     def export_to_fit(
-        self,
-        df: pd.DataFrame,
-        metrics: dict,
-        filename: Optional[str] = None
+        self, df: pd.DataFrame, metrics: dict, filename: Optional[str] = None
     ) -> bytes:
         """Export to FIT format."""
         return self.fit_exporter.export(df, metrics)
 
-    def prepare_strava_description(
-        self,
-        metrics: dict,
-        notes: str = ""
-    ) -> str:
+    def prepare_strava_description(self, metrics: dict, notes: str = "") -> str:
         """Create description text for Strava upload.
-        
+
         Args:
             metrics: Calculated metrics
             notes: Optional user notes
-            
+
         Returns:
             Formatted description string
         """
         lines = ["📊 Pro Athlete Dashboard Analysis\n"]
 
-        if metrics.get('np'):
+        if metrics.get("np"):
             lines.append(f"⚡ NP: {metrics['np']:.0f} W")
-        if metrics.get('avg_watts'):
+        if metrics.get("avg_watts"):
             lines.append(f"💪 Avg Power: {metrics['avg_watts']:.0f} W")
-        if metrics.get('avg_hr'):
+        if metrics.get("avg_hr"):
             lines.append(f"❤️ Avg HR: {metrics['avg_hr']:.0f} bpm")
-        if metrics.get('work_kj'):
+        if metrics.get("work_kj"):
             lines.append(f"🔋 Work: {metrics['work_kj']:.0f} kJ")
-        if metrics.get('carbs_total'):
+        if metrics.get("carbs_total"):
             lines.append(f"🍎 Carbs: {metrics['carbs_total']:.0f} g")
 
         if notes:
@@ -383,23 +395,19 @@ class PlatformSync:
 
         return "\n".join(lines)
 
-    def prepare_intervals_icu_data(
-        self,
-        df: pd.DataFrame,
-        metrics: dict
-    ) -> dict:
+    def prepare_intervals_icu_data(self, df: pd.DataFrame, metrics: dict) -> dict:
         """Prepare data for Intervals.icu API.
-        
+
         Returns dict compatible with Intervals.icu wellness/activity API.
         """
         return {
             "type": "Ride",
-            "icu_training_load": metrics.get('tss', 0),
-            "icu_intensity": metrics.get('if_factor', 0),
-            "average_watts": metrics.get('avg_watts', 0),
-            "weighted_average_watts": metrics.get('np', 0),
-            "average_heartrate": metrics.get('avg_hr', 0),
-            "max_heartrate": df['heartrate'].max() if 'heartrate' in df.columns else 0,
+            "icu_training_load": metrics.get("tss", 0),
+            "icu_intensity": metrics.get("if_factor", 0),
+            "average_watts": metrics.get("avg_watts", 0),
+            "weighted_average_watts": metrics.get("np", 0),
+            "average_heartrate": metrics.get("avg_hr", 0),
+            "max_heartrate": df["heartrate"].max() if "heartrate" in df.columns else 0,
             "moving_time": len(df),
-            "joules": int(metrics.get('work_kj', 0) * 1000),
+            "joules": int(metrics.get("work_kj", 0) * 1000),
         }

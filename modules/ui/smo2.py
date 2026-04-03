@@ -175,7 +175,11 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
         else:
             m1, m2, m3, m4 = st.columns(4)
 
-        pace_str = f"{int(avg_pace_min):02d}:{int((avg_pace_min % 1) * 60):02d}" if avg_pace > 0 else "--:--"
+        pace_str = (
+            f"{int(avg_pace_min):02d}:{int((avg_pace_min % 1) * 60):02d}"
+            if avg_pace > 0
+            else "--:--"
+        )
         m1.metric("Śr. Tempo", pace_str)
         m2.metric("Śr. SmO2", f"{avg_smo2:.1f} %")
 
@@ -185,7 +189,9 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
             cadence = interval_data["cadence"].mean() if "cadence" in interval_data.columns else 0
             # Use SPM for running, RPM for cycling
             sport_type = st.session_state.get("sport_type", "unknown")
-            cad_unit = "SPM" if sport_type == "running" or "pace" in interval_data.columns else "rpm"
+            cad_unit = (
+                "SPM" if sport_type == "running" or "pace" in interval_data.columns else "rpm"
+            )
             m3.metric("Śr. Kadencja", f"{cadence:.0f} {cad_unit}")
 
         # Kolorowanie trendu
@@ -213,7 +219,9 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
             # Convert pace to min/km for display
             pace_min_display = target_df["pace_smooth"] / 60.0
             # Create formatted pace string as mm:ss
-            pace_formatted = pace_min_display.apply(lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--")
+            pace_formatted = pace_min_display.apply(
+                lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--"
+            )
             fig_smo2.add_trace(
                 go.Scatter(
                     x=target_df["time"],
@@ -325,7 +333,9 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                 # Convert pace to min/km for display
                 pace_min_thb = target_df["pace_smooth"] / 60.0
                 # Create formatted pace string as mm:ss
-                pace_thb_formatted = pace_min_thb.apply(lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--")
+                pace_thb_formatted = pace_min_thb.apply(
+                    lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--"
+                )
                 fig_thb.add_trace(
                     go.Scatter(
                         x=target_df["time"],
@@ -407,41 +417,54 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
 
         smo2_valid = target_df["smo2"].dropna()
         if len(smo2_valid) >= 120:
-            time_s = target_df["time"].iloc[:len(smo2_valid)] if "time" in target_df.columns else None
+            time_s = (
+                target_df["time"].iloc[: len(smo2_valid)] if "time" in target_df.columns else None
+            )
             phase_result = detect_smo2_phases(smo2_valid, time_s)
 
             if phase_result.is_valid:
                 col_ph1, col_ph2, col_ph3 = st.columns(3)
-                col_ph1.metric("Desaturacja", f"{phase_result.desaturation_magnitude:.1f}%",
-                               help="Różnica między max a min SmO2")
-                col_ph2.metric("Recovery Rate", f"{phase_result.recovery_rate_pct_per_min:.2f} %/min",
-                               help="Szybkość reoxygenacji w Fazie 4")
+                col_ph1.metric(
+                    "Desaturacja",
+                    f"{phase_result.desaturation_magnitude:.1f}%",
+                    help="Różnica między max a min SmO2",
+                )
+                col_ph2.metric(
+                    "Recovery Rate",
+                    f"{phase_result.recovery_rate_pct_per_min:.2f} %/min",
+                    help="Szybkość reoxygenacji w Fazie 4",
+                )
                 col_ph3.metric("Fazy wykryte", f"{len(phase_result.phases)}/4")
 
                 # Phase table
                 phase_rows = []
                 for p in phase_result.phases:
                     dur_min = p["duration_sec"] / 60
-                    phase_rows.append({
-                        "Faza": p["name"],
-                        "Start": f"{p['start_sec'] // 60}:{p['start_sec'] % 60:02d}",
-                        "Koniec": f"{p['end_sec'] // 60}:{p['end_sec'] % 60:02d}",
-                        "Czas": f"{dur_min:.1f} min",
-                        "Śr. SmO2": f"{p['mean_smo2']:.1f}%",
-                        "Slope": f"{p['slope_pct_per_sec']:.4f} %/s",
-                        "R²": f"{p['r_squared']:.2f}",
-                    })
+                    phase_rows.append(
+                        {
+                            "Faza": p["name"],
+                            "Start": f"{p['start_sec'] // 60}:{p['start_sec'] % 60:02d}",
+                            "Koniec": f"{p['end_sec'] // 60}:{p['end_sec'] % 60:02d}",
+                            "Czas": f"{dur_min:.1f} min",
+                            "Śr. SmO2": f"{p['mean_smo2']:.1f}%",
+                            "Slope": f"{p['slope_pct_per_sec']:.4f} %/s",
+                            "R²": f"{p['r_squared']:.2f}",
+                        }
+                    )
                 st.dataframe(pd.DataFrame(phase_rows), use_container_width=True, hide_index=True)
 
                 # Recovery halftime
                 halftime = calculate_smo2_recovery_halftime(smo2_valid)
                 if halftime.get("is_valid"):
-                    st.info(f"**Recovery Half-time:** {halftime['halftime_sec']}s — "
-                            f"**{halftime['classification']}** "
-                            f"(nadir {halftime['nadir_pct']:.1f}% → baseline {halftime['baseline_pct']:.1f}%)")
+                    st.info(
+                        f"**Recovery Half-time:** {halftime['halftime_sec']}s — "
+                        f"**{halftime['classification']}** "
+                        f"(nadir {halftime['nadir_pct']:.1f}% → baseline {halftime['baseline_pct']:.1f}%)"
+                    )
             else:
-                st.info("Niewystarczające dane do wykrycia 4 faz SmO2. " +
-                        "; ".join(phase_result.notes))
+                st.info(
+                    "Niewystarczające dane do wykrycia 4 faz SmO2. " + "; ".join(phase_result.notes)
+                )
 
             # Slope classification
             st.markdown("#### Klasyfikacja nachylenia SmO2 (Rodriguez 2023)")
@@ -453,12 +476,17 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
                 sus_pct = counts.get("sustainable", 0) / total * 100
                 thr_pct = counts.get("threshold", 0) / total * 100
                 unsus_pct = counts.get("unsustainable", 0) / total * 100
-                col_s1.metric("Sustainable", f"{sus_pct:.0f}%",
-                              help="Slope > 0: dostawa > zużycie (poniżej CS/CP)")
-                col_s2.metric("Threshold", f"{thr_pct:.0f}%",
-                              help="Slope ≈ 0: na progu")
-                col_s3.metric("Unsustainable", f"{unsus_pct:.0f}%",
-                              help="Slope < 0: zużycie > dostawa (powyżej CS/CP)")
+                col_s1.metric(
+                    "Sustainable",
+                    f"{sus_pct:.0f}%",
+                    help="Slope > 0: dostawa > zużycie (poniżej CS/CP)",
+                )
+                col_s2.metric("Threshold", f"{thr_pct:.0f}%", help="Slope ≈ 0: na progu")
+                col_s3.metric(
+                    "Unsustainable",
+                    f"{unsus_pct:.0f}%",
+                    help="Slope < 0: zużycie > dostawa (powyżej CS/CP)",
+                )
         else:
             st.info("Za mało danych SmO2 do analizy 4-fazowej (min. 120 próbek).")
 
@@ -539,98 +567,98 @@ def render_smo2_tab(target_df, training_notes, uploaded_file_name):
     with st.expander("🫁 TEORIA: Interpretacja SmO2", expanded=False):
         st.markdown("""
         ## Co oznacza SmO2?
-        
-        **SmO2 (Muscle Oxygen Saturation)** to procent hemoglobiny związanej z tlenem w tkance mięśniowej. 
+
+        **SmO2 (Muscle Oxygen Saturation)** to procent hemoglobiny związanej z tlenem w tkance mięśniowej.
         Mierzona przez sensory NIRS (Near-Infrared Spectroscopy), np. **Moxy, TrainRed, Humon Hex**.
-        
+
         | Parametr | Opis |
         |----------|------|
         | **SmO2** | Saturacja tlenu w mięśniu (%) |
         | **THb** | Całkowita hemoglobina - wskaźnik przepływu krwi |
         | **Zakres typowy** | 30% - 80% (zależnie od sensora i umiejscowienia) |
-        
+
         ---
-        
+
         ## Strefy SmO2 i ich znaczenie
-        
+
         | Strefa SmO2 | Interpretacja | Typ wysiłku |
         |-------------|---------------|-------------|
         | **70-80%** | Pełna saturacja, regeneracja | Recovery, rozgrzewka |
         | **50-70%** | Równowaga zużycie/dostawa | Tempo, Sweet Spot |
         | **30-50%** | Desaturacja, próg beztlenowy | Threshold, VO2max |
         | **< 30%** | Głęboka hipoksja, okluzja | Sprint, maksymalny wysiłek |
-        
+
         ---
-        
+
         ## Trend SmO2 (Slope) - Co oznacza nachylenie?
-        
+
         | Trend | Wartość | Interpretacja |
         |-------|---------|---------------|
         | 🟢 **Pozytywny** | > 0 | Reoxygenacja - recovery, spadek obciążenia |
         | 🟡 **Zerowy** | ~ 0 | Równowaga - steady state, zużycie = dostawa |
         | 🔴 **Negatywny** | < 0 | Desaturacja - mięsień zużywa więcej tlenu niż dostaje |
-        
+
         ---
-        
+
         ## THb (Total Hemoglobin) - Przepływ krwi
-        
+
         **THb** odzwierciedla ilość krwi w obszarze pomiaru:
-        
+
         - **⬆️ Wzrost THb**: Większy przepływ krwi (rozszerzenie naczyń, niższa kadencja)
         - **⬇️ Spadek THb**: Okluzja naczyń (wysokie napięcie mięśniowe, niska kadencja + duża siła)
         - **➡️ Stabilny THb**: Prawidłowy przepływ przy stałym obciążeniu
-        
+
         ### Praktyczny przykład:
         - **Podjazd na niskiej kadencji (50 rpm)**: THb spada → napięcie mięśni blokuje przepływ
         - **Płaski teren, wysoka kadencja (95 rpm)**: THb rośnie → "pompa mięśniowa" wspomaga krążenie
-        
+
         ---
-        
+
         ## Zastosowania Treningowe SmO2
-        
+
         ### 1️⃣ Wyznaczanie Progów (VT1, VT2)
         - **VT1 (Próg tlenowy)**: Moment, gdy SmO2 zaczyna stabilnie spadać
         - **VT2 (Próg beztlenowy)**: Gwałtowny spadek SmO2, przejście do metabolizmu beztlenowego
-        
+
         ### 2️⃣ Kontrola Intensywności Interwałów
         - **Start interwału**: SmO2 powinno być wysokie (> 60%)
         - **Koniec interwału**: Obserwuj głębokość desaturacji
         - **Przerwa**: Czekaj na reoxygenację (SmO2 > 70%) przed kolejnym powtórzeniem
-        
+
         ### 3️⃣ Optymalizacja Kadencji
         - Jeśli SmO2 spada szybko przy niskiej kadencji → **zwiększ kadencję**
         - Optymalna kadencja = maksymalna moc przy stabilnym SmO2
-        
+
         ### 4️⃣ Detekcja Zmęczenia
         - **Zmęczenie lokalne**: SmO2 baseline spada w czasie treningu
         - **Zmęczenie centralne**: SmO2 przestaje odpowiadać na zmiany mocy
-        
+
         ---
-        
+
         ## Korelacja SmO2 vs Moc
-        
+
         Wykres scatter pokazuje zależność między mocą a saturacją:
-        
+
         - **Negatywna korelacja** (typowa): Wyższa moc → niższe SmO2
         - **Płaska krzywa**: Dobra wydolność tlenowa, mięśnie dobrze ukrwione
         - **Stroma krzywa**: Szybka desaturacja, limitacja przepływu lub mitochondriów
-        
+
         ### Kolor punktów (czas):
         - **Wczesne punkty (ciemne)**: Początek treningu, świeże mięśnie
         - **Późne punkty (jasne)**: Koniec treningu, kumulacja zmęczenia
-        
+
         Jeśli późne punkty są niżej niż wczesne przy tej samej mocy → **zmęczenie lokalne mięśni**
-        
+
         ---
-        
+
         ## Limitacje Pomiaru SmO2
-        
+
         ⚠️ **Czynniki wpływające na dokładność:**
         - Grubość tkanki tłuszczowej (> 10mm zaburza pomiar)
         - Pozycja sensora (różne mięśnie = różne wartości)
         - Ruch sensora podczas jazdy
         - Światło zewnętrzne (bezpośrednie słońce)
         - Temperatura skóry
-        
+
         💡 **Wskazówka**: Porównuj tylko pomiary z tej samej pozycji sensora!
         """)

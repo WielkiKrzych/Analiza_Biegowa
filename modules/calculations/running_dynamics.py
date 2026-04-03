@@ -45,7 +45,7 @@ def calculate_cadence_stats(cadence_spm: np.ndarray) -> Dict:
         "min_spm": int(np.min(valid_cadence)),
         "max_spm": int(np.max(valid_cadence)),
         "zone": zone,
-        "cv_pct": round(std_spm / mean_spm * 100, 1) if mean_spm > 0 else 0
+        "cv_pct": round(std_spm / mean_spm * 100, 1) if mean_spm > 0 else 0,
     }
 
 
@@ -100,7 +100,9 @@ def calculate_gct_stats(gct_ms: np.ndarray, pace_sec_per_km: Optional[np.ndarray
             mean_pace = float(np.mean(valid_pace[(valid_pace > 0) & (~np.isnan(valid_pace))]))
         else:
             mean_pace = 0.0
-        classification = classify_gct(mean_ms, mean_pace) if mean_pace > 0 else classify_gct(mean_ms, 270.0)
+        classification = (
+            classify_gct(mean_ms, mean_pace) if mean_pace > 0 else classify_gct(mean_ms, 270.0)
+        )
     else:
         classification = classify_gct(mean_ms, 270.0)
 
@@ -109,7 +111,7 @@ def calculate_gct_stats(gct_ms: np.ndarray, pace_sec_per_km: Optional[np.ndarray
         "std_ms": round(float(np.std(valid_gct)), 1),
         "min_ms": int(np.min(valid_gct)),
         "max_ms": int(np.max(valid_gct)),
-        "classification": classification
+        "classification": classification,
     }
 
 
@@ -150,7 +152,7 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
                 "stride_length_std_m": round(float(np.std(raw_step)) * 2, 3),
                 "height_ratio": round(mean_stride / height_m, 2) if height_m > 0 else 0,
                 "samples": len(raw_step),
-                "source": "FIT"
+                "source": "FIT",
             }
 
     speed_m_s = pace_array_to_speed_array(valid["pace"].values)
@@ -171,7 +173,7 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
         "stride_length_std_m": round(float(np.std(stride_length_m)), 3),
         "height_ratio": round(mean_stride / height_m, 2) if height_m > 0 else 0,
         "samples": len(valid),
-        "source": "derived"
+        "source": "derived",
     }
 
 
@@ -202,11 +204,13 @@ def analyze_cadence_drift(cadence_spm: np.ndarray, min_samples: int = 100) -> Di
     return {
         "drift_spm": round(drift_spm, 1),
         "drift_pct": round(drift_pct, 1),
-        "classification": classification
+        "classification": classification,
     }
 
 
-def calculate_running_effectiveness(pace_sec_per_km: float, running_power: float, weight_kg: float) -> float:
+def calculate_running_effectiveness(
+    pace_sec_per_km: float, running_power: float, weight_kg: float
+) -> float:
     """Calculate Running Effectiveness (RE). RE = Speed (m/s) / Power (W/kg)."""
     if pace_sec_per_km <= 0 or running_power <= 0 or weight_kg <= 0:
         return 0.0
@@ -249,7 +253,13 @@ def analyze_vo_efficiency(vo_cm: np.ndarray, cadence_spm: np.ndarray) -> Dict:
     Lower VO at same cadence = better efficiency (less bouncing).
     """
     # Filter valid data (including VO range 2-20 cm)
-    mask = (~np.isnan(vo_cm)) & (~np.isnan(cadence_spm)) & (cadence_spm > 0) & (vo_cm >= 2.0) & (vo_cm <= 20.0)
+    mask = (
+        (~np.isnan(vo_cm))
+        & (~np.isnan(cadence_spm))
+        & (cadence_spm > 0)
+        & (vo_cm >= 2.0)
+        & (vo_cm <= 20.0)
+    )
     if mask.sum() < 10:
         return {}
 
@@ -261,7 +271,7 @@ def analyze_vo_efficiency(vo_cm: np.ndarray, cadence_spm: np.ndarray) -> Dict:
     vo_by_cadence = {}
 
     for i, cad_start in enumerate(cad_bins[:-1]):
-        cad_end = cad_bins[i+1]
+        cad_end = cad_bins[i + 1]
         mask_bin = (cad_valid >= cad_start) & (cad_valid < cad_end)
         if mask_bin.sum() > 5:
             vo_by_cadence[f"{cad_start}-{cad_end}"] = round(float(np.mean(vo_valid[mask_bin])), 1)
@@ -280,9 +290,7 @@ def _find_optimal_cadence(vo_by_cadence: Dict) -> Optional[str]:
 
 
 def calculate_running_effectiveness_from_vo(
-    pace_sec_per_km: float,
-    vo_cm: float,
-    runner_height_cm: float
+    pace_sec_per_km: float, vo_cm: float, runner_height_cm: float
 ) -> Dict:
     """
     Calculate running effectiveness using Vertical Oscillation.

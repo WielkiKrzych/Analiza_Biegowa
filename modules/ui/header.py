@@ -91,8 +91,8 @@ def show_breadcrumb(group: str, section: str = None) -> None:
         st.markdown(
             f"""
         <div class="breadcrumb-nav">
-            🏠 Dashboard <span class="separator">›</span> 
-            {group} <span class="separator">›</span> 
+            🏠 Dashboard <span class="separator">›</span>
+            {group} <span class="separator">›</span>
             <span class="current">{section}</span>
         </div>
         """,
@@ -102,7 +102,7 @@ def show_breadcrumb(group: str, section: str = None) -> None:
         st.markdown(
             f"""
         <div class="breadcrumb-nav">
-            🏠 Dashboard <span class="separator">›</span> 
+            🏠 Dashboard <span class="separator">›</span>
             <span class="current">{group}</span>
         </div>
         """,

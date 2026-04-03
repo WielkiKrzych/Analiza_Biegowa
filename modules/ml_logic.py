@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 # Abstrakcja dla callbacków UI - logika ML nie zależy od Streamlit
 # ============================================================
 
+
 class TrainingCallback(ABC):
     """Abstrakcja dla raportowania postępu treningu ML.
-    
+
     Pozwala na oddzielenie logiki ML od konkretnej implementacji UI.
     """
 
@@ -65,6 +66,7 @@ try:
     import mlx.nn as nn
     import mlx.optimizers as optim
     import mlx.utils
+
     MLX_AVAILABLE = True
 except ImportError:
     pass
@@ -73,6 +75,7 @@ MODEL_FILE = Config.MODEL_FILE
 HISTORY_FILE = Config.HISTORY_FILE
 
 if MLX_AVAILABLE:
+
     class PhysioNet(nn.Module):
         def __init__(self):
             super().__init__()
@@ -90,20 +93,20 @@ if MLX_AVAILABLE:
         flattened_params = {}
         for k, v in model.parameters().items():
             if isinstance(v, dict):
-                 for sub_k, sub_v in v.items():
-                     flattened_params[f"{k}.{sub_v}"] = sub_v
+                for _sub_k, sub_v in v.items():
+                    flattened_params[f"{k}.{sub_v}"] = sub_v
             else:
                 flattened_params[k] = v
         mx.savez(filepath, **dict(mlx.utils.tree_flatten(model.parameters())))
 
     def load_model(model, filepath: str, callback: Optional[TrainingCallback] = None) -> bool:
         """Ładuje wagi modelu z pliku.
-        
+
         Args:
             model: Instancja PhysioNet
             filepath: Ścieżka do pliku z wagami
             callback: Opcjonalny callback do raportowania błędów
-        
+
         Returns:
             True jeśli wagi zostały załadowane, False w przeciwnym razie
         """
@@ -114,14 +117,15 @@ if MLX_AVAILABLE:
                 try:
                     model.update(weights)
                 except Exception:
-                    current_params = model.parameters()
+                    model.parameters()
                     new_params = {}
 
                     for k, v in weights.items():
-                        parts = k.split('.')
+                        parts = k.split(".")
                         if len(parts) == 2:
                             layer, param = parts
-                            if layer not in new_params: new_params[layer] = {}
+                            if layer not in new_params:
+                                new_params[layer] = {}
                             new_params[layer][param] = v
 
                     model.update(new_params)
@@ -139,7 +143,7 @@ if MLX_AVAILABLE:
         history = []
         if os.path.exists(HISTORY_FILE):
             try:
-                with open(HISTORY_FILE, 'r') as f:
+                with open(HISTORY_FILE, "r") as f:
                     history = json.load(f)
             except (json.JSONDecodeError, IOError) as e:
                 logger.debug(f"Could not load history: {e}")
@@ -148,30 +152,30 @@ if MLX_AVAILABLE:
             "timestamp": time.time(),
             "date": time.strftime("%Y-%m-%d %H:%M"),
             "hr_base": float(hr_base) if hr_base is not None else None,
-            "hr_thresh": float(hr_thresh) if hr_thresh is not None else None
+            "hr_thresh": float(hr_thresh) if hr_thresh is not None else None,
         }
         history.append(entry)
 
-        with open(HISTORY_FILE, 'w') as f:
+        with open(HISTORY_FILE, "w") as f:
             json.dump(history, f)
         return history
 
     def predict_only(df, callback: Optional[TrainingCallback] = None) -> Optional[np.ndarray]:
         """Tylko predykcja (bez treningu) - dla automatycznego wykresu.
-        
+
         Args:
             df: DataFrame z danymi treningowymi
             callback: Opcjonalny callback do raportowania błędów
-        
+
         Returns:
             Tablica numpy z predykcjami HR lub None
         """
         if not os.path.exists(MODEL_FILE):
             return None
 
-        w = df['watts_smooth'].values / 500.0
-        c = df['cadence_smooth'].values / 120.0 if 'cadence_smooth' in df else np.zeros_like(w)
-        t = df['time_min'].values / df['time_min'].max()
+        w = df["watts_smooth"].values / 500.0
+        c = df["cadence_smooth"].values / 120.0 if "cadence_smooth" in df else np.zeros_like(w)
+        t = df["time_min"].values / df["time_min"].max()
 
         X_np = np.column_stack((w, c, t)).astype(np.float32)
         X_np = np.nan_to_num(X_np, copy=False)
@@ -184,20 +188,26 @@ if MLX_AVAILABLE:
             return np.array(y_pred_scaled).flatten() * 200.0
         return None
 
-    def filter_and_prepare(df, target_watts: int, tolerance: int = 15,
-                           min_samples: int = 30) -> Tuple[Optional[Any], Optional[Any]]:
+    def filter_and_prepare(
+        df, target_watts: int, tolerance: int = 15, min_samples: int = 30
+    ) -> Tuple[Optional[Any], Optional[Any]]:
         """Filtruje dane do określonej strefy mocy i przygotowuje do treningu."""
-        mask = (df['watts_smooth'] >= target_watts - tolerance) & \
-            (df['watts_smooth'] <= target_watts + tolerance)
+        mask = (df["watts_smooth"] >= target_watts - tolerance) & (
+            df["watts_smooth"] <= target_watts + tolerance
+        )
 
         if mask.sum() < min_samples:
             return None, None
 
         df_filtered = df[mask].copy()
-        w = df_filtered['watts_smooth'].values / 500.0
-        c = df_filtered['cadence_smooth'].values / 120.0 if 'cadence_smooth' in df_filtered else np.zeros_like(w)
-        t = df_filtered['time_min'].values / df['time_min'].max()
-        y = df_filtered['heartrate_smooth'].values / 200.0
+        w = df_filtered["watts_smooth"].values / 500.0
+        c = (
+            df_filtered["cadence_smooth"].values / 120.0
+            if "cadence_smooth" in df_filtered
+            else np.zeros_like(w)
+        )
+        t = df_filtered["time_min"].values / df["time_min"].max()
+        y = df_filtered["heartrate_smooth"].values / 200.0
 
         X_np = np.column_stack((w, c, t)).astype(np.float32)
         X_np = np.nan_to_num(X_np, copy=False)
@@ -209,17 +219,20 @@ if MLX_AVAILABLE:
         Y = mx.array(y_np)
         return X, Y
 
-    def train_cycling_brain(df, epochs: int = Config.ML_EPOCHS,
-                            callback: Optional[TrainingCallback] = None,
-                            training_zones: Optional[List[Tuple[str, int]]] = None):
+    def train_cycling_brain(
+        df,
+        epochs: int = Config.ML_EPOCHS,
+        callback: Optional[TrainingCallback] = None,
+        training_zones: Optional[List[Tuple[str, int]]] = None,
+    ):
         """Trenuje model predykcji HR na podstawie mocy i kadencji.
-        
+
         Args:
             df: DataFrame z danymi treningowymi
             epochs: Liczba epok treningu dla każdej strefy
             callback: Opcjonalny callback do raportowania postępu (DIP)
             training_zones: Lista stref do kalibracji [(nazwa, moc_w)], domyślnie base/thresh
-        
+
         Returns:
             Tuple: (predykcje, hr_base, hr_thresh, czy_załadowano_model, historia)
         """
@@ -236,20 +249,26 @@ if MLX_AVAILABLE:
 
         loaded = load_model(model, MODEL_FILE, callback)
 
-        def mse_loss(pred, target): return mx.mean((pred - target) ** 2)
+        def mse_loss(pred, target):
+            return mx.mean((pred - target) ** 2)
+
         optimizer = optim.Adam(learning_rate=Config.ML_LEARNING_RATE)
+
         def train_step(model, X, y):
             loss = mse_loss(model(X), y)
             return loss
+
         loss_and_grad_fn = nn.value_and_grad(model, train_step)
 
         results = {zone[0]: None for zone in training_zones}
 
         callback.on_status("Trenowanie modelu ogólnego (cały plik)...")
-        w_all = df['watts_smooth'].values / 500.0
-        c_all = df['cadence_smooth'].values / 120.0 if 'cadence_smooth' in df else np.zeros_like(w_all)
-        t_all = df['time_min'].values / df['time_min'].max()
-        y_all = df['heartrate_smooth'].values / 200.0
+        w_all = df["watts_smooth"].values / 500.0
+        c_all = (
+            df["cadence_smooth"].values / 120.0 if "cadence_smooth" in df else np.zeros_like(w_all)
+        )
+        t_all = df["time_min"].values / df["time_min"].max()
+        y_all = df["heartrate_smooth"].values / 200.0
 
         X_all_np = np.column_stack((w_all, c_all, t_all)).astype(np.float32)
         X_all_np = np.nan_to_num(X_all_np, copy=False)
@@ -288,7 +307,7 @@ if MLX_AVAILABLE:
                         step += 10
                         callback.on_progress(step, total_steps)
 
-                in_vec = mx.array([[watts/500.0, 80.0/120.0, 0.5]])
+                in_vec = mx.array([[watts / 500.0, 80.0 / 120.0, 0.5]])
                 pred = float(model(in_vec)[0][0]) * 200.0
                 results[name] = pred
             else:
@@ -306,12 +325,19 @@ else:
 
     class TrainingCallback(ABC):
         """Pusta definicja dla kompatybilności."""
+
         pass
 
     class SilentCallback:
         """Pusta definicja dla kompatybilności."""
+
         pass
 
-    def train_cycling_brain(*args, **kwargs): return None, None, None, None, None
-    def predict_only(*args, **kwargs): return None
-    def update_history(*args, **kwargs): return []
+    def train_cycling_brain(*args, **kwargs):
+        return None, None, None, None, None
+
+    def predict_only(*args, **kwargs):
+        return None
+
+    def update_history(*args, **kwargs):
+        return []

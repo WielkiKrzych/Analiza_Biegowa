@@ -11,6 +11,7 @@ Chart shows:
 - Annotation about SmO₂ being a local signal
 - Footer with test_id and method version
 """
+
 from typing import Any, Dict, Optional
 
 import matplotlib.pyplot as plt
@@ -28,26 +29,26 @@ def generate_smo2_power_chart(
     report_data: Dict[str, Any],
     config: Optional[Any] = None,
     output_path: Optional[str] = None,
-    source_df: Optional["pd.DataFrame"] = None
+    source_df: Optional["pd.DataFrame"] = None,
 ) -> bytes:
     """Generate SmO₂ vs Pace chart with LT1/LT2 range bands."""
     # Handle config as dict if passed, or use defaults
-    if hasattr(config, '__dict__'):
+    if hasattr(config, "__dict__"):
         cfg = config.__dict__
     elif isinstance(config, dict):
         cfg = config
     else:
         cfg = {}
 
-    figsize = cfg.get('figsize', (10, 6))
-    dpi = cfg.get('dpi', 150)
-    font_size = cfg.get('font_size', 10)
-    title_size = cfg.get('title_size', 14)
-    method_version = cfg.get('method_version', '1.0.0')
+    figsize = cfg.get("figsize", (10, 6))
+    dpi = cfg.get("dpi", 150)
+    font_size = cfg.get("font_size", 10)
+    title_size = cfg.get("title_size", 14)
+    method_version = cfg.get("method_version", "1.0.0")
 
     # Extract data
     time_series = report_data.get("time_series", {})
-    thresholds = report_data.get("thresholds", {})
+    report_data.get("thresholds", {})
     metadata = report_data.get("metadata", {})
     smo2_context = report_data.get("smo2_context", {})
 
@@ -57,14 +58,24 @@ def generate_smo2_power_chart(
         df.columns = df.columns.str.lower().str.strip()
 
         # Get pace data (instead of power)
-        pace_col = next((c for c in ['pace', 'pace_smooth', 'pace_sec_per_km', 'tempo'] if c in df.columns), None)
+        pace_col = next(
+            (c for c in ["pace", "pace_smooth", "pace_sec_per_km", "tempo"] if c in df.columns),
+            None,
+        )
 
         # Get smo2 data
-        smo2_col = next((c for c in ['smo2', 'smo2_pct', 'muscle_oxygen', 'smo2_smooth'] if c in df.columns), None)
+        smo2_col = next(
+            (c for c in ["smo2", "smo2_pct", "muscle_oxygen", "smo2_smooth"] if c in df.columns),
+            None,
+        )
 
         if pace_col and smo2_col:
             # Filter out NaN values and convert pace to min/km
-            mask = ~(df[pace_col].isna() | df[smo2_col].isna()) & (df[pace_col] > 0) & (df[pace_col] < 1200)
+            mask = (
+                ~(df[pace_col].isna() | df[smo2_col].isna())
+                & (df[pace_col] > 0)
+                & (df[pace_col] < 1200)
+            )
             pace_sec_data = df.loc[mask, pace_col].tolist()
             smo2_data = df.loc[mask, smo2_col].tolist()
             # Convert pace to min/km for display
@@ -80,7 +91,7 @@ def generate_smo2_power_chart(
     # Handle missing data
     if not pace_data or not smo2_data:
         empty_result = create_empty_figure("Brak danych SmO₂", "SmO₂ vs Tempo", output_path, **cfg)
-        return empty_result if output_path else empty_result.to_image(format='png')
+        return empty_result if output_path else empty_result.to_image(format="png")
 
     # Get SmO2 drop point from smo2_context (convert watts to pace if available)
     drop_point = smo2_context.get("drop_point", {})
@@ -91,9 +102,9 @@ def generate_smo2_power_chart(
         lt1_pace_sec = 0
 
     # MANUAL OVERRIDE: Check config for manual SmO2 LT1 (priority over saved)
-    manual_overrides = cfg.get('manual_overrides', {})
-    if manual_overrides.get('smo2_lt1_pace') and manual_overrides['smo2_lt1_pace'] > 0:
-        lt1_pace_sec = float(manual_overrides['smo2_lt1_pace'])
+    manual_overrides = cfg.get("manual_overrides", {})
+    if manual_overrides.get("smo2_lt1_pace") and manual_overrides["smo2_lt1_pace"] > 0:
+        lt1_pace_sec = float(manual_overrides["smo2_lt1_pace"])
 
     # Define LT ranges in min/km (±5% for visual band width)
     if lt1_pace_sec:
@@ -106,46 +117,79 @@ def generate_smo2_power_chart(
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
     # Raw scatter plot SmO2 vs Pace (NO SMOOTHING)
-    ax.scatter(pace_data, smo2_data, c=get_color("smo2"),
-               alpha=0.4, s=12, label="SmO₂", zorder=3, edgecolors='none')
+    ax.scatter(
+        pace_data,
+        smo2_data,
+        c=get_color("smo2"),
+        alpha=0.4,
+        s=12,
+        label="SmO₂",
+        zorder=3,
+        edgecolors="none",
+    )
 
     # LT1 vertical range band (semi-transparent) - SmO2 drop point
     if lt1_range:
-        ax.axvspan(lt1_range[0], lt1_range[1],
-                   alpha=0.2, color=get_color("vt1"),
-                   zorder=1, label=f"SmO₂ Drop: {_sec_to_min(lt1_pace_sec):.2f} min/km")
+        ax.axvspan(
+            lt1_range[0],
+            lt1_range[1],
+            alpha=0.2,
+            color=get_color("vt1"),
+            zorder=1,
+            label=f"SmO₂ Drop: {_sec_to_min(lt1_pace_sec):.2f} min/km",
+        )
 
     # Axis labels
-    ax.set_xlabel("Tempo [min/km]", fontsize=font_size, fontweight='medium')
-    ax.set_ylabel("SmO₂ [%]", fontsize=font_size, fontweight='medium')
+    ax.set_xlabel("Tempo [min/km]", fontsize=font_size, fontweight="medium")
+    ax.set_ylabel("SmO₂ [%]", fontsize=font_size, fontweight="medium")
 
     # Title
-    ax.set_title("SmO₂ vs Tempo", fontsize=title_size, fontweight='bold', pad=15)
+    ax.set_title("SmO₂ vs Tempo", fontsize=title_size, fontweight="bold", pad=15)
 
     # Invert X-axis (lower pace = faster)
     ax.invert_xaxis()
 
     # Legend
-    ax.legend(loc='upper right', fontsize=font_size - 1,
-              framealpha=0.9, edgecolor='none')
+    ax.legend(loc="upper right", fontsize=font_size - 1, framealpha=0.9, edgecolor="none")
 
     # Apply common styling
     apply_common_style(fig, ax, **cfg)
 
     # Important annotation about SmO₂ interpretation
-    ax.text(0.5, -0.12,
-            "ℹ️ SmO₂ jest sygnałem lokalnym – interpretować kontekstowo",
-            ha='center', va='top', fontsize=9, style='italic',
-            color=get_color("secondary"), transform=ax.transAxes)
+    ax.text(
+        0.5,
+        -0.12,
+        "ℹ️ SmO₂ jest sygnałem lokalnym – interpretować kontekstowo",
+        ha="center",
+        va="top",
+        fontsize=9,
+        style="italic",
+        color=get_color("secondary"),
+        transform=ax.transAxes,
+    )
 
     # Footer with test_id and method version
     session_id = metadata.get("session_id", "unknown")[:8]
-    fig.text(0.01, 0.01, f"ID: {session_id}",
-             ha='left', va='bottom', fontsize=8,
-             color=get_color("secondary"), style='italic')
-    fig.text(0.99, 0.01, f"v{method_version}",
-             ha='right', va='bottom', fontsize=8,
-             color=get_color("secondary"), style='italic')
+    fig.text(
+        0.01,
+        0.01,
+        f"ID: {session_id}",
+        ha="left",
+        va="bottom",
+        fontsize=8,
+        color=get_color("secondary"),
+        style="italic",
+    )
+    fig.text(
+        0.99,
+        0.01,
+        f"v{method_version}",
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color=get_color("secondary"),
+        style="italic",
+    )
 
     plt.tight_layout()
 

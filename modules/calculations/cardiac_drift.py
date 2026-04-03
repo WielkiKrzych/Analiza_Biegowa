@@ -12,6 +12,7 @@ Key metrics:
 - Drift classification: minimal (<5%), moderate (5-10%), high (>10%)
 - Drift type: cardiac, thermal, metabolic
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -25,24 +26,25 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CardiacDriftProfile:
     """Cardiac drift analysis results."""
+
     # Core EF metrics
-    ef_start: float = 0.0              # EF at test start [W/bpm]
-    ef_end: float = 0.0                # EF at test end [W/bpm]
-    delta_ef_abs: float = 0.0          # Absolute change [W/bpm]
-    delta_ef_pct: float = 0.0          # Percentage change [%]
+    ef_start: float = 0.0  # EF at test start [W/bpm]
+    ef_end: float = 0.0  # EF at test end [W/bpm]
+    delta_ef_abs: float = 0.0  # Absolute change [W/bpm]
+    delta_ef_pct: float = 0.0  # Percentage change [%]
 
     # EF vs Temperature relationship
-    ef_vs_temp_slope: float = 0.0      # EF change per °C [W/bpm/°C]
+    ef_vs_temp_slope: float = 0.0  # EF change per °C [W/bpm/°C]
     temp_at_10pct_drop: Optional[float] = None  # Core temp where EF drops 10%
 
     # Key signals for correlation
-    hsi_peak: float = 0.0              # Peak Heat Strain Index
-    smo2_drift_pct: float = 0.0        # SmO2 drift percentage
-    hr_drift_pct: float = 0.0          # HR drift percentage
+    hsi_peak: float = 0.0  # Peak Heat Strain Index
+    smo2_drift_pct: float = 0.0  # SmO2 drift percentage
+    hr_drift_pct: float = 0.0  # HR drift percentage
 
     # Classification
     drift_classification: str = "unknown"  # minimal, moderate, high
-    drift_type: str = "unknown"            # cardiac, thermal, metabolic, mixed
+    drift_type: str = "unknown"  # cardiac, thermal, metabolic, mixed
     classification_color: str = "#808080"
 
     # Interpretation
@@ -58,10 +60,10 @@ class CardiacDriftProfile:
 def calculate_efficiency_factor(power: np.ndarray, hr: np.ndarray) -> np.ndarray:
     """
     Calculate Efficiency Factor: EF = Power / HR [W/bpm].
-    
+
     Higher EF = more watts per heartbeat = better aerobic efficiency.
     """
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         ef = np.where(hr > 50, power / hr, np.nan)
     return ef
 
@@ -72,11 +74,11 @@ def analyze_cardiac_drift(
     time_seconds: np.ndarray,
     core_temp: Optional[np.ndarray] = None,
     smo2: Optional[np.ndarray] = None,
-    hsi: Optional[np.ndarray] = None
+    hsi: Optional[np.ndarray] = None,
 ) -> CardiacDriftProfile:
     """
     Analyze cardiac drift from power, HR, and optional thermal/muscle data.
-    
+
     Args:
         power: Power values [W]
         hr: Heart rate values [bpm]
@@ -84,7 +86,7 @@ def analyze_cardiac_drift(
         core_temp: Optional core temperature [°C]
         smo2: Optional SmO2 values [%]
         hsi: Optional Heat Strain Index
-        
+
     Returns:
         CardiacDriftProfile with comprehensive drift analysis
     """
@@ -99,7 +101,7 @@ def analyze_cardiac_drift(
 
     power_valid = power[mask]
     hr_valid = hr[mask]
-    time_valid = time_seconds[mask]
+    time_seconds[mask]
 
     profile.data_points = len(power_valid)
 
@@ -137,8 +139,7 @@ def analyze_cardiac_drift(
             if np.sum(valid_mask) > 20 and np.unique(temp_for_ef[valid_mask]).size > 1:
                 try:
                     slope, intercept, r, p, se = stats.linregress(
-                        temp_for_ef[valid_mask],
-                        ef_for_temp[valid_mask]
+                        temp_for_ef[valid_mask], ef_for_temp[valid_mask]
                     )
                     profile.ef_vs_temp_slope = float(slope)
 
@@ -199,7 +200,7 @@ def analyze_cardiac_drift(
 def _classify_drift_type(profile: CardiacDriftProfile, core_temp: Optional[np.ndarray]) -> str:
     """
     Differentiate between drift types based on signal correlations.
-    
+
     - Cardiac: HR rises, temp stable, SmO2 stable → CV fatigue
     - Thermal: temp rises, HR follows → thermoregulation stress
     - Metabolic: SmO2 drops significantly → peripheral muscle fatigue
@@ -369,8 +370,12 @@ def format_drift_for_report(profile: CardiacDriftProfile) -> Dict[str, Any]:
             "ef_end": round(profile.ef_end, 3),
             "delta_ef_abs": round(profile.delta_ef_abs, 3),
             "delta_ef_pct": round(profile.delta_ef_pct, 1),
-            "ef_vs_temp_slope": round(profile.ef_vs_temp_slope, 4) if profile.ef_vs_temp_slope else None,
-            "temp_at_10pct_drop": round(profile.temp_at_10pct_drop, 1) if profile.temp_at_10pct_drop else None,
+            "ef_vs_temp_slope": round(profile.ef_vs_temp_slope, 4)
+            if profile.ef_vs_temp_slope
+            else None,
+            "temp_at_10pct_drop": round(profile.temp_at_10pct_drop, 1)
+            if profile.temp_at_10pct_drop
+            else None,
         },
         "key_signals": {
             "hsi_peak": round(profile.hsi_peak, 1),
@@ -381,21 +386,14 @@ def format_drift_for_report(profile: CardiacDriftProfile) -> Dict[str, Any]:
             "drift_level": profile.drift_classification,
             "drift_type": profile.drift_type,
             "color": profile.classification_color,
-            "thresholds": {
-                "minimal": "<5%",
-                "moderate": "5-10%",
-                "high": ">10%"
-            }
+            "thresholds": {"minimal": "<5%", "moderate": "5-10%", "high": ">10%"},
         },
         "interpretation": {
             "mechanism": profile.mechanism_description,
             "key_signals_summary": profile.key_signals_summary,
-            "training_implications": profile.training_implications
+            "training_implications": profile.training_implications,
         },
-        "quality": {
-            "data_points": profile.data_points,
-            "confidence": round(profile.confidence, 2)
-        }
+        "quality": {"data_points": profile.data_points, "confidence": round(profile.confidence, 2)},
     }
 
 

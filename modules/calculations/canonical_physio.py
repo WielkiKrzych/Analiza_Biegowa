@@ -125,17 +125,14 @@ def select_canonical_vo2max(
         if source == "mmp_5min":
             vo2 = calculate_vo2max_acsm(value, weight_kg)
             alternatives["acsm_5min"] = vo2
-            source_key = "acsm_5min"
         elif source == "cp_watts":
             # CP is ~90-95% of 5-min power, so use CP * 1.05 as estimate
             est_5min = value * 1.05
             vo2 = calculate_vo2max_acsm(est_5min, weight_kg)
             alternatives["acsm_cp"] = vo2
-            source_key = "acsm_cp"
         else:
             # Direct VO2max value
             alternatives[source] = value
-            source_key = source
 
     if not alternatives:
         return metric

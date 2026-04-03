@@ -4,6 +4,7 @@ SOLID: Implementacja Streamlit-specyficznych callbacków dla logiki ML.
 Ten moduł zawiera konkretne implementacje abstrakcyjnych callbacków
 z ml_logic.py dla interfejsu Streamlit.
 """
+
 import streamlit as st
 
 from modules.ml_logic import TrainingCallback
@@ -11,8 +12,8 @@ from modules.ml_logic import TrainingCallback
 
 class StreamlitCallback(TrainingCallback):
     """Callback dla Streamlit UI - wyświetla pasek postępu i statusy.
-    
-    Implementuje wzorzec Dependency Inversion - warstwa UI zależy od 
+
+    Implementuje wzorzec Dependency Inversion - warstwa UI zależy od
     abstrakcji z warstwy logiki biznesowej, a nie odwrotnie.
     """
 

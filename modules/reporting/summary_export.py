@@ -23,22 +23,22 @@ CHART_SIZES = {
 def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
     """
     Dodaje watermark do obrazu PNG.
-    
+
     Args:
         image_bytes: Raw PNG bytes
         text: Tekst watermarka
-        
+
     Returns:
         PNG bytes z watermarkiem
     """
     img = Image.open(io.BytesIO(image_bytes))
 
     # Konwertuj do RGBA jeśli potrzeba
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
 
     # Utwórz warstwę przezroczystą dla watermarka
-    watermark_layer = Image.new('RGBA', img.size, (255, 255, 255, 0))
+    watermark_layer = Image.new("RGBA", img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(watermark_layer)
 
     # Użyj domyślnej czcionki (brak zewnętrznych zależności)
@@ -68,7 +68,7 @@ def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
 
     # Zapisz do bytes
     output = io.BytesIO()
-    result.save(output, format='PNG')
+    result.save(output, format="PNG")
     return output.getvalue()
 
 
@@ -76,17 +76,17 @@ def export_chart_to_png(
     fig: go.Figure,
     filename: str,
     size: Tuple[int, int] = (1200, 800),
-    add_watermark_flag: bool = True
+    add_watermark_flag: bool = True,
 ) -> Tuple[str, bytes]:
     """
     Eksportuje wykres Plotly do PNG z opcjonalnym watermarkiem.
-    
+
     Args:
         fig: Obiekt wykresu Plotly
         filename: Nazwa pliku (bez rozszerzenia)
         size: Rozmiar wykresu (szerokość, wysokość)
         add_watermark_flag: Czy dodać watermark
-        
+
     Returns:
         Tuple (nazwa_pliku.png, bytes)
     """
@@ -98,7 +98,7 @@ def export_chart_to_png(
     )
 
     # Eksportuj do PNG
-    img_bytes = pio.to_image(fig, format='png', scale=1)
+    img_bytes = pio.to_image(fig, format="png", scale=1)
 
     # Dodaj watermark jeśli wymagany
     if add_watermark_flag:
@@ -108,18 +108,16 @@ def export_chart_to_png(
 
 
 def generate_summary_charts_zip(
-    df_plot: pd.DataFrame,
-    size_key: str = "large",
-    add_watermark_flag: bool = True
+    df_plot: pd.DataFrame, size_key: str = "large", add_watermark_flag: bool = True
 ) -> bytes:
     """
     Generuje ZIP z wykresami z zakładki Podsumowanie.
-    
+
     Args:
         df_plot: DataFrame z danymi treningu
         size_key: Klucz rozmiaru (standard/large/full_hd/macbook_pro)
         add_watermark_flag: Czy dodać watermark
-        
+
     Returns:
         ZIP file jako bytes
     """
@@ -128,7 +126,7 @@ def generate_summary_charts_zip(
     # Utwórz ZIP w pamięci
     zip_buffer = io.BytesIO()
 
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         # 1. Przebieg treningu (Moc, HR, SmO2, VE)
         fig1 = _build_training_timeline_chart(df_plot)
         if fig1:
@@ -148,9 +146,7 @@ def generate_summary_charts_zip(
         # 3. SmO2 vs THb
         fig3 = _build_smo2_thb_chart(df_plot)
         if fig3:
-            name, bytes_data = export_chart_to_png(
-                fig3, "03_smo2_vs_thb", size, add_watermark_flag
-            )
+            name, bytes_data = export_chart_to_png(fig3, "03_smo2_vs_thb", size, add_watermark_flag)
             zip_file.writestr(name, bytes_data)
 
     zip_buffer.seek(0)
@@ -175,68 +171,101 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
 
     # Convert time_min to hh:mm:ss format for x-axis
     import numpy as np
-    time_vals = time_x.values if hasattr(time_x, 'values') else np.array(time_x)
+
+    time_vals = time_x.values if hasattr(time_x, "values") else np.array(time_x)
     tick_step = 5  # every 5 minutes
     tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
-    tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
+    tick_text = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals]
 
     # Tempo (zamiast Mocy dla biegania)
     if "pace_smooth" in df_plot.columns:
         pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
-        fig.add_trace(go.Scatter(
-            x=time_x, y=pace_display,
-            name="Tempo", fill="tozeroy",
-            line=dict(color=Config.COLOR_POWER, width=1),
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=pace_display,
+                name="Tempo",
+                fill="tozeroy",
+                line=dict(color=Config.COLOR_POWER, width=1),
+            )
+        )
     elif "pace" in df_plot.columns:
         pace_display = df_plot["pace"].rolling(5, center=True).mean() / 60.0
-        fig.add_trace(go.Scatter(
-            x=time_x, y=pace_display,
-            name="Tempo", fill="tozeroy",
-            line=dict(color=Config.COLOR_POWER, width=1),
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=pace_display,
+                name="Tempo",
+                fill="tozeroy",
+                line=dict(color=Config.COLOR_POWER, width=1),
+            )
+        )
 
     # HR
     if "heartrate_smooth" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["heartrate_smooth"],
-            name="HR", line=dict(color=Config.COLOR_HR, width=2),
-            yaxis="y2",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["heartrate_smooth"],
+                name="HR",
+                line=dict(color=Config.COLOR_HR, width=2),
+                yaxis="y2",
+            )
+        )
     elif "heartrate" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["heartrate"],
-            name="HR", line=dict(color=Config.COLOR_HR, width=2),
-            yaxis="y2",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["heartrate"],
+                name="HR",
+                line=dict(color=Config.COLOR_HR, width=2),
+                yaxis="y2",
+            )
+        )
 
     # SmO2
     if "smo2_smooth" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["smo2_smooth"],
-            name="SmO2", line=dict(color=Config.COLOR_SMO2, width=2, dash="dot"),
-            yaxis="y3",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["smo2_smooth"],
+                name="SmO2",
+                line=dict(color=Config.COLOR_SMO2, width=2, dash="dot"),
+                yaxis="y3",
+            )
+        )
     elif "smo2" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["smo2"].rolling(5, center=True).mean(),
-            name="SmO2", line=dict(color=Config.COLOR_SMO2, width=2, dash="dot"),
-            yaxis="y3",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["smo2"].rolling(5, center=True).mean(),
+                name="SmO2",
+                line=dict(color=Config.COLOR_SMO2, width=2, dash="dot"),
+                yaxis="y3",
+            )
+        )
 
     # VE
     if "tymeventilation_smooth" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["tymeventilation_smooth"],
-            name="VE", line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
-            yaxis="y4",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["tymeventilation_smooth"],
+                name="VE",
+                line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
+                yaxis="y4",
+            )
+        )
     elif "tymeventilation" in df_plot.columns:
-        fig.add_trace(go.Scatter(
-            x=time_x, y=df_plot["tymeventilation"].rolling(10, center=True).mean(),
-            name="VE", line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
-            yaxis="y4",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=time_x,
+                y=df_plot["tymeventilation"].rolling(10, center=True).mean(),
+                name="VE",
+                line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
+                yaxis="y4",
+            )
+        )
 
     fig.update_layout(
         template="plotly_dark",
@@ -251,7 +280,9 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         yaxis=dict(title="Tempo [min/km]", side="left", autorange="reversed"),
         yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
         yaxis3=dict(title="SmO2 [%]", overlaying="y", side="right", position=0.95, showgrid=False),
-        yaxis4=dict(title="VE [L/min]", overlaying="y", side="right", position=0.98, showgrid=False),
+        yaxis4=dict(
+            title="VE [L/min]", overlaying="y", side="right", position=0.98, showgrid=False
+        ),
         legend=dict(orientation="h", y=-0.15),
         margin=dict(l=60, r=60, t=60, b=60),
     )
@@ -274,7 +305,8 @@ def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     ve_data = df_plot["tymeventilation"].rolling(10, center=True).mean()
     fig.add_trace(
         go.Scatter(
-            x=time_x, y=ve_data,
+            x=time_x,
+            y=ve_data,
             name="VE (L/min)",
             line=dict(color="#ffa15a", width=2),
         ),
@@ -286,7 +318,8 @@ def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
         br_data = df_plot["tymebreathrate"].rolling(10, center=True).mean()
         fig.add_trace(
             go.Scatter(
-                x=time_x, y=br_data,
+                x=time_x,
+                y=br_data,
                 name="BR (oddech/min)",
                 line=dict(color="#00cc96", width=2),
             ),
@@ -321,7 +354,8 @@ def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     smo2_smooth = df_plot["smo2"].rolling(5, center=True).mean()
     fig.add_trace(
         go.Scatter(
-            x=time_x, y=smo2_smooth,
+            x=time_x,
+            y=smo2_smooth,
             name="SmO2 (%)",
             line=dict(color="#2ca02c", width=2),
         ),
@@ -333,7 +367,8 @@ def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
         thb_smooth = df_plot["thb"].rolling(5, center=True).mean()
         fig.add_trace(
             go.Scatter(
-                x=time_x, y=thb_smooth,
+                x=time_x,
+                y=thb_smooth,
                 name="THb (g/dL)",
                 line=dict(color="#9467bd", width=2),
             ),

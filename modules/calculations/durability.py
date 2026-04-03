@@ -61,6 +61,7 @@ def _classify_durability(score: float) -> tuple[str, str]:
 # Public API
 # --------------------------------------------------------------------------- #
 
+
 def calculate_aerobic_decoupling(
     pace_series: pd.Series,
     hr_series: pd.Series,
@@ -70,9 +71,13 @@ def calculate_aerobic_decoupling(
     pace, hr = _filter_active(pace_series, hr_series)
     if len(pace) < MIN_SAMPLES:
         logger.warning("Too few active samples (%d) for decoupling.", len(pace))
-        return {"decoupling_pct": np.nan, "ef_first_half": np.nan,
-                "ef_second_half": np.nan, "classification": "insufficient_data",
-                "interpretation": "Not enough data for analysis."}
+        return {
+            "decoupling_pct": np.nan,
+            "ef_first_half": np.nan,
+            "ef_second_half": np.nan,
+            "classification": "insufficient_data",
+            "interpretation": "Not enough data for analysis.",
+        }
 
     speed = _pace_to_speed(pace)
     n = len(speed)
@@ -106,22 +111,32 @@ def detect_decoupling_onset(
     """Find the time point where decoupling begins (Smyth et al. 2025)."""
     pace, hr = _filter_active(pace_series, hr_series)
     if len(pace) < MIN_SAMPLES:
-        return {"onset_time_sec": None, "onset_distance_m": None,
-                "ef_at_onset": np.nan, "ef_series": pd.Series(dtype=float),
-                "drift_series": pd.Series(dtype=float)}
+        return {
+            "onset_time_sec": None,
+            "onset_distance_m": None,
+            "ef_at_onset": np.nan,
+            "ef_series": pd.Series(dtype=float),
+            "drift_series": pd.Series(dtype=float),
+        }
 
     speed = _pace_to_speed(pace)
 
     # Rolling EF with given window, then smooth with 60-sample mean
-    rolling_ef = (speed.rolling(window=window_sec, min_periods=window_sec // 2).mean()
-                  / hr.rolling(window=window_sec, min_periods=window_sec // 2).mean())
+    rolling_ef = (
+        speed.rolling(window=window_sec, min_periods=window_sec // 2).mean()
+        / hr.rolling(window=window_sec, min_periods=window_sec // 2).mean()
+    )
     smoothed_ef = rolling_ef.rolling(window=60, min_periods=30).mean()
 
     initial_ef = smoothed_ef.dropna().iloc[0] if not smoothed_ef.dropna().empty else np.nan
     if np.isnan(initial_ef) or initial_ef == 0:
-        return {"onset_time_sec": None, "onset_distance_m": None,
-                "ef_at_onset": np.nan, "ef_series": rolling_ef,
-                "drift_series": pd.Series(dtype=float)}
+        return {
+            "onset_time_sec": None,
+            "onset_distance_m": None,
+            "ef_at_onset": np.nan,
+            "ef_series": rolling_ef,
+            "drift_series": pd.Series(dtype=float),
+        }
 
     drift_pct = (initial_ef - smoothed_ef) / initial_ef * 100
 
@@ -129,7 +144,7 @@ def detect_decoupling_onset(
     above = drift_pct > DRIFT_ONSET_PCT
     onset_idx = None
     run_start = None
-    for i, (idx, val) in enumerate(above.items()):
+    for i, (_idx, val) in enumerate(above.items()):
         if val:
             if run_start is None:
                 run_start = i
@@ -160,11 +175,16 @@ def calculate_cardiac_drift_rate(
     """Rate of HR increase during steady-state running (linear regression, 2nd half)."""
     hr = hr_series.dropna().copy()
     if len(hr) < MIN_SAMPLES:
-        return {"drift_bpm_per_min": np.nan, "drift_bpm_per_hour": np.nan,
-                "is_steady_state": False, "r_squared": np.nan}
+        return {
+            "drift_bpm_per_min": np.nan,
+            "drift_bpm_per_hour": np.nan,
+            "is_steady_state": False,
+            "r_squared": np.nan,
+        }
 
     time_sec = (
-        time_series.loc[hr.index].copy() if time_series is not None
+        time_series.loc[hr.index].copy()
+        if time_series is not None
         else pd.Series(range(len(hr)), index=hr.index, dtype=float)
     )
 
@@ -173,14 +193,18 @@ def calculate_cardiac_drift_rate(
     t_2nd = time_sec.iloc[mid:].values.astype(float)
 
     if len(hr_2nd) < 10:
-        return {"drift_bpm_per_min": np.nan, "drift_bpm_per_hour": np.nan,
-                "is_steady_state": False, "r_squared": np.nan}
+        return {
+            "drift_bpm_per_min": np.nan,
+            "drift_bpm_per_hour": np.nan,
+            "is_steady_state": False,
+            "r_squared": np.nan,
+        }
 
     slope, _intercept, r_value, _p, _se = stats.linregress(t_2nd, hr_2nd)
     drift_per_sec = float(slope)
     drift_per_min = drift_per_sec * 60
     drift_per_hour = drift_per_min * 60
-    r_sq = float(r_value ** 2)
+    r_sq = float(r_value**2)
 
     is_steady = False
     if pace_series is not None:
@@ -209,7 +233,9 @@ def calculate_durability_index(
 
     decoupling_result = calculate_aerobic_decoupling(pace_series, hr_series)
     drift_result = calculate_cardiac_drift_rate(
-        hr_series, time_series=time_series, pace_series=pace_series,
+        hr_series,
+        time_series=time_series,
+        pace_series=pace_series,
     )
 
     pace, _hr = _filter_active(pace_series, hr_series)
@@ -221,9 +247,7 @@ def calculate_durability_index(
     # Convert each metric to a 0-100 sub-score (100 = perfect stability)
     dec_score = max(0.0, 100.0 - dec_pct * 10) if not np.isnan(dec_pct) else np.nan
     cv_score = max(0.0, 100.0 - pace_cv * 5) if not np.isnan(pace_cv) else np.nan
-    drift_score = (
-        max(0.0, 100.0 - abs(drift_bpm) * 30) if not np.isnan(drift_bpm) else np.nan
-    )
+    drift_score = max(0.0, 100.0 - abs(drift_bpm) * 30) if not np.isnan(drift_bpm) else np.nan
 
     valid = [(dec_score, W_DECOUPLING), (cv_score, W_PACE_CV), (drift_score, W_HR_DRIFT)]
     valid = [(s, w) for s, w in valid if not np.isnan(s)]
@@ -236,7 +260,8 @@ def calculate_durability_index(
 
     durability = round(float(durability), 1) if not np.isnan(durability) else np.nan
     classification, interpretation = (
-        _classify_durability(durability) if not np.isnan(durability)
+        _classify_durability(durability)
+        if not np.isnan(durability)
         else ("insufficient_data", "Not enough data for analysis.")
     )
 

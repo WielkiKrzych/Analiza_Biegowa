@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Try to use Numba-accelerated version if available
 try:
     from modules.numba_utils import calculate_w_prime_balance_numba
+
     _HAS_NUMBA = True
 except ImportError:
     _HAS_NUMBA = False
@@ -74,22 +75,22 @@ def calculate_w_prime_balance(
 
     if cp <= 0 or w_prime <= 0:
         logger.warning("CP or W' not set, skipping W' balance calculation.")
-        df['w_prime_balance'] = np.nan
+        df["w_prime_balance"] = np.nan
         return df
 
-    if 'watts' not in df.columns:
+    if "watts" not in df.columns:
         logger.warning("No 'watts' column found, skipping W' balance calculation.")
-        df['w_prime_balance'] = np.nan
+        df["w_prime_balance"] = np.nan
         return df
 
-    power = df['watts'].fillna(0).values.astype(np.float64)
+    power = df["watts"].fillna(0).values.astype(np.float64)
 
     if _HAS_NUMBA:
         w_bal = calculate_w_prime_balance_numba(power, cp, w_prime, tau)
     else:
         w_bal = _w_prime_balance_python(power, cp, w_prime, tau)
 
-    df['w_prime_balance'] = w_bal
+    df["w_prime_balance"] = w_bal
     return df
 
 
@@ -154,9 +155,7 @@ def get_recovery_recommendation(recovery_score: float) -> str:
         return "Poor recovery – rest or very easy session recommended."
 
 
-def estimate_w_prime_reconstitution(
-    w_bal: np.ndarray, w_prime: float, cp: float
-) -> float:
+def estimate_w_prime_reconstitution(w_bal: np.ndarray, w_prime: float, cp: float) -> float:
     """
     Estimate W' reconstitution rate from session data.
 

@@ -15,21 +15,21 @@ def calculate_d_prime_balance(
     time_sec: np.ndarray,
     critical_speed_pace: float,
     d_prime_capacity: float,
-    tau: float = 60.0
+    tau: float = 60.0,
 ) -> np.ndarray:
     """
     Calculate D' balance over time.
-    
+
     D' is depleted when running faster than Critical Speed (lower pace),
     and recharges when running slower.
-    
+
     Args:
         pace_sec_per_km: Array of paces in sec/km
         time_sec: Array of time values in seconds
         critical_speed_pace: Critical Speed pace in sec/km
         d_prime_capacity: Total D' capacity in meters
         tau: Time constant for D' reconstitution (seconds, default 60s)
-        
+
     Returns:
         Array of D' balance values (meters remaining)
     """
@@ -45,43 +45,41 @@ def calculate_d_prime_balance(
     d_prime_balance[0] = d_prime_capacity
 
     for i in range(1, n):
-        dt = time_sec[i] - time_sec[i-1]
+        dt = time_sec[i] - time_sec[i - 1]
         current_speed = speeds[i]
 
         if current_speed > critical_speed:
             # Above CS: deplete D' based on excess speed
             excess_speed = current_speed - critical_speed  # m/s
             depletion = excess_speed * dt  # meters
-            d_prime_balance[i] = max(0, d_prime_balance[i-1] - depletion)
+            d_prime_balance[i] = max(0, d_prime_balance[i - 1] - depletion)
         else:
             # Below CS: recharge D'
             # Exponential recovery model
-            recharge_rate = (d_prime_capacity - d_prime_balance[i-1]) / tau
+            recharge_rate = (d_prime_capacity - d_prime_balance[i - 1]) / tau
             recharge = recharge_rate * dt
-            d_prime_balance[i] = min(d_prime_capacity, d_prime_balance[i-1] + recharge)
+            d_prime_balance[i] = min(d_prime_capacity, d_prime_balance[i - 1] + recharge)
 
     return d_prime_balance
 
 
 def estimate_time_to_exhaustion_pace(
-    target_pace: float,
-    critical_speed_pace: float,
-    d_prime: float
+    target_pace: float, critical_speed_pace: float, d_prime: float
 ) -> float:
     """
     Estimate Time to Exhaustion (TTE) at given pace.
-    
+
     Based on Critical Speed model: TTE = D' / (v - CS)
     where v is target speed, CS is critical speed.
-    
+
     Args:
         target_pace: Target pace in sec/km
         critical_speed_pace: Critical Speed pace in sec/km
         d_prime: D' capacity in meters
-        
+
     Returns:
         Time to exhaustion in seconds (inf if target <= CS)
-        
+
     Example:
         >>> estimate_time_to_exhaustion_pace(240, 300, 200)  # 4:00 vs 5:00
         120.0  # ~2 minutes
@@ -111,19 +109,19 @@ def count_surges(
     d_prime_balance: np.ndarray,
     d_prime_capacity: float,
     threshold_pct: float = 0.3,
-    recovery_pct: float = 0.8
+    recovery_pct: float = 0.8,
 ) -> int:
     """
     Count number of surges (significant D' depletions).
-    
+
     A surge is counted when D' drops below threshold.
-    
+
     Args:
         d_prime_balance: D' balance array (meters remaining)
         d_prime_capacity: Full D' capacity (meters)
         threshold_pct: Threshold as fraction of D' (default 30%)
         recovery_pct: Recovery threshold to count next surge (default 80%)
-        
+
     Returns:
         Number of surges
     """
@@ -148,17 +146,14 @@ def count_surges(
     return surges
 
 
-def calculate_d_prime_utilization(
-    d_prime_balance: np.ndarray,
-    d_prime_capacity: float
-) -> dict:
+def calculate_d_prime_utilization(d_prime_balance: np.ndarray, d_prime_capacity: float) -> dict:
     """
     Calculate D' utilization statistics.
-    
+
     Args:
         d_prime_balance: D' balance array
         d_prime_capacity: Full capacity
-        
+
     Returns:
         Dict with utilization stats
     """

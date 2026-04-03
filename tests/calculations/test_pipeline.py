@@ -3,12 +3,13 @@ Tests for the Ramp Test Pipeline module.
 
 Tests validate_test() function following TDD principles.
 """
-import pytest
-import pandas as pd
-import numpy as np
 
-from modules.calculations.pipeline import validate_test
+import numpy as np
+import pandas as pd
+import pytest
+
 from models.results import ValidityLevel
+from modules.calculations.pipeline import validate_test
 
 
 def _make_ramp_df(duration_sec: int = 600, power_range: float = 200.0) -> pd.DataFrame:
@@ -113,9 +114,6 @@ def test_signal_qualities_populated() -> None:
 
 def test_valid_without_hr_column() -> None:
     """A test without HR column can still be valid if other checks pass."""
-    df = pd.DataFrame({
-        "time": np.arange(600),
-        "watts": np.linspace(100.0, 300.0, 600)
-    })
+    df = pd.DataFrame({"time": np.arange(600), "watts": np.linspace(100.0, 300.0, 600)})
     result = validate_test(df)
     assert result.validity == ValidityLevel.VALID

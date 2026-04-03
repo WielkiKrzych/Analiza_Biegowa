@@ -105,7 +105,7 @@ def detect_smo2_from_steps(
     # Extract power and smo2 arrays
     powers = np.array([s["avg_power"] for s in all_steps])
     smo2s = np.array([s["avg_smo2"] for s in all_steps])
-    hrs = np.array([s["avg_hr"] if s["avg_hr"] else np.nan for s in all_steps])
+    np.array([s["avg_hr"] if s["avg_hr"] else np.nan for s in all_steps])
 
     # Smooth SmO2 data with Savitzky-Golay filter to reduce noise
     window_length = min(5, len(smo2s) if len(smo2s) % 2 == 1 else len(smo2s) - 1)

@@ -4,6 +4,7 @@ Async Calculation Runner.
 Provides async wrappers for CPU-intensive calculations.
 Uses ThreadPoolExecutor for parallel processing.
 """
+
 import asyncio
 import logging
 import threading
@@ -14,8 +15,8 @@ from typing import Any, Callable, Optional, ParamSpec, TypeVar
 logger = logging.getLogger(__name__)
 
 # Type hints for generics
-P = ParamSpec('P')
-T = TypeVar('T')
+P = ParamSpec("P")
+T = TypeVar("T")
 
 # Global thread pool (reused across calls)
 _executor: Optional[ThreadPoolExecutor] = None
@@ -24,10 +25,10 @@ _executor_lock = threading.Lock()
 
 def get_executor(max_workers: int = 4) -> ThreadPoolExecutor:
     """Get or create the global thread pool executor.
-    
+
     Args:
         max_workers: Maximum number of worker threads
-        
+
     Returns:
         ThreadPoolExecutor instance
     """
@@ -49,17 +50,17 @@ def shutdown_executor(wait: bool = True) -> None:
 
 def run_in_thread(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Run a function in a background thread and wait for result.
-    
+
     Useful for CPU-bound calculations that block the main thread.
-    
+
     Args:
         func: Function to execute
         *args: Positional arguments
         **kwargs: Keyword arguments
-        
+
     Returns:
         Function result
-        
+
     Example:
         result = run_in_thread(calculate_w_prime_balance, df, cp, w_prime)
     """
@@ -70,17 +71,17 @@ def run_in_thread(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
 
 def submit_task(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> Future:
     """Submit a task to the thread pool without waiting.
-    
+
     Returns a Future that can be checked for completion.
-    
+
     Args:
         func: Function to execute
         *args: Positional arguments
         **kwargs: Keyword arguments
-        
+
     Returns:
         Future object
-        
+
     Example:
         future = submit_task(heavy_calculation, data)
         # ... do other work ...
@@ -92,17 +93,17 @@ def submit_task(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> Futu
 
 async def run_async(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Run a sync function asynchronously.
-    
+
     Uses asyncio's run_in_executor for async/await compatibility.
-    
+
     Args:
         func: Synchronous function to execute
         *args: Positional arguments
         **kwargs: Keyword arguments
-        
+
     Returns:
         Function result (awaitable)
-        
+
     Example:
         result = await run_async(calculate_pdc, df)
     """
@@ -111,8 +112,10 @@ async def run_async(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> 
 
     # Wrap with kwargs if needed
     if kwargs:
+
         def wrapped():
             return func(*args, **kwargs)
+
         return await loop.run_in_executor(executor, wrapped)
 
     return await loop.run_in_executor(executor, func, *args)
@@ -120,34 +123,36 @@ async def run_async(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> 
 
 def async_wrapper(func: Callable[P, T]) -> Callable[P, T]:
     """Decorator to make a function run in background thread.
-    
+
     The decorated function will execute in a thread pool
     but return normally (blocking the caller).
-    
+
     Use for heavy calculations that should not block UI.
-    
+
     Example:
         @async_wrapper
         def heavy_calculation(data):
             # ... CPU intensive work ...
             return result
     """
+
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         return run_in_thread(func, *args, **kwargs)
+
     return wrapper
 
 
 class AsyncCalculationManager:
     """Manager for tracking multiple async calculations.
-    
+
     Useful for running several calculations in parallel.
-    
+
     Example:
         manager = AsyncCalculationManager()
         manager.submit("w_prime", calculate_w_prime_balance, df, cp, w_prime)
         manager.submit("pdc", calculate_pdc, df)
-        
+
         # Wait for all
         results = manager.wait_all()
         w_prime_result = results["w_prime"]
@@ -196,17 +201,17 @@ def run_with_progress(
     func: Callable[P, T],
     progress_callback: Optional[Callable[[float], None]] = None,
     *args: P.args,
-    **kwargs: P.kwargs
+    **kwargs: P.kwargs,
 ) -> T:
     """Run a calculation with optional progress callback.
-    
+
     For Streamlit, progress_callback can update a progress bar.
-    
+
     Args:
         func: Function to execute
         progress_callback: Optional callback(0.0-1.0) for progress
         *args, **kwargs: Function arguments
-        
+
     Returns:
         Function result
     """

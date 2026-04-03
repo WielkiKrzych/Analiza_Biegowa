@@ -1,6 +1,7 @@
 import streamlit as st
 
-SETTINGS_FILE = 'user_settings.json'
+SETTINGS_FILE = "user_settings.json"
+
 
 class SettingsManager:
     def __init__(self, file_path=SETTINGS_FILE):
@@ -34,15 +35,15 @@ class SettingsManager:
     def get_ui_values(self):
         """Pomocnik do pobierania wartości do UI (Session State lub Load)."""
         # Jeśli settings są już w session_state, użyj ich. Jak nie, wczytaj z pliku.
-        if 'user_settings' not in st.session_state:
-            st.session_state['user_settings'] = self.load_settings()
-        return st.session_state['user_settings']
+        if "user_settings" not in st.session_state:
+            st.session_state["user_settings"] = self.load_settings()
+        return st.session_state["user_settings"]
 
     def update_from_ui(self, key, value):
         """Callback do aktualizacji konkretnego ustawienia."""
-        if 'user_settings' not in st.session_state:
-             st.session_state['user_settings'] = self.load_settings()
+        if "user_settings" not in st.session_state:
+            st.session_state["user_settings"] = self.load_settings()
 
-        st.session_state['user_settings'][key] = value
+        st.session_state["user_settings"][key] = value
         # Save is disabled, but we update session state
         # self.save_settings(st.session_state['user_settings'])

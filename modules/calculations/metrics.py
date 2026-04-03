@@ -188,27 +188,24 @@ def calculate_trend(x, y):
         return None
 
 
-
 def calculate_pace_hr_decoupling(
-    df_pl: Union[pd.DataFrame, Any],
-    pace_col: str = "pace",
-    hr_col: str = "heartrate"
+    df_pl: Union[pd.DataFrame, Any], pace_col: str = "pace", hr_col: str = "heartrate"
 ) -> Tuple[float, float]:
     """Calculate Pace:HR Decoupling (Efficiency Factor for running).
-    
+
     This is the RUNNING version of power-based decoupling.
     Critical for assessing aerobic fitness (Joe Friel methodology).
-    
+
     EF = Speed / HR (higher = more efficient)
     Decoupling = (EF_first_half - EF_second_half) / EF_first_half * 100
-    
+
     Target: <5% = good aerobic adaptation, >5% = needs more base training
-    
+
     Args:
         df_pl: DataFrame with pace and heart rate columns
         pace_col: Column name for pace (sec/km)
         hr_col: Column name for heart rate (bpm)
-    
+
     Returns:
         Tuple of (decoupling_percent, efficiency_factor)
     """
@@ -225,7 +222,7 @@ def calculate_pace_hr_decoupling(
 
     # Convert pace to speed (m/s) for linear averaging
     # Speed = 1000m / pace_sec_per_km
-    df_active['speed_ms'] = 1000.0 / df_active[pace_col]
+    df_active["speed_ms"] = 1000.0 / df_active[pace_col]
 
     mid = len(df_active) // 2
     first_half = df_active.iloc[:mid]
@@ -235,8 +232,8 @@ def calculate_pace_hr_decoupling(
     # Use harmonic mean for pace (which means arithmetic mean for speed)
     hr1 = first_half[hr_col].mean()
     hr2 = second_half[hr_col].mean()
-    speed1 = first_half['speed_ms'].mean()
-    speed2 = second_half['speed_ms'].mean()
+    speed1 = first_half["speed_ms"].mean()
+    speed2 = second_half["speed_ms"].mean()
 
     if hr1 <= 0 or hr2 <= 0:
         return 0.0, 0.0
@@ -251,20 +248,17 @@ def calculate_pace_hr_decoupling(
     decoupling_pct = ((ef1 - ef2) / ef1) * 100
 
     # Overall efficiency factor
-    overall_ef = df_active['speed_ms'].mean() / df_active[hr_col].mean()
+    overall_ef = df_active["speed_ms"].mean() / df_active[hr_col].mean()
 
     return float(decoupling_pct), float(overall_ef)
 
 
-def calculate_durability_index(
-    df_pl: Union[pd.DataFrame, Any],
-    pace_col: str = "pace"
-) -> float:
+def calculate_durability_index(df_pl: Union[pd.DataFrame, Any], pace_col: str = "pace") -> float:
     """Calculate Durability Index using HARMONIC mean for pace.
-    
+
     Durability = (avg_pace_first_half / avg_pace_second_half) * 100
     Uses harmonic mean because pace is nonlinear.
-    
+
     Returns:
         Durability index (100 = perfect maintenance, <100 = fade)
     """
@@ -309,13 +303,14 @@ def calculate_durability_index(
 # NEW: TRIMP and hrTSS for training load without power meter
 # =============================================================================
 
+
 def calculate_trimp(
     df: pd.DataFrame,
     hr_col: str = "hr",
     duration_sec: float = None,
     hr_max: float = 200.0,
     hr_rest: float = 60.0,
-    gender: str = "male"
+    gender: str = "male",
 ) -> Optional[float]:
     """
     Calculate TRIMP (Training Impulse) - heart rate-based training load.
@@ -372,7 +367,7 @@ def calculate_hrtss(
     lthr: float = 175.0,
     hr_max: float = 200.0,
     hr_rest: float = 60.0,
-    gender: str = "male"
+    gender: str = "male",
 ) -> Optional[Dict[str, float]]:
     """
     Calculate hrTSS (Heart Rate Training Stress Score).

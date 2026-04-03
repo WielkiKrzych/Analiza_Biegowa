@@ -844,7 +844,6 @@ def _aggregate_steps(
         if col in data.columns:
             br_col = col
             break
-    has_br = br_col is not None
 
     if step_range and hasattr(step_range, "steps") and step_range.steps:
         for i, step in enumerate(step_range.steps):
@@ -1042,7 +1041,7 @@ def detect_vt_cpet(
     else:
         result = _run_ve_only_mode(df_steps, data, cols, flags, result)
 
-    max_power = df_steps["power"].max()
+    df_steps["power"].max()
     if result["vt1_watts"] is None:
         vt1_power = int(np.percentile(df_steps["power"].values, 60))
         result["vt1_watts"] = vt1_power
@@ -1091,7 +1090,6 @@ def _find_breakpoint_segmented(
 
     best_idx = None
     best_sse = np.inf
-    best_slope_ratio = 0
 
     for i in range(min_segment_size, len(x) - min_segment_size):
         # Fit two segments
@@ -1117,7 +1115,6 @@ def _find_breakpoint_segmented(
             if total_sse < best_sse and slope_ratio > 1.1:
                 best_sse = total_sse
                 best_idx = i
-                best_slope_ratio = slope_ratio
 
         except Exception:
             continue

@@ -76,7 +76,7 @@ class Config:
     @classmethod
     def validate(cls) -> None:
         """Validate configuration values.
-        
+
         Raises:
             ValueError: If any configuration value is invalid
         """
@@ -88,17 +88,23 @@ class Config:
             raise ValueError(f"MIN_HR_ACTIVE must be >= 0, got {cls.MIN_HR_ACTIVE}")
 
         if cls.MIN_RECORDS_FOR_ROLLING < 1:
-            raise ValueError(f"MIN_RECORDS_FOR_ROLLING must be >= 1, got {cls.MIN_RECORDS_FOR_ROLLING}")
+            raise ValueError(
+                f"MIN_RECORDS_FOR_ROLLING must be >= 1, got {cls.MIN_RECORDS_FOR_ROLLING}"
+            )
 
         # Validate ranges
         if not (0.0 < cls.ML_LEARNING_RATE < 1.0):
             raise ValueError(f"ML_LEARNING_RATE must be in (0, 1), got {cls.ML_LEARNING_RATE}")
 
         if not (0.0 < cls.VT1_SLOPE_THRESHOLD < 1.0):
-            raise ValueError(f"VT1_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT1_SLOPE_THRESHOLD}")
+            raise ValueError(
+                f"VT1_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT1_SLOPE_THRESHOLD}"
+            )
 
         if not (0.0 < cls.VT2_SLOPE_THRESHOLD < 1.0):
-            raise ValueError(f"VT2_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT2_SLOPE_THRESHOLD}")
+            raise ValueError(
+                f"VT2_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT2_SLOPE_THRESHOLD}"
+            )
 
         # Validate confidence values
         for name, value in [

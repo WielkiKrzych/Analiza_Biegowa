@@ -120,7 +120,7 @@ def classify_smo2_context(
     if "hr" in df_window.columns:
         slope_hr, _, _, _, _ = stats.linregress(time, df_window["hr"])
     else:
-        slope_hr = 0
+        pass
 
     # Cadence Stats
     avg_cadence = df_window["cadence"].mean() if "cadence" in df_window.columns else 90

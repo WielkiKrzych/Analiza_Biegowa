@@ -31,10 +31,10 @@ def run_in_thread(func: Callable[..., T]) -> Callable[..., asyncio.Future[T]]:
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs) -> T:
-        loop = asyncio.get_running_loop()  # Use get_running_loop instead of deprecated get_event_loop
-        return await loop.run_in_executor(
-            get_executor(), functools.partial(func, *args, **kwargs)
-        )
+        loop = (
+            asyncio.get_running_loop()
+        )  # Use get_running_loop instead of deprecated get_event_loop
+        return await loop.run_in_executor(get_executor(), functools.partial(func, *args, **kwargs))
 
     return wrapper
 

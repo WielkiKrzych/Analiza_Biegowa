@@ -25,9 +25,8 @@ logger = logging.getLogger(__name__)
 
 # ── Normalized Power ──────────────────────────────────────────
 
-def calculate_normalized_power(
-    df: pd.DataFrame, window: int = 30
-) -> float:
+
+def calculate_normalized_power(df: pd.DataFrame, window: int = 30) -> float:
     """
     Calculate Normalized Power (NP) using Coggan's algorithm.
 
@@ -50,6 +49,7 @@ def calculate_normalized_power(
 
 
 # ── Pulse Power ───────────────────────────────────────────────
+
 
 def calculate_pulse_power_stats(
     df: pd.DataFrame,
@@ -92,6 +92,7 @@ def calculate_pulse_power_stats(
 
 # ── Power Duration Curve ──────────────────────────────────────
 
+
 def calculate_power_duration_curve(
     df: pd.DataFrame,
     durations: Optional[List[int]] = None,
@@ -130,6 +131,7 @@ def calculate_power_duration_curve(
 
 
 # ── Fatigue Resistance Index ──────────────────────────────────
+
 
 def calculate_fatigue_resistance_index(
     pdc: Dict[int, float],
@@ -185,6 +187,7 @@ def get_fri_interpretation(fri: float) -> str:
 
 # ── Match Burns ───────────────────────────────────────────────
 
+
 def count_match_burns(
     df: pd.DataFrame,
     cp: float,
@@ -215,6 +218,7 @@ def count_match_burns(
 
 
 # ── Power Zones ───────────────────────────────────────────────
+
 
 def calculate_power_zones_time(
     df: pd.DataFrame,
@@ -264,6 +268,7 @@ def calculate_power_zones_time(
 
 # ── Time to Exhaustion ────────────────────────────────────────
 
+
 def estimate_tte(
     target_power: float,
     cp: float,
@@ -308,15 +313,14 @@ def estimate_tte_range(
     """
     if power_range is None:
         power_range = [
-            cp * frac
-            for frac in [1.05, 1.10, 1.20, 1.30, 1.50, 1.75, 2.00]
-            if cp * frac > cp
+            cp * frac for frac in [1.05, 1.10, 1.20, 1.30, 1.50, 1.75, 2.00] if cp * frac > cp
         ]
 
     return {p: estimate_tte(p, cp, w_prime) for p in power_range}
 
 
 # ── Phenotype (power-based, re-exported for convenience) ──────
+
 
 def classify_phenotype(
     vo2max: float,
@@ -363,14 +367,12 @@ def get_phenotype_description(phenotype: str) -> Tuple[str, str, str]:
         "diesel": (
             "🚂",
             "Diesel Engine",
-            "High aerobic capacity with low glycolytic power. "
-            "Excels in long, steady efforts.",
+            "High aerobic capacity with low glycolytic power. Excels in long, steady efforts.",
         ),
         "allrounder": (
             "⚖️",
             "All-Rounder",
-            "Balanced aerobic and anaerobic capacity. "
-            "Versatile across different effort types.",
+            "Balanced aerobic and anaerobic capacity. Versatile across different effort types.",
         ),
         "sprinter": (
             "⚡",
@@ -397,6 +399,4 @@ def get_phenotype_description(phenotype: str) -> Tuple[str, str, str]:
         ),
     }
 
-    return phenotypes.get(
-        phenotype, ("❓", "Unknown", "Phenotype not recognized.")
-    )
+    return phenotypes.get(phenotype, ("❓", "Unknown", "Phenotype not recognized."))
