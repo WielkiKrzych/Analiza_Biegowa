@@ -4,19 +4,13 @@ Orchestrates step detection, ventilatory, and metabolic threshold analysis.
 """
 import pandas as pd
 
-from .threshold_types import (
-    HysteresisResult, 
-    StepTestResult
-)
-from .ventilatory import (
-    detect_vt_from_steps, detect_vt_transition_zone, 
-    run_sensitivity_analysis
-)
 from .metabolic import detect_smo2_from_steps
+
 # NOTE: _detect_smo2_thresholds_legacy removed - was never called
-from .step_detection import (
-    detect_step_test_range, segment_load_phases
-)
+from .step_detection import detect_step_test_range, segment_load_phases
+from .threshold_types import HysteresisResult, StepTestResult
+from .ventilatory import detect_vt_from_steps, detect_vt_transition_zone, run_sensitivity_analysis
+
 
 def analyze_step_test(
     df: pd.DataFrame,
@@ -32,19 +26,19 @@ def analyze_step_test(
     # Work on renamed copy to avoid mutating caller's DataFrame
     cols_lower = {c: c.lower().strip() for c in df.columns}
     df_work = df.rename(columns=cols_lower)
-    
+
     has_ve = ve_column in df_work.columns
     has_smo2 = smo2_column in df.columns
     has_power = power_column in df.columns
     has_time = time_column in df.columns
-    
+
     if not has_time:
         result.analysis_notes.append("Brak kolumny czasu")
         return result
-    
+
     step_range = None
     df_test = df
-    
+
     if has_power:
         step_range = detect_step_test_range(df, power_column=power_column, time_column=time_column)
         result.step_range = step_range
@@ -54,7 +48,7 @@ def analyze_step_test(
             result.steps_analyzed = len(step_range.steps)
             result.analysis_notes.append(f"✅ Wykryto test schodkowy: {len(step_range.steps)} stopni")
             result.analysis_notes.extend([f"  • {n}" for n in step_range.notes])
-            
+
             if has_ve:
                 vt_res = detect_vt_from_steps(
                     df, step_range,
@@ -75,7 +69,7 @@ def analyze_step_test(
                 result.vt2_br = vt_res.vt2_br
                 result.analysis_notes.extend(vt_res.notes)
                 result.step_ve_analysis = vt_res.step_analysis
-            
+
             if has_smo2:
                 smo2_res = detect_smo2_from_steps(df, step_range, smo2_column=smo2_column, power_column=power_column, hr_column=hr_column, time_column=time_column)
                 result.smo2_1_watts = smo2_res.smo2_1_watts
@@ -89,17 +83,17 @@ def analyze_step_test(
             notes = step_range.notes if step_range else ["Nie znaleziono prawidłowego testu schodkowego"]
             result.analysis_notes.extend([f"⚠️ {n}" for n in notes])
             result.analysis_notes.append("Używanie detekcji legacy (sliding window)")
-        
+
     if has_ve and has_power and result.vt1_watts is None:
         df_temp = df_test# Fallback
         df_inc, df_dec = segment_load_phases(df_temp, power_col=power_column, time_col=time_column)
         vt1_inc, vt2_inc = detect_vt_transition_zone(
-            df_inc, 
-            window_duration=60, 
+            df_inc,
+            window_duration=60,
             step_size=5,
-            ve_column=ve_column, 
-            power_column=power_column, 
-            hr_column=hr_column, 
+            ve_column=ve_column,
+            power_column=power_column,
+            hr_column=hr_column,
             time_column=time_column
         )
         result.vt1_zone, result.vt2_zone = vt1_inc, vt2_inc
@@ -109,14 +103,14 @@ def analyze_step_test(
         if vt2_inc:
             result.vt2_watts = sum(vt2_inc.range_watts)/2
             result.vt2_hr = sum(vt2_inc.range_hr)/2 if vt2_inc.range_hr else None
-            
+
         if not df_dec.empty:
             vt1_dec, vt2_dec = detect_vt_transition_zone(df_dec, ve_column=ve_column, power_column=power_column, hr_column=hr_column, time_column=time_column)
             h = HysteresisResult(vt1_inc_zone=vt1_inc, vt1_dec_zone=vt1_dec, vt2_inc_zone=vt2_inc, vt2_dec_zone=vt2_dec)
             if vt1_inc and vt1_dec: h.vt1_shift_watts = sum(vt1_dec.range_watts)/2 - sum(vt1_inc.range_watts)/2
             if vt2_inc and vt2_dec: h.vt2_shift_watts = sum(vt2_dec.range_watts)/2 - sum(vt2_inc.range_watts)/2
             result.hysteresis = h
-            
+
         result.sensitivity = run_sensitivity_analysis(df_inc, ve_column=ve_column, power_column=power_column, hr_column=hr_column, time_column=time_column)
 
     return result
@@ -139,16 +133,16 @@ def calculate_training_zones_from_thresholds(vt1_watts: int, vt2_watts: int, cp=
     if cp is None: cp = vt2_watts
     v1 = vt1_watts if vt1_watts else 0
     v2 = vt2_watts if vt2_watts else 0
-    
+
     # Calculate zone boundaries
     gap = v2 - v1  # Gap between VT1 and VT2
     midpoint = int((v1 + v2) / 2)
-    
+
     # Split point for Z3a/Z3b: 35% of the gap above VT1
     # This puts Low Tempo as the "comfortable tempo" zone
     # and Sweet Spot as the "hard tempo" zone closer to threshold
     z3_split = int(v1 + gap * 0.35)
-    
+
     return {
         "power_zones": {
             "Z1_Recovery": (0, int(v1 * 0.75)),

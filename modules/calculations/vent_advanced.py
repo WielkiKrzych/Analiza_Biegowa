@@ -12,12 +12,13 @@ Classifies breathing patterns:
 - Compensatory (shallow/panic)
 - Unstable (hyperventilation)
 """
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional, Tuple, List
-from dataclasses import dataclass, field
 from scipy import stats
-import logging
 
 logger = logging.getLogger("Tri_Dashboard.VentilationAdvanced")
 
@@ -36,20 +37,20 @@ class VentilationMetrics:
     rr_max: float = 0.0                   # Max RR
     ve_rr_ratio: float = 0.0              # VE/RR = tidal volume proxy
     ve_slope: float = 0.0                 # VE change per 100W
-    
+
     # Breakpoints
     ve_breakpoint_watts: Optional[float] = None  # VE inflection (VT1/VT2)
     rr_breakpoint_watts: Optional[float] = None  # RR inflection
-    
+
     # Pattern classification
     breathing_pattern: str = "unknown"    # controlled, shallow, hyperventilation
     control_status: str = "unknown"       # controlled, compensatory, unstable
     control_confidence: float = 0.0
-    
+
     # Interpretation
     interpretation: str = ""
     recommendations: List[Dict[str, str]] = field(default_factory=list)
-    
+
     # Profile for charting
     ve_profile: List[Dict[str, float]] = field(default_factory=list)
     rr_profile: List[Dict[str, float]] = field(default_factory=list)
@@ -77,27 +78,27 @@ def calculate_ve_metrics(
         if col in df.columns:
             ve_data = df[col]
             break
-    
+
     if ve_data is None or power_col not in df.columns:
         return 0.0, 0.0, 0.0
-    
+
     mask = df[power_col] > 100
     if mask.sum() < 20:
         return 0.0, 0.0, 0.0
-    
+
     filtered_ve = ve_data[mask]
     filtered_power = df.loc[mask, power_col]
-    
+
     ve_avg = float(filtered_ve.mean())
     ve_max = float(filtered_ve.max())
-    
+
     # VE slope
     if filtered_power.nunique() > 1:
         slope, _, r, _, _ = stats.linregress(filtered_power, filtered_ve)
         ve_slope = slope * 100  # per 100W
     else:
         ve_slope = 0.0
-    
+
     return ve_avg, ve_max, ve_slope
 
 
@@ -114,7 +115,7 @@ def calculate_rr_metrics(
     """
     # Try multiple column names - including Tyme/Garmin variations
     rr_cols = [
-        "rr", "resprate", "respiratory_rate", "breaths", 
+        "rr", "resprate", "respiratory_rate", "breaths",
         "respiration_rate", "breathing_rate", "bf",  # Common aliases
         "tymerespirationrate", "respirationrate",  # Tyme wear
         "tymebreathrate", "breathrate",  # Tyme breath rate (CONFIRMED)
@@ -126,16 +127,16 @@ def calculate_rr_metrics(
         if matching:
             rr_data = df[matching[0]]
             break
-    
+
     if rr_data is None:
         return 0.0, 0.0
-    
+
     mask = df[power_col] > 100 if power_col in df.columns else pd.Series(True, index=df.index)
     if mask.sum() < 10:
         return 0.0, 0.0
-    
+
     filtered_rr = rr_data[mask]
-    
+
     return float(filtered_rr.mean()), float(filtered_rr.max())
 
 
@@ -168,21 +169,21 @@ def find_ve_breakpoint(
         if col in df.columns:
             ve_data = df[col]
             break
-    
+
     if ve_data is None or power_col not in df.columns:
         return None
-    
+
     mask = df[power_col] > 100
     if mask.sum() < 50:
         return None
-    
+
     filtered = df[mask].copy()
     power = filtered[power_col].values
     ve = ve_data[mask].values
-    
+
     # Smooth
     ve_smooth = pd.Series(ve).rolling(window=window, min_periods=1).mean().values
-    
+
     # Calculate local slope in windows
     n = len(ve_smooth)
     slopes = []
@@ -196,18 +197,18 @@ def find_ve_breakpoint(
             except Exception as e:
                 logger.debug(f"Linregress failed in segment: {e}")
                 pass
-    
+
     if len(slopes) < 3:
         return None
-    
+
     # Find where slope increases significantly
     slopes_arr = np.array([s[1] for s in slopes])
     baseline = np.mean(slopes_arr[:3])
-    
+
     for power_val, slope in slopes:
         if slope > baseline * 1.5:  # 50% increase
             return float(power_val)
-    
+
     return None
 
 
@@ -226,15 +227,15 @@ def classify_breathing_pattern(
     # High RR with low TV = shallow/panic
     if rr_max > 50 and ve_rr_ratio < 1.5:
         return "shallow", "Shallow/Panic Breathing – płytkie oddechy, niska objętość oddechowa"
-    
+
     # Very high VE slope = hyperventilation
     if ve_slope > 0.5:  # > 0.5 L/min per watt
         return "hyperventilation", "Hyperventilation – nadmierna kompensacja wentylacyjna"
-    
+
     # Normal pattern
     if rr_avg < 35 and ve_rr_ratio > 2.0:
         return "efficient", "Efficient Breathing – zrównoważony wzorzec oddechowy"
-    
+
     # Default
     return "mixed", "Mixed Pattern – profil oddechowy do optymalizacji"
 
@@ -247,13 +248,13 @@ def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, floa
         (status, confidence, interpretation)
     """
     scores = {"controlled": 0.0, "compensatory": 0.0, "unstable": 0.0}
-    
+
     ve_slope = metrics.ve_slope
     rr_avg = metrics.rr_avg
     rr_max = metrics.rr_max
     ve_rr = metrics.ve_rr_ratio
     pattern = metrics.breathing_pattern
-    
+
     # --- VE SLOPE ANALYSIS ---
     if ve_slope < 0.25:
         scores["controlled"] += 2.0
@@ -261,7 +262,7 @@ def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, floa
         scores["compensatory"] += 1.5
     else:
         scores["unstable"] += 2.0
-    
+
     # --- RR ANALYSIS ---
     if rr_max < 45:
         scores["controlled"] += 1.5
@@ -269,7 +270,7 @@ def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, floa
         scores["compensatory"] += 1.0
     else:
         scores["unstable"] += 2.0
-    
+
     # --- TIDAL VOLUME ANALYSIS ---
     if ve_rr > 2.5:
         scores["controlled"] += 2.0
@@ -277,7 +278,7 @@ def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, floa
         scores["compensatory"] += 1.0
     else:
         scores["unstable"] += 1.5
-    
+
     # --- PATTERN CONTRIBUTION ---
     if pattern == "efficient":
         scores["controlled"] += 1.0
@@ -285,27 +286,27 @@ def classify_ventilatory_control(metrics: VentilationMetrics) -> Tuple[str, floa
         scores["unstable"] += 1.5
     elif pattern == "hyperventilation":
         scores["compensatory"] += 1.5
-    
+
     # Determine winner
     total = sum(scores.values()) or 1.0
     max_score = max(scores.values())
     status = max(scores, key=scores.get)
     confidence = max_score / total
-    
+
     # Generate interpretation
     interpretation = _generate_vent_interpretation(status, metrics)
-    
+
     return status, confidence, interpretation
 
 
 def _generate_vent_interpretation(status: str, metrics: VentilationMetrics) -> str:
     """Generate physiology-oriented interpretation."""
-    
+
     ve_slope = metrics.ve_slope
     rr_max = metrics.rr_max
     ve_rr = metrics.ve_rr_ratio
     bp = metrics.ve_breakpoint_watts
-    
+
     if status == "controlled":
         base = "CONTROLLED – Efektywna kontrola wentylacji"
         detail = (
@@ -314,7 +315,7 @@ def _generate_vent_interpretation(status: str, metrics: VentilationMetrics) -> s
         )
         if bp:
             detail += f"Punkt załamania VE przy {bp:.0f}W potwierdza wysoką sprawność metaboliczną."
-    
+
     elif status == "compensatory":
         base = "COMPENSATORY – Oddech kompensuje stres metaboliczny"
         detail = (
@@ -323,14 +324,14 @@ def _generate_vent_interpretation(status: str, metrics: VentilationMetrics) -> s
         )
         if ve_rr < 2.0:
             detail += "Niska objętość oddechowa wymaga uwagi – może ograniczać saturację. "
-    
+
     else:  # unstable
         base = "UNSTABLE – Dekompensacja wentylacyjna"
         detail = (
             f"Wysoki VE slope ({ve_slope:.2f}) i/lub RR max ({rr_max:.0f}) wskazują na "
             "niekontrolowany wzorzec oddechowy. Priorytet: trening tolerancji CO₂."
         )
-    
+
     return f"{base}\n{detail}"
 
 
@@ -339,7 +340,7 @@ def generate_vent_recommendations(
     metrics: VentilationMetrics
 ) -> List[Dict[str, str]]:
     """Generate training recommendations for ventilatory improvement."""
-    
+
     if status == "controlled":
         return [
             {
@@ -355,7 +356,7 @@ def generate_vent_recommendations(
                 "risk": "low"
             }
         ]
-    
+
     elif status == "compensatory":
         return [
             {
@@ -377,7 +378,7 @@ def generate_vent_recommendations(
                 "risk": "low"
             }
         ]
-    
+
     else:  # unstable
         return [
             {
@@ -415,30 +416,30 @@ def analyze_ventilation(
     Perform complete ventilation analysis.
     """
     metrics = VentilationMetrics()
-    
+
     # Calculate core metrics
     metrics.ve_avg, metrics.ve_max, metrics.ve_slope = calculate_ve_metrics(df, ve_col, power_col)
     metrics.rr_avg, metrics.rr_max = calculate_rr_metrics(df, rr_col, power_col)
     metrics.ve_rr_ratio = calculate_ve_rr_ratio(metrics.ve_avg, metrics.rr_avg)
-    
+
     # Find breakpoints
     metrics.ve_breakpoint_watts = find_ve_breakpoint(df, ve_col, power_col)
-    
+
     # Classify pattern
     pattern, pattern_desc = classify_breathing_pattern(
         metrics.rr_avg, metrics.rr_max, metrics.ve_rr_ratio, metrics.ve_slope
     )
     metrics.breathing_pattern = pattern
-    
+
     # Classify control
     status, confidence, interpretation = classify_ventilatory_control(metrics)
     metrics.control_status = status
     metrics.control_confidence = confidence
     metrics.interpretation = interpretation
-    
+
     # Generate recommendations
     metrics.recommendations = generate_vent_recommendations(status, metrics)
-    
+
     # Build profiles for charting
     ve_cols = ["ve", "tymeventilation", "ventilation"]
     for col in ve_cols:
@@ -451,7 +452,7 @@ def analyze_ventilation(
                     "ve": float(df.loc[idx, col])
                 })
             break
-    
+
     return metrics
 
 

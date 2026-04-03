@@ -5,12 +5,13 @@ IMPORTANT: Pace is a NONLINEAR metric (sec/km = 1/speed).
 Averaging pace with .mean() gives INCORRECT results.
 Always convert to speed for averaging, then convert back.
 """
-from typing import Union, Any
 import logging
+from typing import Any, Union
+
 import numpy as np
 import pandas as pd
 
-from .common import ensure_pandas, WINDOW_LONG, WINDOW_SHORT
+from .common import WINDOW_LONG, WINDOW_SHORT, ensure_pandas
 from .gap import calculate_gap, calculate_grade, smooth_elevation
 
 logger = logging.getLogger(__name__)

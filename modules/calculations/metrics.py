@@ -2,16 +2,17 @@
 SRP: Moduł odpowiedzialny za podstawowe metryki treningowe.
 """
 
-from typing import Union, Any, Tuple, Dict
+from typing import Any, Dict, Tuple, Union
+
 import numpy as np
 import pandas as pd
 
 from .common import (
-    ensure_pandas,
+    MIN_HR_DECOUPLING,
     MIN_SAMPLES_ACTIVE,
     MIN_SAMPLES_Z2_DRIFT,
     MIN_WATTS_DECOUPLING,
-    MIN_HR_DECOUPLING,
+    ensure_pandas,
 )
 
 
@@ -212,46 +213,46 @@ def calculate_pace_hr_decoupling(
         Tuple of (decoupling_percent, efficiency_factor)
     """
     df = ensure_pandas(df_pl)
-    
+
     if pace_col not in df.columns or hr_col not in df.columns:
         return 0.0, 0.0
-    
+
     # Filter valid data (positive pace, reasonable HR > 60 bpm)
     df_active = df[(df[pace_col] > 0) & (df[pace_col] < 2000) & (df[hr_col] > 60)].copy()
-    
+
     if len(df_active) < MIN_SAMPLES_ACTIVE:
         return 0.0, 0.0
-    
+
     # Convert pace to speed (m/s) for linear averaging
     # Speed = 1000m / pace_sec_per_km
     df_active['speed_ms'] = 1000.0 / df_active[pace_col]
-    
+
     mid = len(df_active) // 2
     first_half = df_active.iloc[:mid]
     second_half = df_active.iloc[mid:]
-    
+
     # Calculate EF for each half (Speed / HR)
     # Use harmonic mean for pace (which means arithmetic mean for speed)
     hr1 = first_half[hr_col].mean()
     hr2 = second_half[hr_col].mean()
     speed1 = first_half['speed_ms'].mean()
     speed2 = second_half['speed_ms'].mean()
-    
+
     if hr1 <= 0 or hr2 <= 0:
         return 0.0, 0.0
-    
+
     ef1 = speed1 / hr1  # m/s per bpm
     ef2 = speed2 / hr2
-    
+
     if ef1 <= 0:
         return 0.0, 0.0
-    
+
     # Decoupling percentage
     decoupling_pct = ((ef1 - ef2) / ef1) * 100
-    
+
     # Overall efficiency factor
     overall_ef = df_active['speed_ms'].mean() / df_active[hr_col].mean()
-    
+
     return float(decoupling_pct), float(overall_ef)
 
 
@@ -268,39 +269,39 @@ def calculate_durability_index(
         Durability index (100 = perfect maintenance, <100 = fade)
     """
     df = ensure_pandas(df_pl)
-    
+
     if pace_col not in df.columns:
         return 0.0
-    
+
     df_valid = df[(df[pace_col] > 0) & (df[pace_col] < 2000)].copy()
-    
+
     if len(df_valid) < 100:
         return 0.0
-    
+
     mid = len(df_valid) // 2
     first_half = df_valid.iloc[:mid]
     second_half = df_valid.iloc[mid:]
-    
+
     # Use harmonic mean for pace: H = n / sum(1/x)
     # Equivalent to arithmetic mean of speed
     speed1 = 1000.0 / first_half[pace_col]
     speed2 = 1000.0 / second_half[pace_col]
-    
+
     avg_speed1 = speed1.mean()
     avg_speed2 = speed2.mean()
-    
+
     if avg_speed1 <= 0 or avg_speed2 <= 0:
         return 0.0
-    
+
     # Convert back to pace for durability ratio
     avg_pace1 = 1000.0 / avg_speed1
     avg_pace2 = 1000.0 / avg_speed2
-    
+
     # Durability: ratio of first half to second half pace
     # >100 means second half was faster (negative split)
     # <100 means second half was slower (positive split/fade)
     durability = (avg_pace1 / avg_pace2) * 100
-    
+
     return float(durability)
 
 

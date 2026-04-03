@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if it exists
@@ -82,23 +83,23 @@ class Config:
         # Validate positive values
         if cls.MIN_WATTS_ACTIVE < 0:
             raise ValueError(f"MIN_WATTS_ACTIVE must be >= 0, got {cls.MIN_WATTS_ACTIVE}")
-        
+
         if cls.MIN_HR_ACTIVE < 0:
             raise ValueError(f"MIN_HR_ACTIVE must be >= 0, got {cls.MIN_HR_ACTIVE}")
-        
+
         if cls.MIN_RECORDS_FOR_ROLLING < 1:
             raise ValueError(f"MIN_RECORDS_FOR_ROLLING must be >= 1, got {cls.MIN_RECORDS_FOR_ROLLING}")
-        
+
         # Validate ranges
         if not (0.0 < cls.ML_LEARNING_RATE < 1.0):
             raise ValueError(f"ML_LEARNING_RATE must be in (0, 1), got {cls.ML_LEARNING_RATE}")
-        
+
         if not (0.0 < cls.VT1_SLOPE_THRESHOLD < 1.0):
             raise ValueError(f"VT1_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT1_SLOPE_THRESHOLD}")
-        
+
         if not (0.0 < cls.VT2_SLOPE_THRESHOLD < 1.0):
             raise ValueError(f"VT2_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT2_SLOPE_THRESHOLD}")
-        
+
         # Validate confidence values
         for name, value in [
             ("SLOPE_CONFIDENCE_MAX", cls.SLOPE_CONFIDENCE_MAX),
@@ -108,17 +109,17 @@ class Config:
         ]:
             if not (0.0 <= value <= 1.0):
                 raise ValueError(f"{name} must be in [0, 1], got {value}")
-        
+
         if cls.BASE_CONFIDENCE >= cls.MAX_CONFIDENCE:
             raise ValueError(
                 f"BASE_CONFIDENCE ({cls.BASE_CONFIDENCE}) must be < "
                 f"MAX_CONFIDENCE ({cls.MAX_CONFIDENCE})"
             )
-        
+
         # Validate file paths
         if not isinstance(cls.DB_PATH, Path):
             raise ValueError(f"DB_PATH must be a Path object, got {type(cls.DB_PATH)}")
-        
+
         if not isinstance(cls.DATA_DIR, Path):
             raise ValueError(f"DATA_DIR must be a Path object, got {type(cls.DATA_DIR)}")
 

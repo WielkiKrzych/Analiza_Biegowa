@@ -8,9 +8,9 @@ Provides:
 - 4-week microcycle plan generator
 """
 
-import streamlit as st
-import plotly.graph_objects as go
 import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
 from modules.calculations.thresholds import (
     analyze_step_test,
@@ -39,12 +39,12 @@ def render_threshold_analysis_tab(
     has_hr = "hr" in target_df.columns or "heartrate" in target_df.columns
     hr_col = "hr" if "hr" in target_df.columns else "heartrate"
     pace_col = "pace" if "pace" in target_df.columns else "pace_s" if "pace_s" in target_df.columns else None
-    
+
     # FIX: Allow pace-based analysis when no power meter available
     if not has_watts and not has_pace:
         st.error("Brak danych mocy (kolumna 'watts') ani tempa (kolumna 'pace'). Analiza niemożliwa.")
         return
-    
+
     # Determine primary metric for analysis
     if has_watts:
         intensity_col = "watts"

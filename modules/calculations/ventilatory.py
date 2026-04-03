@@ -2,23 +2,24 @@
 Ventilatory Threshold Detection (VT1/VT2).
 """
 
+import warnings
+from typing import Any, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from scipy import stats, signal
-from typing import Optional, List, Tuple, Any
+from scipy import signal, stats
 
-from .threshold_types import TransitionZone, SensitivityResult, StepVTResult, StepTestRange
 from .common import (
-    VT1_SLOPE_THRESHOLD,
-    VT2_SLOPE_THRESHOLD,
-    VT1_SLOPE_SPIKE_SKIP,
+    BASE_CONFIDENCE,
+    LOWER_STEP_WEIGHT,
+    MAX_CONFIDENCE,
     SLOPE_CONFIDENCE_MAX,
     STABILITY_CONFIDENCE_MAX,
-    BASE_CONFIDENCE,
-    MAX_CONFIDENCE,
-    LOWER_STEP_WEIGHT,
     UPPER_STEP_WEIGHT,
+    VT1_SLOPE_SPIKE_SKIP,
+    VT1_SLOPE_THRESHOLD,
 )
+from .threshold_types import SensitivityResult, StepTestRange, StepVTResult, TransitionZone
 
 
 def calculate_slope(time_series: pd.Series, value_series: pd.Series) -> Tuple[float, float, float]:
@@ -423,6 +424,11 @@ def detect_vt_vslope_savgol(
     DEPRECATED: Use detect_vt_cpet() for CPET-grade detection.
     This wrapper calls the new function for backward compatibility.
     """
+    warnings.warn(
+        "detect_vt_vslope_savgol is deprecated. Use detect_vt_cpet instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return detect_vt_cpet(
         df, step_range, power_column, ve_column, time_column, min_power_watts=min_power_watts
     )
@@ -1207,7 +1213,7 @@ def _run_ve_only_mode(
     if len(zones) != 4:
         result["analysis_notes"].append(f"❌ BŁĄD: Wygenerowano {len(zones)} stref zamiast 4!")
     else:
-        result["analysis_notes"].append(f"✓ 4 strefy wygenerowane poprawnie")
+        result["analysis_notes"].append("✓ 4 strefy wygenerowane poprawnie")
 
     result["metabolic_zones"] = zones
 

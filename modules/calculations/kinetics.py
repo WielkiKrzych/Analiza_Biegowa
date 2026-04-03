@@ -10,11 +10,12 @@ Includes Cross-Correlation Analysis (Signal Lag).
 Includes State-Based Physiological Modeling.
 """
 
+from typing import Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-from typing import Optional, Dict, List
+from scipy import signal, stats
 from scipy.optimize import curve_fit
-from scipy import stats, signal
 
 
 def normalize_smo2_series(series: pd.Series) -> pd.Series:

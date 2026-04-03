@@ -4,12 +4,12 @@ Serwis eksportu wykresów z zakładki Podsumowanie do PNG.
 
 import io
 import zipfile
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
+
 import pandas as pd
 import plotly.graph_objects as go
-from PIL import Image, ImageDraw, ImageFont
 import plotly.io as pio
-
+from PIL import Image, ImageDraw, ImageFont
 
 # Dostępne rozmiary wykresów
 CHART_SIZES = {
@@ -32,15 +32,15 @@ def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
         PNG bytes z watermarkiem
     """
     img = Image.open(io.BytesIO(image_bytes))
-    
+
     # Konwertuj do RGBA jeśli potrzeba
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
-    
+
     # Utwórz warstwę przezroczystą dla watermarka
     watermark_layer = Image.new('RGBA', img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(watermark_layer)
-    
+
     # Użyj domyślnej czcionki (brak zewnętrznych zależności)
     try:
         # Próba użycia czcionki systemowej na macOS
@@ -51,21 +51,21 @@ def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48)
         except Exception:
             font = ImageFont.load_default()
-    
+
     # Oblicz pozycję (prawy dolny róg z marginesem)
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
-    
+
     x = img.width - text_width - 40
     y = img.height - text_height - 40
-    
+
     # Narysuj watermark z przezroczystością (10% opacity = 25/255)
     draw.text((x, y), text, fill=(255, 255, 255, 25), font=font)
-    
+
     # Połącz oryginalny obraz z warstwą watermarka
     result = Image.alpha_composite(img, watermark_layer)
-    
+
     # Zapisz do bytes
     output = io.BytesIO()
     result.save(output, format='PNG')
@@ -96,14 +96,14 @@ def export_chart_to_png(
         height=size[1],
         autosize=False,
     )
-    
+
     # Eksportuj do PNG
     img_bytes = pio.to_image(fig, format='png', scale=1)
-    
+
     # Dodaj watermark jeśli wymagany
     if add_watermark_flag:
         img_bytes = add_watermark(img_bytes)
-    
+
     return f"{filename}.png", img_bytes
 
 
@@ -124,10 +124,10 @@ def generate_summary_charts_zip(
         ZIP file jako bytes
     """
     size = CHART_SIZES.get(size_key, CHART_SIZES["large"])
-    
+
     # Utwórz ZIP w pamięci
     zip_buffer = io.BytesIO()
-    
+
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # 1. Przebieg treningu (Moc, HR, SmO2, VE)
         fig1 = _build_training_timeline_chart(df_plot)
@@ -136,7 +136,7 @@ def generate_summary_charts_zip(
                 fig1, "01_przebieg_treningu", size, add_watermark_flag
             )
             zip_file.writestr(name, bytes_data)
-        
+
         # 2. Wentylacja (VE) i Oddechy (BR)
         fig2 = _build_ventilation_chart(df_plot)
         if fig2:
@@ -144,7 +144,7 @@ def generate_summary_charts_zip(
                 fig2, "02_wentylacja_oddechy", size, add_watermark_flag
             )
             zip_file.writestr(name, bytes_data)
-        
+
         # 3. SmO2 vs THb
         fig3 = _build_smo2_thb_chart(df_plot)
         if fig3:
@@ -152,7 +152,7 @@ def generate_summary_charts_zip(
                 fig3, "03_smo2_vs_thb", size, add_watermark_flag
             )
             zip_file.writestr(name, bytes_data)
-    
+
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
 
@@ -160,7 +160,7 @@ def generate_summary_charts_zip(
 def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     """Buduje wykres przebiegu treningu (kopia z summary.py)."""
     from modules.config import Config
-    
+
     fig = go.Figure()
     time_x = (
         df_plot["time_min"]
@@ -169,17 +169,17 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         if "time" in df_plot.columns
         else None
     )
-    
+
     if time_x is None:
         return None
-    
+
     # Convert time_min to hh:mm:ss format for x-axis
     import numpy as np
     time_vals = time_x.values if hasattr(time_x, 'values') else np.array(time_x)
     tick_step = 5  # every 5 minutes
     tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
     tick_text = [f"{int(m//60):02d}:{int(m%60):02d}:00" for m in tick_vals]
-    
+
     # Tempo (zamiast Mocy dla biegania)
     if "pace_smooth" in df_plot.columns:
         pace_display = df_plot["pace_smooth"] / 60.0  # Convert to min/km
@@ -195,7 +195,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             name="Tempo", fill="tozeroy",
             line=dict(color=Config.COLOR_POWER, width=1),
         ))
-    
+
     # HR
     if "heartrate_smooth" in df_plot.columns:
         fig.add_trace(go.Scatter(
@@ -209,7 +209,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             name="HR", line=dict(color=Config.COLOR_HR, width=2),
             yaxis="y2",
         ))
-    
+
     # SmO2
     if "smo2_smooth" in df_plot.columns:
         fig.add_trace(go.Scatter(
@@ -223,7 +223,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             name="SmO2", line=dict(color=Config.COLOR_SMO2, width=2, dash="dot"),
             yaxis="y3",
         ))
-    
+
     # VE
     if "tymeventilation_smooth" in df_plot.columns:
         fig.add_trace(go.Scatter(
@@ -237,7 +237,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             name="VE", line=dict(color=Config.COLOR_VE, width=2, dash="dash"),
             yaxis="y4",
         ))
-    
+
     fig.update_layout(
         template="plotly_dark",
         title="Przebieg Treningu (Tempo, HR, SmO2, VE)",
@@ -255,21 +255,21 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         legend=dict(orientation="h", y=-0.15),
         margin=dict(l=60, r=60, t=60, b=60),
     )
-    
+
     return fig
 
 
 def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     """Buduje wykres wentylacji i oddechów."""
     from plotly.subplots import make_subplots
-    
+
     if "tymeventilation" not in df_plot.columns:
         return None
-    
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     time_x = df_plot["time"] if "time" in df_plot.columns else range(len(df_plot))
-    
+
     # VE
     ve_data = df_plot["tymeventilation"].rolling(10, center=True).mean()
     fig.add_trace(
@@ -280,7 +280,7 @@ def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
         ),
         secondary_y=False,
     )
-    
+
     # BR
     if "tymebreathrate" in df_plot.columns:
         br_data = df_plot["tymebreathrate"].rolling(10, center=True).mean()
@@ -292,7 +292,7 @@ def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
             ),
             secondary_y=True,
         )
-    
+
     fig.update_layout(
         template="plotly_dark",
         title="Wentylacja (VE) i Oddechy (BR)",
@@ -302,21 +302,21 @@ def _build_ventilation_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     )
     fig.update_yaxes(title_text="VE (L/min)", secondary_y=False)
     fig.update_yaxes(title_text="BR (/min)", secondary_y=True)
-    
+
     return fig
 
 
 def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     """Buduje wykres SmO2 vs THb."""
     from plotly.subplots import make_subplots
-    
+
     if "smo2" not in df_plot.columns:
         return None
-    
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     time_x = df_plot["time"] if "time" in df_plot.columns else range(len(df_plot))
-    
+
     # SmO2
     smo2_smooth = df_plot["smo2"].rolling(5, center=True).mean()
     fig.add_trace(
@@ -327,7 +327,7 @@ def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
         ),
         secondary_y=False,
     )
-    
+
     # THb
     if "thb" in df_plot.columns:
         thb_smooth = df_plot["thb"].rolling(5, center=True).mean()
@@ -339,7 +339,7 @@ def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
             ),
             secondary_y=True,
         )
-    
+
     fig.update_layout(
         template="plotly_dark",
         title="SmO2 vs THb w czasie",
@@ -349,5 +349,5 @@ def _build_smo2_thb_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
     )
     fig.update_yaxes(title_text="SmO2 (%)", secondary_y=False)
     fig.update_yaxes(title_text="THb (g/dL)", secondary_y=True)
-    
+
     return fig

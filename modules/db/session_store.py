@@ -5,9 +5,10 @@ SQLite-based persistent storage for historical data.
 
 import logging
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
-from dataclasses import dataclass
+
 from modules.config import Config
 
 logger = logging.getLogger(__name__)

@@ -7,9 +7,9 @@ to keep the UI responsive during heavy computations.
 
 import asyncio
 import functools
-from typing import Any, Callable, TypeVar, Optional
+from typing import Any, Callable, Optional, TypeVar
+
 import pandas as pd
-from pathlib import Path
 
 # Use shared executor from async_runner to avoid duplication
 from modules.calculations.async_runner import get_executor

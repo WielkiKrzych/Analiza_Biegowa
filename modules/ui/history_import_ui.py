@@ -5,10 +5,11 @@ UI for importing historical training files from 'treningi_csv' folder.
 """
 
 import html
+
 import streamlit as st
 
-from modules.history_import import import_training_folder, get_available_files, TRAINING_FOLDER
 from modules.db import SessionStore
+from modules.history_import import TRAINING_FOLDER, get_available_files, import_training_folder
 
 
 def render_history_import_tab(cp: float = 280):

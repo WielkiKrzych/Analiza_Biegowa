@@ -11,12 +11,13 @@ Classifies limiters:
 - Central (cardiac output)
 - Metabolic (high glycolysis)
 """
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional, Tuple, List
-from dataclasses import dataclass, field
 from scipy import stats
-import logging
 
 try:
     from numba import jit, prange
@@ -86,15 +87,15 @@ class SmO2AdvancedMetrics:
     halftime_reoxy_sec: Optional[float] = None  # Half-time to reoxygenation [s]
     hr_coupling_r: float = 0.0            # Correlation SmO2 vs HR changes
     drift_pct: float = 0.0                # SmO2 drift first half vs second half [%]
-    
+
     # Limiter classification
     limiter_type: str = "unknown"         # local, central, metabolic, balanced
     limiter_confidence: float = 0.0       # 0-1
-    
+
     # Interpretation
     interpretation: str = ""
     recommendations: List[str] = field(default_factory=list)
-    
+
     # Raw data for debugging
     slope_r2: float = 0.0
     data_quality: str = "unknown"
@@ -120,21 +121,21 @@ def calculate_smo2_slope(
     mask = df[power_col] >= min_power
     if mask.sum() < 10:
         return 0.0, 0.0
-    
+
     filtered = df.loc[mask, [power_col, smo2_col]].dropna()
     if len(filtered) < 10:
         return 0.0, 0.0
-    
+
     # Linear regression
     slope, intercept, r, p, se = stats.linregress(
-        filtered[power_col], 
+        filtered[power_col],
         filtered[smo2_col]
     )
-    
+
     # Convert to per 100W
     slope_per_100w = slope * 100
     r_squared = r ** 2
-    
+
     return slope_per_100w, r_squared
 
 
@@ -157,11 +158,11 @@ def calculate_halftime_reoxygenation(
     # Find end of ramp (power drops significantly)
     if power_col not in df.columns or smo2_col not in df.columns:
         return None
-    
+
     # Get power and SmO2
     power = df[power_col].values
     smo2 = df[smo2_col].values
-    
+
     # Check for time column
     if time_col in df.columns:
         time = df[time_col].values
@@ -173,23 +174,23 @@ def calculate_halftime_reoxygenation(
             time = np.arange(len(df))
     else:
         time = np.arange(len(df))
-    
+
     # Find peak power index
     peak_idx = np.argmax(power)
     if peak_idx >= len(power) - 30:  # Not enough recovery data
         return None
-    
+
     # Get SmO2 at peak and minimum before peak
     smo2_at_peak = smo2[peak_idx]
     smo2_min_during_ramp = np.min(smo2[:peak_idx])
-    
+
     # Look for recovery after peak
     recovery_smo2 = smo2[peak_idx:]
     recovery_time = time[peak_idx:]
-    
+
     if len(recovery_smo2) < 30:
         return None
-    
+
     # Calculate baseline from first 30s of low-intensity data (not just smo2[0])
     low_power_mask = power < power_threshold
     if low_power_mask.any():
@@ -202,15 +203,15 @@ def calculate_halftime_reoxygenation(
     drop = baseline_smo2 - smo2_min_during_ramp  # Baseline - minimum
     if drop <= 0:
         return None
-    
+
     half_recovery_target = smo2_min_during_ramp + (drop * 0.5)
-    
+
     # Find when SmO2 reaches 50% recovery
     for i, val in enumerate(recovery_smo2):
         if val >= half_recovery_target:
             halftime = recovery_time[i] - recovery_time[0]
             return float(halftime)
-    
+
     return None  # Did not reach 50% recovery in data
 
 
@@ -284,11 +285,11 @@ def classify_smo2_limiter(metrics: SmO2AdvancedMetrics) -> Tuple[str, float, str
         (limiter_type, confidence, interpretation)
     """
     scores = {"local": 0.0, "central": 0.0, "metabolic": 0.0}
-    
+
     slope = metrics.slope_per_100w
     halftime = metrics.halftime_reoxy_sec
     coupling = metrics.hr_coupling_r
-    
+
     # --- SLOPE ANALYSIS ---
     if slope < LIMITER_THRESHOLDS["slope_severe"]:
         scores["local"] += 3.0
@@ -297,7 +298,7 @@ def classify_smo2_limiter(metrics: SmO2AdvancedMetrics) -> Tuple[str, float, str
         scores["local"] += 1.5
     else:
         scores["central"] += 1.0  # Low slope = supply keeping up
-    
+
     # --- HALFTIME ANALYSIS ---
     if halftime is not None:
         if halftime > LIMITER_THRESHOLDS["halftime_slow"]:
@@ -306,7 +307,7 @@ def classify_smo2_limiter(metrics: SmO2AdvancedMetrics) -> Tuple[str, float, str
             scores["central"] += 1.5  # Good capillaries, central limit
         else:
             scores["metabolic"] += 1.0  # Moderate = metabolic
-    
+
     # --- COUPLING ANALYSIS ---
     if coupling < LIMITER_THRESHOLDS["coupling_strong"]:
         scores["central"] += 2.5  # Strong HR-SmO2 link = central driver
@@ -314,16 +315,16 @@ def classify_smo2_limiter(metrics: SmO2AdvancedMetrics) -> Tuple[str, float, str
         scores["local"] += 2.0  # Weak link = local independence
     else:
         scores["metabolic"] += 1.5
-    
+
     # Determine winner
     total = sum(scores.values()) or 1.0
     max_score = max(scores.values())
     limiter_type = max(scores, key=scores.get)
     confidence = max_score / total
-    
+
     # Generate interpretation
     interpretation = _generate_interpretation(limiter_type, metrics, scores)
-    
+
     return limiter_type, confidence, interpretation
 
 
@@ -333,11 +334,11 @@ def _generate_interpretation(
     scores: Dict[str, float]
 ) -> str:
     """Generate coach-oriented interpretation text."""
-    
+
     slope = metrics.slope_per_100w
     halftime = metrics.halftime_reoxy_sec
     coupling = metrics.hr_coupling_r
-    
+
     if limiter_type == "local":
         base = "LIMIT OBWODOWY (KAPILARYZACJA)"
         detail = (
@@ -347,13 +348,13 @@ def _generate_interpretation(
             detail += f"Powolna reoksygenacja ({halftime:.0f}s) potwierdza słabą kapilaryzację. "
         if coupling > -0.5:
             detail += "Niska korelacja z HR wskazuje na niezależność od układu centralnego. "
-        
+
         recommendations = [
             "Trening Sweet Spot (2×20min) dla rozbudowy kapilar",
             "Siłowy na rowerze (4×8min @ 50rpm) dla rekrutacji włókien",
             "Objętość Z2 (3-4h) dla gęstości naczyń"
         ]
-    
+
     elif limiter_type == "central":
         base = "LIMIT CENTRALNY (RZUT SERCA)"
         detail = (
@@ -363,13 +364,13 @@ def _generate_interpretation(
             detail += f"Umiarkowany spadek SmO₂ ({abs(slope):.1f}%/100W) potwierdza wystarczającą kapilaryzację. "
         if halftime and halftime < 45:
             detail += f"Szybka reoksygenacja ({halftime:.0f}s) – mięśnie sprawnie odbierają tlen. "
-        
+
         recommendations = [
             "Interwały VO₂max (4-6×4min) dla wzrostu rzutu serca",
             "Tempo długie (60-90min) dla adaptacji sercowej",
             "Budowa bazy Z2 (4-5h) dla objętości wyrzutowej"
         ]
-    
+
     else:  # metabolic
         base = "LIMIT METABOLICZNY (GLIKOLIZA)"
         detail = (
@@ -378,15 +379,15 @@ def _generate_interpretation(
         )
         if halftime and 45 < halftime < 90:
             detail += f" Umiarkowana reoksygenacja ({halftime:.0f}s) potwierdza stres metaboliczny. "
-        
+
         recommendations = [
             "Długie jazdy Z2 (4-5h) na obniżenie VLaMax",
             "Treningi na czczo dla optymalizacji FatMax",
             "Tempo pod LT1 dla efektywności metabolicznej"
         ]
-    
+
     full_interpretation = f"{base}\n{detail}"
-    
+
     return full_interpretation
 
 
@@ -437,43 +438,43 @@ def analyze_smo2_advanced(
         SmO2AdvancedMetrics with all calculated values
     """
     metrics = SmO2AdvancedMetrics()
-    
+
     # Check data quality
     if smo2_col not in df.columns:
         metrics.data_quality = "no_smo2"
         metrics.interpretation = "Brak danych SmO₂."
         return metrics
-    
+
     if power_col not in df.columns:
         metrics.data_quality = "no_power"
         metrics.interpretation = "Brak danych mocy."
         return metrics
-    
+
     # Calculate metrics
     metrics.slope_per_100w, metrics.slope_r2 = calculate_smo2_slope(
         df, smo2_col, power_col
     )
-    
+
     metrics.halftime_reoxy_sec = calculate_halftime_reoxygenation(
         df, smo2_col, time_col, power_col
     )
-    
+
     metrics.hr_coupling_r = calculate_hr_coupling_index(
         df, smo2_col, hr_col
     )
-    
+
     # Classify limiter
     limiter_type, confidence, interpretation = classify_smo2_limiter(metrics)
     metrics.limiter_type = limiter_type
     metrics.limiter_confidence = confidence
     metrics.interpretation = interpretation
     metrics.recommendations = get_recommendations_for_limiter(limiter_type)
-    
+
     metrics.data_quality = "good" if metrics.slope_r2 > 0.3 else "low"
-    
+
     # Calculate SmO2 drift (first half vs second half)
     metrics.drift_pct = calculate_smo2_drift(df, smo2_col, power_col)
-    
+
     return metrics
 
 
@@ -494,27 +495,27 @@ def calculate_smo2_drift(
     """
     if smo2_col not in df.columns or power_col not in df.columns:
         return 0.0
-    
+
     # Filter to ramp portion (power > threshold)
     mask = df[power_col] > min_power
     if mask.sum() < 20:
         return 0.0
-    
+
     filtered = df.loc[mask, smo2_col].dropna()
     if len(filtered) < 20:
         return 0.0
-    
+
     n = len(filtered)
     mid = n // 2
-    
+
     first_half_avg = filtered.iloc[:mid].mean()
     second_half_avg = filtered.iloc[mid:].mean()
-    
+
     if first_half_avg == 0:
         return 0.0
-    
+
     drift_pct = ((second_half_avg - first_half_avg) / first_half_avg) * 100
-    
+
     return float(drift_pct)
 
 
@@ -540,7 +541,7 @@ def format_smo2_metrics_for_report(metrics: SmO2AdvancedMetrics) -> Dict[str, An
 @dataclass
 class SmO2ThresholdResult:
     """Result of 3-point SmO2 threshold detection (T1, T2_onset, T2_steady)."""
-    
+
     # T1 (LT1 analog - onset of desaturation)
     t1_watts: Optional[int] = None
     t1_hr: Optional[int] = None
@@ -549,7 +550,7 @@ class SmO2ThresholdResult:
     t1_trend: Optional[float] = None     # dSmO2/dt (%/min)
     t1_sd: Optional[float] = None        # Variability
     t1_step: Optional[int] = None
-    
+
     # T2_onset (Heavy→Severe transition)
     t2_onset_watts: Optional[int] = None
     t2_onset_hr: Optional[int] = None
@@ -558,7 +559,7 @@ class SmO2ThresholdResult:
     t2_onset_curvature: Optional[float] = None
     t2_onset_sd: Optional[float] = None
     t2_onset_step: Optional[int] = None
-    
+
     # T2_steady (MLSS_local / RCP_steady analog)
     t2_steady_watts: Optional[int] = None
     t2_steady_hr: Optional[int] = None
@@ -567,23 +568,23 @@ class SmO2ThresholdResult:
     t2_steady_trend: Optional[float] = None  # dSmO2/dt (%/min)
     t2_steady_sd: Optional[float] = None
     t2_steady_step: Optional[int] = None
-    
+
     # Legacy compatibility (map to primary thresholds)
     t2_watts: Optional[int] = None  # Maps to t2_onset_watts
     t2_hr: Optional[int] = None
     t2_smo2: Optional[float] = None
     t2_gradient: Optional[float] = None
     t2_step: Optional[int] = None
-    
+
     # Zones
     zones: List[Dict] = field(default_factory=list)
-    
+
     # Validation
     vt1_correlation_watts: Optional[int] = None
     rcp_onset_correlation_watts: Optional[int] = None
     rcp_steady_correlation_watts: Optional[int] = None
     physiological_agreement: str = "not_checked"
-    
+
     # Analysis info
     analysis_notes: List[str] = field(default_factory=list)
     method: str = "moxy_3point"
@@ -621,9 +622,9 @@ def detect_smo2_thresholds_moxy(
     6. 4-domain zones
     7. Confidence score
     """
-    
+
     result = SmO2ThresholdResult()
-    
+
     # Normalize columns
     df = df.copy()
     df.columns = df.columns.str.lower().str.strip()
@@ -631,75 +632,75 @@ def detect_smo2_thresholds_moxy(
     power_col = power_col.lower()
     hr_col = hr_col.lower() if hr_col else None
     time_col = time_col.lower()
-    
+
     if smo2_col not in df.columns:
         result.analysis_notes.append("❌ Brak kolumny SmO2")
         return result
-    
+
     if power_col not in df.columns:
         result.analysis_notes.append("❌ Brak kolumny mocy")
         return result
-    
+
     # =========================================================================
     # 1. PREPROCESSING: MEDIAN SMOOTHING (30-45s)
     # =========================================================================
-    
+
     window = min(45, max(30, len(df) // 40))
     if window % 2 == 0:
         window += 1
-    
+
     df['smo2_smooth'] = df[smo2_col].rolling(window=window, center=True, min_periods=1).median()
-    
+
     if time_col in df.columns:
         df['step'] = (df[time_col] // step_duration_sec).astype(int)
     else:
         df['step'] = (df.index // step_duration_sec).astype(int)
-    
+
     max_power = df[power_col].max()
     has_hr = hr_col and hr_col in df.columns
-    
+
     if hr_max is None and has_hr:
         hr_max = int(df[hr_col].max())
-    
+
     # =========================================================================
     # 2. AGGREGATE BY STEP
     # =========================================================================
-    
+
     # OPTIMIZED: Vectorized step aggregation using groupby
     all_steps = sorted(df['step'].unique())
-    
+
     # REMOVE LAST 1 STEP (ischemic crash zone)
     if len(all_steps) > 1:
         last_step = all_steps[-1]
     else:
         last_step = None
-    
+
     # Filter steps with at least 30 samples
     step_counts = df.groupby('step').size()
     valid_steps = step_counts[step_counts >= 30].index.tolist()
-    
+
     if not valid_steps:
         result.analysis_notes.append("⚠️ Za mało danych w stopniach")
         return result
-    
+
     # Vectorized aggregation per step
     def aggregate_step(step_num):
         step_df = df[df['step'] == step_num]
         last_90 = step_df.tail(90) if len(step_df) >= 90 else step_df
         last_60 = step_df.tail(60) if len(step_df) >= 60 else step_df
-        
+
         avg_power = last_60[power_col].mean()
         avg_smo2 = last_60['smo2_smooth'].mean()
         avg_hr = last_60[hr_col].mean() if has_hr else None
         end_time = last_60[time_col].iloc[-1] if time_col in last_60.columns else None
-        
+
         # CV in 90s window
         sd_smo2 = last_90['smo2_smooth'].std()
         cv_smo2 = (sd_smo2 / avg_smo2 * 100) if avg_smo2 > 0 else 0
-        
+
         # Oscillation amplitude (peak-to-peak)
         osc_amp = last_60['smo2_smooth'].max() - last_60['smo2_smooth'].min()
-        
+
         # Trend (dSmO2/dt in %/min)
         trend = 0
         if len(last_90) >= 60 and time_col in last_90.columns:
@@ -707,7 +708,7 @@ def detect_smo2_thresholds_moxy(
             if time_range > 0:
                 smo2_change = last_90['smo2_smooth'].iloc[-1] - last_90['smo2_smooth'].iloc[0]
                 trend = smo2_change / (time_range / 60)
-        
+
         # HR slope (linear check)
         hr_slope = None
         if has_hr and len(last_90) >= 30:
@@ -715,7 +716,7 @@ def detect_smo2_thresholds_moxy(
             time_vals = np.arange(len(hr_vals))
             if len(hr_vals) > 2:
                 hr_slope = np.polyfit(time_vals, hr_vals, 1)[0]
-        
+
         return {
             'step': step_num,
             'power': avg_power,
@@ -729,72 +730,72 @@ def detect_smo2_thresholds_moxy(
             'hr_slope': hr_slope,
             'is_last_step': step_num == last_step
         }
-    
+
     # Use list comprehension for better performance
     step_data = [aggregate_step(step) for step in valid_steps]
-    
+
     if len(step_data) < 4:
         result.analysis_notes.append(f"⚠️ Za mało stopni ({len(step_data)})")
         return result
-    
+
     step_df = pd.DataFrame(step_data)
-    
+
     # =========================================================================
     # 3. CALCULATE DERIVATIVES
     # =========================================================================
-    
+
     # Use Numba-optimized functions if available
     smo2_vals = step_df['smo2'].values
     power_vals = step_df['power'].values
     step_df['gradient'] = _fast_gradient(smo2_vals, power_vals)
     step_df['curvature'] = _fast_curvature(smo2_vals, power_vals)
-    
+
     # =========================================================================
     # 4. SmO₂_T1 DETECTION (LT1 analog)
     # =========================================================================
     # Criteria: dSmO2/dt < -0.4%/min for ≥2 consecutive steps, CV < 4%, VT1±15%
-    
+
     t1_idx = None
     t1_is_systemic = False
     t1_confidence = 0
-    
+
     # Power window for T1: VT1 ± 15%
     t1_power_min = vt1_watts * 0.85 if vt1_watts else 0
     t1_power_max = vt1_watts * 1.15 if vt1_watts else max_power
-    
+
     for i in range(1, len(step_df) - 1):
         row = step_df.iloc[i]
         next_row = step_df.iloc[i + 1]
-        
+
         # Skip last step (ischemic)
         if row['is_last_step'] or next_row['is_last_step']:
             continue
-        
+
         # ARTEFACT REJECTION: CV > 6%
         if row['cv'] > 6.0:
             result.analysis_notes.append(f"❌ Step {row['step']} rejected: CV={row['cv']:.1f}% > 6%")
             continue
-        
+
         # Power window check
         if vt1_watts:
             if not (t1_power_min <= row['power'] <= t1_power_max):
                 continue
-        
+
         # T1 CRITERIA:
         # dSmO2/dt < -0.4%/min for ≥2 consecutive steps
         trend_ok = row['trend'] < -0.4 and next_row['trend'] < -0.4
-        
+
         # CV < 4%
         cv_ok = row['cv'] < 4.0
-        
+
         # HR slope remains linear (not accelerating excessively)
         hr_linear = True
         if row['hr_slope'] is not None:
             hr_linear = row['hr_slope'] > 0  # HR should be increasing
-        
+
         if trend_ok and cv_ok and hr_linear:
             t1_idx = i
-            
+
             # Check VT1 validation
             if vt1_watts:
                 pct_diff = abs(row['power'] - vt1_watts) / vt1_watts * 100
@@ -807,15 +808,15 @@ def detect_smo2_thresholds_moxy(
                     result.analysis_notes.append(f"⚠️ T1 w zakresie VT1 ±{pct_diff:.0f}%")
             else:
                 t1_confidence += 20
-            
+
             # Additional confidence from signal quality
             if row['cv'] < 2.0:
                 t1_confidence += 10
             if abs(row['trend']) > 0.6:
                 t1_confidence += 10
-            
+
             break
-    
+
     if t1_idx is None:
         result.analysis_notes.append("⚠️ T1 nie wykryto")
     else:
@@ -832,76 +833,76 @@ def detect_smo2_thresholds_moxy(
             f"SmO₂ T1: {result.t1_watts}W @ {result.t1_smo2}% "
             f"(slope={result.t1_trend}%/min, CV={row['cv']:.1f}%) [{flag}]"
         )
-    
+
     # =========================================================================
     # 5. SmO₂_T2_onset DETECTION (RCP analog)
     # =========================================================================
     # Criteria: max global curvature, dSmO2/dt < -1.5%/min, osc ↑30%, T1+20%, VT2±15%
-    
+
     t2_onset_idx = None
     t2_onset_is_systemic = False
     t2_confidence = 0
-    
+
     # Power constraints
     min_t2_power = (result.t1_watts * 1.20) if result.t1_watts else (vt1_watts * 1.20 if vt1_watts else 0)
     t2_power_min = rcp_onset_watts * 0.85 if rcp_onset_watts else min_t2_power
     t2_power_max = rcp_onset_watts * 1.15 if rcp_onset_watts else max_power
-    
+
     search_start = t1_idx + 1 if t1_idx is not None else 2
-    
+
     # Get baseline oscillation amplitude
     t1_osc = step_df.iloc[t1_idx]['osc_amp'] if t1_idx else step_df['osc_amp'].median()
-    
+
     # Find max global curvature in valid range
     valid_rows = []
     for i in range(search_start, len(step_df)):
         row = step_df.iloc[i]
-        
+
         # Skip last step (ischemic)
         if row['is_last_step']:
             continue
-        
+
         # Power constraints
         if row['power'] < min_t2_power:
             continue
         if rcp_onset_watts:
             if not (t2_power_min <= row['power'] <= t2_power_max):
                 continue
-        
+
         # ARTEFACT REJECTION: CV > 6%
         if row['cv'] > 6.0:
             result.analysis_notes.append(f"❌ Step {row['step']} rejected: CV={row['cv']:.1f}% > 6%")
             continue
-        
+
         valid_rows.append({'idx': i, 'row': row})
-    
+
     if valid_rows:
         # Find max curvature (global peak)
         max_curv_item = max(valid_rows, key=lambda x: abs(x['row']['curvature']))
         best_row = max_curv_item['row']
         best_idx = max_curv_item['idx']
-        
+
         # Check T2_onset criteria
         trend_severe = best_row['trend'] < -1.5
         osc_increasing = best_row['osc_amp'] > t1_osc * 1.3  # ≥30% increase
-        
+
         if trend_severe or abs(best_row['curvature']) > 0.0003:
             t2_onset_idx = best_idx
-            
+
             # Confidence from trend
             if trend_severe:
                 t2_confidence += 20
-            
+
             # Confidence from oscillation
             if osc_increasing:
                 t2_confidence += 15
-            
+
             # Confidence from curvature magnitude
             if abs(best_row['curvature']) > 0.0005:
                 t2_confidence += 15
             elif abs(best_row['curvature']) > 0.0003:
                 t2_confidence += 10
-            
+
             # Check VT2/RCP validation
             if rcp_onset_watts:
                 pct_diff = abs(best_row['power'] - rcp_onset_watts) / rcp_onset_watts * 100
@@ -913,10 +914,10 @@ def detect_smo2_thresholds_moxy(
                     t2_confidence += 15
                     result.analysis_notes.append(f"⚠️ T2_onset w zakresie VT2/RCP ±{pct_diff:.0f}%")
                 else:
-                    result.analysis_notes.append(f"❌ T2_onset poza VT2/RCP ±15%: Local Perfusion Limitation")
+                    result.analysis_notes.append("❌ T2_onset poza VT2/RCP ±15%: Local Perfusion Limitation")
             else:
                 t2_confidence += 20
-    
+
     if t2_onset_idx is None:
         result.analysis_notes.append("⚠️ T2_onset nie wykryto")
     else:
@@ -928,57 +929,57 @@ def detect_smo2_thresholds_moxy(
         result.t2_onset_curvature = round(row['curvature'], 5)
         result.t2_onset_sd = round(row['sd'], 2)
         result.t2_onset_step = int(row['step'])
-        
+
         result.t2_watts = result.t2_onset_watts
         result.t2_hr = result.t2_onset_hr
         result.t2_smo2 = result.t2_onset_smo2
         result.t2_gradient = result.t2_onset_gradient
         result.t2_step = result.t2_onset_step
-        
+
         flag = "🟢 Systemic" if t2_onset_is_systemic else "🟡 Local"
         result.analysis_notes.append(
             f"SmO₂ T2_onset: {result.t2_onset_watts}W @ {result.t2_onset_smo2}% "
             f"(slope={row['trend']:.1f}%/min, curv={row['curvature']:.5f}) [{flag}]"
         )
-    
+
     # =========================================================================
     # 6. NO T2_STEADY FOR RAMP TESTS
     # =========================================================================
     # CRITICAL: T2_steady (MLSS_local) MUST NOT be detected in ramp tests
-    
+
     result.analysis_notes.append(
         "ℹ️ T2_steady N/A w teście rampowym (brak plateau do detekcji MLSS_local)"
     )
-    
+
     # =========================================================================
     # 7. HIERARCHICAL VALIDATION + CONFIDENCE SCORE
     # =========================================================================
-    
+
     # Check T1 < T2_onset
     if result.t1_watts and result.t2_onset_watts:
         if result.t1_watts >= result.t2_onset_watts:
             result.analysis_notes.append("⚠️ Hierarchy violated: T1 >= T2_onset")
             result.t1_watts = None
             t1_confidence = 0
-    
+
     # Correlation with CPET
     if vt1_watts and result.t1_watts:
         result.vt1_correlation_watts = abs(result.t1_watts - vt1_watts)
-    
+
     if rcp_onset_watts and result.t2_onset_watts:
         result.rcp_onset_correlation_watts = abs(result.t2_onset_watts - rcp_onset_watts)
-    
+
     # Overall confidence score (0-100)
     total_confidence = t1_confidence + t2_confidence
     if result.t1_watts and result.t2_onset_watts:
         total_confidence += 20  # Both thresholds detected
-    
+
     # Cap at 100
     total_confidence = min(100, total_confidence)
-    
+
     # Determine agreement level
     systemic_count = sum([t1_is_systemic, t2_onset_is_systemic])
-    
+
     if systemic_count >= 2:
         result.physiological_agreement = "high"
         result.analysis_notes.append(f"🟢 High systemic agreement (confidence: {total_confidence}%)")
@@ -988,14 +989,14 @@ def detect_smo2_thresholds_moxy(
     else:
         result.physiological_agreement = "low"
         result.analysis_notes.append(f"🔴 Low agreement - Local Perfusion Limitation (confidence: {total_confidence}%)")
-    
+
     # =========================================================================
     # 8. BUILD 4-DOMAIN ZONES
     # =========================================================================
-    
+
     max_power_int = int(max_power)
     zones = []
-    
+
     # Zone 1: Stable aerobic extraction (< T1)
     if result.t1_watts:
         zones.append({
@@ -1004,7 +1005,7 @@ def detect_smo2_thresholds_moxy(
             'description': '<T1 - stable O₂ extraction',
             'training': 'Endurance / Recovery'
         })
-    
+
     # Zone 2: Heavy domain, progressive extraction (T1 → T2)
     t2_w = result.t2_onset_watts
     if result.t1_watts and t2_w:
@@ -1014,7 +1015,7 @@ def detect_smo2_thresholds_moxy(
             'description': 'T1→T2 - progressive O₂ extraction',
             'training': 'Tempo / Threshold'
         })
-    
+
     # Zone 3: Severe domain, non-steady ischemic (T2 → end)
     if t2_w:
         zones.append({
@@ -1023,7 +1024,7 @@ def detect_smo2_thresholds_moxy(
             'description': 'T2→end - compensatory desaturation',
             'training': 'VO₂max intervals'
         })
-    
+
     # Zone 4: Post-failure ischemic collapse (artefact, not training zone)
     zones.append({
         'zone': 4, 'name': 'Ischemic Collapse',
@@ -1031,14 +1032,14 @@ def detect_smo2_thresholds_moxy(
         'description': 'Post-failure artefact',
         'training': 'N/A'
     })
-    
+
     result.zones = zones
     result.step_data = step_df.to_dict('records')
-    
+
     result.analysis_notes.append(
         f"Ramp Test Pipeline: T1+T2_onset only, no T2_steady. Confidence: {total_confidence}%."
     )
-    
+
     return result
 
 

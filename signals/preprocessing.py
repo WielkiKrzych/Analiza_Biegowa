@@ -12,10 +12,10 @@ NO STREAMLIT OR UI DEPENDENCIES ALLOWED.
 """
 
 from dataclasses import dataclass, field
-from typing import Literal, Dict, Any
+from typing import Any, Dict, Literal
+
 import numpy as np
 import pandas as pd
-
 
 # ============================================================
 # Quality Flags Dataclass
@@ -29,10 +29,10 @@ class SignalQualityFlags:
     max_gap_duration: int       # Longest gap in samples
     noise_level: float          # Estimated noise level (CV of diff)
     is_usable: bool             # Overall usability flag
-    
+
     @classmethod
     def from_series(
-        cls, 
+        cls,
         series: pd.Series,
         min_valid_ratio: float = 0.8,
         max_noise_level: float = 0.3
@@ -43,16 +43,16 @@ class SignalQualityFlags:
                 valid_ratio=0.0, gap_count=0, max_gap_duration=0,
                 noise_level=1.0, is_usable=False
             )
-        
+
         # Valid ratio
         valid_mask = series.notna() & np.isfinite(series)
         valid_ratio = valid_mask.sum() / len(series)
-        
+
         # Gap analysis
         gaps = (~valid_mask).astype(int)
         gap_starts = np.diff(gaps, prepend=0) == 1
         gap_count = gap_starts.sum()
-        
+
         # Max gap duration
         if gap_count > 0:
             gap_lengths = []
@@ -69,7 +69,7 @@ class SignalQualityFlags:
             max_gap_duration = max(gap_lengths) if gap_lengths else 0
         else:
             max_gap_duration = 0
-        
+
         # Noise level (coefficient of variation of diffs)
         valid_data = series[valid_mask]
         if len(valid_data) > 10:
@@ -81,9 +81,9 @@ class SignalQualityFlags:
                 noise_level = 0.0
         else:
             noise_level = 1.0
-        
+
         is_usable = valid_ratio >= min_valid_ratio and noise_level <= max_noise_level
-        
+
         return cls(
             valid_ratio=round(valid_ratio, 3),
             gap_count=int(gap_count),
@@ -133,19 +133,19 @@ def rolling_smooth(
             method='rolling_smooth',
             parameters={'window': window, 'method': method}
         )
-    
+
     rolling = series.rolling(window=window, min_periods=min_periods, center=center)
-    
+
     if method == 'median':
         smoothed = rolling.median()
     else:
         smoothed = rolling.mean()
-    
+
     # Fill any remaining NaNs at edges
     smoothed = smoothed.fillna(series)
-    
+
     quality = SignalQualityFlags.from_series(smoothed)
-    
+
     return SeriesResult(
         data=smoothed,
         quality=quality,
@@ -182,10 +182,10 @@ def exponential_smooth(
             method='exponential_smooth',
             parameters={'alpha': alpha}
         )
-    
+
     smoothed = series.ewm(alpha=alpha, adjust=adjust).mean()
     quality = SignalQualityFlags.from_series(smoothed)
-    
+
     return SeriesResult(
         data=smoothed,
         quality=quality,
@@ -215,7 +215,7 @@ def detrend_linear(series: pd.Series) -> SeriesResult:
             method='detrend_linear',
             parameters={}
         )
-    
+
     valid_mask = series.notna() & np.isfinite(series)
     if valid_mask.sum() < 2:
         return SeriesResult(
@@ -224,23 +224,23 @@ def detrend_linear(series: pd.Series) -> SeriesResult:
             method='detrend_linear',
             parameters={'slope': 0, 'intercept': 0}
         )
-    
+
     x = np.arange(len(series))
     y = series.values.copy()
-    
+
     # Fit linear regression only on valid points
     x_valid = x[valid_mask]
     y_valid = y[valid_mask]
-    
+
     coeffs = np.polyfit(x_valid, y_valid, 1)
     slope, intercept = coeffs[0], coeffs[1]
-    
+
     # Subtract trend
     trend = slope * x + intercept
     detrended = pd.Series(y - trend, index=series.index)
-    
+
     quality = SignalQualityFlags.from_series(detrended)
-    
+
     return SeriesResult(
         data=detrended,
         quality=quality,
@@ -270,7 +270,7 @@ def detrend_polynomial(
             method='detrend_polynomial',
             parameters={'degree': degree}
         )
-    
+
     valid_mask = series.notna() & np.isfinite(series)
     if valid_mask.sum() < degree + 1:
         return SeriesResult(
@@ -279,19 +279,19 @@ def detrend_polynomial(
             method='detrend_polynomial',
             parameters={'degree': degree, 'coefficients': []}
         )
-    
+
     x = np.arange(len(series))
     y = series.values.copy()
-    
+
     x_valid = x[valid_mask]
     y_valid = y[valid_mask]
-    
+
     coeffs = np.polyfit(x_valid, y_valid, degree)
     trend = np.polyval(coeffs, x)
     detrended = pd.Series(y - trend, index=series.index)
-    
+
     quality = SignalQualityFlags.from_series(detrended)
-    
+
     return SeriesResult(
         data=detrended,
         quality=quality,
@@ -332,17 +332,17 @@ def interpolate_gaps(
             method='interpolate_gaps',
             parameters={'method': method, 'max_gap': max_gap}
         )
-    
+
     result = series.copy()
-    
+
     # Identify gaps and their lengths
     is_nan = result.isna()
     gap_group = (~is_nan).cumsum()
     gap_sizes = is_nan.groupby(gap_group).transform('sum')
-    
+
     # Mask for gaps that are too large
     large_gaps = is_nan & (gap_sizes > max_gap)
-    
+
     # Interpolate
     if method == 'spline':
         result = result.interpolate(method='spline', order=spline_order, limit=max_gap)
@@ -352,13 +352,13 @@ def interpolate_gaps(
         result = result.interpolate(method='zero', limit=max_gap)
     else:
         result = result.interpolate(method='linear', limit=max_gap)
-    
+
     # Restore NaNs for large gaps
     result[large_gaps] = np.nan
-    
+
     quality = SignalQualityFlags.from_series(result)
     gaps_filled = is_nan.sum() - result.isna().sum()
-    
+
     return SeriesResult(
         data=result,
         quality=quality,
@@ -400,17 +400,17 @@ def preprocess_signal(
         SeriesResult with processed data
     """
     result = series.copy()
-    
+
     # Step 1: Interpolation
     if interpolate:
         interp_result = interpolate_gaps(result, method='linear', max_gap=max_gap)
         result = interp_result.data
-    
+
     # Step 2: Detrending
     if detrend:
         detrend_result = detrend_linear(result)
         result = detrend_result.data
-    
+
     # Step 3: Smoothing
     if smooth:
         if smooth_method == 'ewma':
@@ -420,9 +420,9 @@ def preprocess_signal(
         else:
             smooth_result = rolling_smooth(result, window=smooth_window, method='mean')
         result = smooth_result.data
-    
+
     quality = SignalQualityFlags.from_series(result)
-    
+
     return SeriesResult(
         data=result,
         quality=quality,

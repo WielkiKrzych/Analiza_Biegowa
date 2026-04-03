@@ -1,5 +1,23 @@
 ## 📋 Changelog
 
+### 2026-04-03 - Phase 1 Cleanup
+
+**Branch cleanup:**
+- Deleted stale branches: `claude/dreamy-dijkstra`, `feature/new-functions`
+- Removed stale worktrees (`.claude/worktrees`, `.worktrees`)
+
+**Code quality:**
+- Added runtime `DeprecationWarning` to 3 deprecated functions
+- Ran ruff + isort cleanup on all source files
+- Added `isort` to dev dependencies
+
+**Project structure:**
+- Moved `init_db.py` and `train_history.py` to `scripts/` directory
+- Created `docs/architecture.md` with architecture overview
+- Created `docs/cleanup-candidates.md` tracking cleanup progress
+
+---
+
 ### 2026-03-24 - CSV vs FIT Unit Normalization & Sidebar Defaults
 
 **Normalizacja jednostek Intervals.icu CSV vs Garmin FIT:**
@@ -295,6 +313,8 @@ PRZED:                    PO:
 
 ## 🏗️ Architektura Systemu
 
+> See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    🚀 STREAMLIT APP                          │
@@ -466,6 +486,10 @@ PRZED:                    PO:
 ├── 🚀 app.py                          ← Główny punkt wejścia
 ├── 📦 pyproject.toml                  ← Zależności
 ├── 📖 README.md                       ← Dokumentacja
+│
+├── 📁 scripts/                        ← Utility scripts
+│   ├── 🗄️ init_db.py                ← Database initialization
+│   └── 🧠 train_history.py           ← AI Coach batch training
 │
 ├── 📁 modules/
 │   │

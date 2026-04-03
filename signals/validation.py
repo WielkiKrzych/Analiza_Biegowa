@@ -12,8 +12,9 @@ NO STREAMLIT OR UI DEPENDENCIES ALLOWED.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 from enum import Enum
+from typing import List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 
@@ -32,7 +33,7 @@ class ValidationWarning:
     message: str
     severity: Severity = Severity.WARNING
     details: Optional[dict] = None
-    
+
     def __str__(self) -> str:
         emoji = {"info": "ℹ️", "warning": "⚠️", "error": "❌"}.get(self.severity, "")
         return f"{emoji} [{self.code}] {self.message}"
@@ -45,15 +46,15 @@ class ValidationResult:
     warnings: List[ValidationWarning] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
     artifact_indices: List[int] = field(default_factory=list)
-    
+
     def has_errors(self) -> bool:
         """Check if any error-level warnings exist."""
         return any(w.severity == Severity.ERROR for w in self.warnings)
-    
+
     def has_warnings(self) -> bool:
         """Check if any warning-level warnings exist."""
         return any(w.severity == Severity.WARNING for w in self.warnings)
-    
+
     def get_messages(self) -> List[str]:
         """Get all warning messages as strings."""
         return [str(w) for w in self.warnings]
@@ -83,10 +84,10 @@ def detect_missing_data(
             message="Signal is empty or None",
             severity=Severity.ERROR
         )
-    
+
     missing_count = series.isna().sum()
     missing_ratio = missing_count / len(series)
-    
+
     if missing_ratio > max_missing_ratio:
         return ValidationWarning(
             code="EXCESSIVE_MISSING_DATA",
@@ -94,7 +95,7 @@ def detect_missing_data(
             severity=Severity.WARNING if missing_ratio < 0.5 else Severity.ERROR,
             details={"missing_count": int(missing_count), "missing_ratio": round(missing_ratio, 3)}
         )
-    
+
     if missing_count > 0:
         return ValidationWarning(
             code="MISSING_DATA",
@@ -102,7 +103,7 @@ def detect_missing_data(
             severity=Severity.INFO,
             details={"missing_count": int(missing_count), "missing_ratio": round(missing_ratio, 3)}
         )
-    
+
     return None
 
 
@@ -124,23 +125,23 @@ def detect_artifacts(
     """
     if series is None or len(series) < 3:
         return [], None
-    
+
     valid_data = series.dropna()
     if len(valid_data) < 3:
         return [], None
-    
+
     artifact_indices = []
-    
+
     # Z-score outlier detection
     mean_val = valid_data.mean()
     std_val = valid_data.std()
-    
+
     if std_val > 0:
         z_scores = np.abs((valid_data - mean_val) / std_val)
         outlier_mask = z_scores > z_threshold
         z_outliers = valid_data.index[outlier_mask].tolist()
         artifact_indices.extend(z_outliers)
-    
+
     # Spike detection (sudden jumps)
     data_range = valid_data.max() - valid_data.min()
     if data_range > 0:
@@ -149,10 +150,10 @@ def detect_artifacts(
         spike_indices = np.where(spike_mask)[0] + 1
         spike_locations = valid_data.index[spike_indices].tolist()
         artifact_indices.extend(spike_locations)
-    
+
     # Remove duplicates
     artifact_indices = sorted(set(artifact_indices))
-    
+
     if len(artifact_indices) > 0:
         artifact_ratio = len(artifact_indices) / len(series)
         warning = ValidationWarning(
@@ -166,7 +167,7 @@ def detect_artifacts(
             }
         )
         return artifact_indices, warning
-    
+
     return [], None
 
 
@@ -190,9 +191,9 @@ def check_minimum_length(
             message="Signal is None",
             severity=Severity.ERROR
         )
-    
+
     actual_length = len(series)
-    
+
     if actual_length < min_length:
         return ValidationWarning(
             code="SIGNAL_TOO_SHORT",
@@ -200,7 +201,7 @@ def check_minimum_length(
             severity=Severity.ERROR,
             details={"actual_length": actual_length, "min_length": min_length}
         )
-    
+
     return None
 
 
@@ -222,14 +223,14 @@ def check_data_range(
     """
     if series is None or len(series) == 0 or valid_range is None:
         return None
-    
+
     valid_data = series.dropna()
     if len(valid_data) == 0:
         return None
-    
+
     min_val, max_val = valid_range
     out_of_range = ((valid_data < min_val) | (valid_data > max_val)).sum()
-    
+
     if out_of_range > 0:
         ratio = out_of_range / len(valid_data)
         return ValidationWarning(
@@ -242,7 +243,7 @@ def check_data_range(
                 "expected_range": valid_range
             }
         )
-    
+
     return None
 
 
@@ -279,31 +280,31 @@ def validate_signal(
     warnings = []
     artifact_indices = []
     stats = {}
-    
+
     try:
         # Check minimum length
         length_warning = check_minimum_length(series, min_length)
         if length_warning:
             warnings.append(length_warning)
-        
+
         # Check missing data
         missing_warning = detect_missing_data(series, max_missing_ratio)
         if missing_warning:
             warnings.append(missing_warning)
-        
+
         # Check for artifacts
         artifact_indices, artifact_warning = detect_artifacts(
             series, z_threshold, spike_threshold
         )
         if artifact_warning:
             warnings.append(artifact_warning)
-        
+
         # Check data range
         if valid_range:
             range_warning = check_data_range(series, valid_range, column_name)
             if range_warning:
                 warnings.append(range_warning)
-        
+
         # Compute statistics
         if series is not None and len(series) > 0:
             valid_data = series.dropna()
@@ -317,7 +318,7 @@ def validate_signal(
                 "max": round(valid_data.max(), 3) if len(valid_data) > 0 else None,
                 "artifact_count": len(artifact_indices)
             }
-        
+
     except Exception as e:
         # Catch any unexpected errors and convert to warning
         warnings.append(ValidationWarning(
@@ -325,11 +326,11 @@ def validate_signal(
             message=f"Validation failed: {str(e)}",
             severity=Severity.ERROR
         ))
-    
+
     # Determine overall validity
     has_errors = any(w.severity == Severity.ERROR for w in warnings)
     is_valid = not has_errors
-    
+
     return ValidationResult(
         is_valid=is_valid,
         warnings=warnings,

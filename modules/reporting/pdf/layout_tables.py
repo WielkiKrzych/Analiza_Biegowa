@@ -27,30 +27,30 @@ def build_table_of_contents(styles: Dict, section_titles: List[Dict[str, Any]]) 
     Returns:
         List of reportlab flowables
     """
-    
+
     elements = []
-    
+
     # Header
     elements.append(Paragraph(
         "<font size='22'><b>SPIS TREŚCI</b></font>",
         styles["title"]
     ))
     elements.append(Spacer(1, 8 * mm))
-    
+
     # Table of Contents entries with hierarchy and hyperlinks
     # We need to track row heights to add spacing before chapters
     toc_data = []
     row_heights = []  # Track heights for each row
-    
+
     for i, section in enumerate(section_titles):
         title = section.get("title", "---")
         page = section.get("page", "---")
         level = section.get("level", 1)  # 0=chapter, 1=subchapter
-        
+
         # Create anchor name from page number for internal linking
         # ReportLab uses <a href="#page_X"> format for internal links
         anchor_name = f"page_{page}"
-        
+
         # Check if this is a chapter (level=0) and not the first entry
         # If so, check if the previous entry was a subchapter (level=1)
         is_chapter_after_subchapter = False
@@ -58,7 +58,7 @@ def build_table_of_contents(styles: Dict, section_titles: List[Dict[str, Any]]) 
             prev_level = section_titles[i - 1].get("level", 1)
             if prev_level == 1:
                 is_chapter_after_subchapter = True
-        
+
         if level == 0:
             # Main chapter - bold, larger, dark blue background with hyperlink
             title_para = Paragraph(
@@ -79,14 +79,14 @@ def build_table_of_contents(styles: Dict, section_titles: List[Dict[str, Any]]) 
                 f"<a href='#{anchor_name}' color='#7F8C8D'><font size='9'>{page}</font></a>",
                 styles["body"]
             )
-        
+
         toc_data.append([title_para, page_para])
         # Add extra height for chapters that follow subchapters (half-line, ~6mm extra)
         if is_chapter_after_subchapter:
             row_heights.append(14 * mm)  # Normal row ~8mm + extra 6mm
         else:
             row_heights.append(None)  # Auto height
-    
+
     if toc_data:
         toc_table = Table(toc_data, colWidths=[150 * mm, 20 * mm], rowHeights=row_heights)
         toc_table.setStyle(TableStyle([
@@ -103,7 +103,7 @@ def build_table_of_contents(styles: Dict, section_titles: List[Dict[str, Any]]) 
             "<font color='#7F8C8D'>Brak sekcji do wyświetlenia</font>",
             styles["body"]
         ))
-    
+
     return elements
 
 
@@ -119,13 +119,13 @@ def build_chapter_header(chapter_num: str, chapter_title: str, styles: Dict) -> 
         List of flowables
     """
     elements = []
-    
+
     # Chapter header with navy background
     header_content = [[Paragraph(
         f"<font color='white' size='16'><b>{chapter_num}. {chapter_title}</b></font>",
         styles["center"]
     )]]
-    
+
     header_table = Table(header_content, colWidths=[170 * mm])
     header_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), PREMIUM_COLORS["navy"]),
@@ -136,5 +136,5 @@ def build_chapter_header(chapter_num: str, chapter_title: str, styles: Dict) -> 
     ]))
     elements.append(header_table)
     elements.append(Spacer(1, 6 * mm))
-    
+
     return elements

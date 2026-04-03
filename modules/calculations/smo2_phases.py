@@ -11,12 +11,13 @@ Also implements SmO2 slope classification for sustainable vs unsustainable
 intensity detection (Rodriguez et al. 2023, PMC10108753).
 """
 
+import logging
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-from typing import Optional, Dict, List, Tuple
-from dataclasses import dataclass, field
-import logging
 
 logger = logging.getLogger(__name__)
 

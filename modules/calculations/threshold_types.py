@@ -2,7 +2,8 @@
 Common types and dataclasses for threshold detection.
 """
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
+
 
 @dataclass
 class TransitionZone:
@@ -21,28 +22,28 @@ class TransitionZone:
     description: str = ""                               # Human-readable description
     detection_sources: List[str] = field(default_factory=list)  # ["VE", "SmO2", "HR"]
     variability_watts: float = 0.0                      # Std dev of detections
-    
+
     @property
     def midpoint_watts(self) -> float:
         """Get the midpoint of the power range."""
         return (self.range_watts[0] + self.range_watts[1]) / 2
-    
+
     @property
     def range_width_watts(self) -> float:
         """Get the width of the power range."""
         return self.range_watts[1] - self.range_watts[0]
-    
+
     @property
     def midpoint_hr(self) -> Optional[float]:
         """Get the midpoint of the HR range if available."""
         if self.range_hr:
             return (self.range_hr[0] + self.range_hr[1]) / 2
         return None
-    
+
     def is_high_confidence(self, threshold: float = 0.7) -> bool:
         """Check if confidence exceeds threshold."""
         return self.confidence >= threshold
-    
+
     def is_stable(self, threshold: float = 0.7) -> bool:
         """Check if stability score exceeds threshold."""
         return self.stability_score >= threshold
@@ -64,10 +65,10 @@ class HysteresisResult:
     vt1_dec_zone: Optional[TransitionZone] = None
     vt2_inc_zone: Optional[TransitionZone] = None
     vt2_dec_zone: Optional[TransitionZone] = None
-    
+
     vt1_shift_watts: Optional[float] = None
     vt2_shift_watts: Optional[float] = None
-    
+
     warnings: List[str] = field(default_factory=list)
 
 @dataclass
@@ -141,7 +142,7 @@ class StepVTResult:
     # NEW: Range-based thresholds (preferred)
     vt1_zone: Optional[TransitionZone] = None
     vt2_zone: Optional[TransitionZone] = None
-    
+
     # Legacy point values (for backward compatibility)
     vt1_watts: Optional[float] = None
     vt1_hr: Optional[float] = None
@@ -157,13 +158,13 @@ class StepVTResult:
     vt2_ve_slope: Optional[float] = None
     step_analysis: List[dict] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
-    
+
     # Confidence (derived from zones if available)
     @property
     def vt1_confidence(self) -> float:
         """Get VT1 confidence from zone or default."""
         return self.vt1_zone.confidence if self.vt1_zone else 0.5
-    
+
     @property
     def vt2_confidence(self) -> float:
         """Get VT2 confidence from zone or default."""
@@ -196,7 +197,7 @@ class StepSmO2Result:
     # NEW: Range-based thresholds (preferred)
     smo2_1_zone: Optional[TransitionZone] = None
     smo2_2_zone: Optional[TransitionZone] = None
-    
+
     # Legacy point values (for backward compatibility)
     smo2_1_watts: Optional[float] = None
     smo2_1_hr: Optional[float] = None
@@ -210,11 +211,11 @@ class StepSmO2Result:
     smo2_2_value: Optional[float] = None
     step_analysis: List[dict] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
-    
+
     # LOCAL SIGNAL FLAGS - SmO2 is regional, not systemic
     signal_type: str = "LOCAL"  # LOCAL = muscle-specific, not whole-body
     is_supporting_only: bool = True  # Should NOT generate standalone decisions
-    
+
     # Documented limitations for UI display
     limitations: List[str] = field(default_factory=lambda: [
         "SmO₂ odzwierciedla utlenowanie JEDNEGO mięśnia, nie całego ciała",
@@ -222,7 +223,7 @@ class StepSmO2Result:
         "Użyj SmO₂ do potwierdzenia VT1/VT2 z wentylacji, nie jako samodzielny próg",
         "Zmienność międzyosobnicza jest wysoka (baseline 60-80%)"
     ])
-    
+
     def get_confidence_modifier(self) -> float:
         """Return confidence modifier for combined threshold detection.
         
@@ -236,7 +237,7 @@ class StepSmO2Result:
         elif self.smo2_1_watts is not None or self.smo2_2_watts is not None:
             return 0.10  # One threshold - weak support
         return 0.0  # No detection
-    
+
     def get_interpretation_note(self) -> str:
         """Get interpretation guidance for UI."""
         if self.is_supporting_only:
@@ -266,25 +267,25 @@ def calculate_detection_confidence(
     """
     if not detections or len(detections) == 0:
         return 0.0, (0.0, 0.0), 0.0
-    
+
     valid_detections = [d for d in detections if d is not None and d > 0]
-    
+
     if len(valid_detections) == 0:
         return 0.0, (0.0, 0.0), 0.0
-    
+
     if len(valid_detections) == 1:
         # Single detection - moderate confidence
         val = valid_detections[0]
         return 0.5, (val - 10, val + 10), 0.0
-    
+
     # Calculate range and variability
     min_val = min(valid_detections)
     max_val = max(valid_detections)
     range_width = max_val - min_val
-    
+
     import numpy as np
     variability = float(np.std(valid_detections))
-    
+
     # Calculate confidence based on agreement
     # Perfect agreement (range_width = 0) -> confidence = 1.0
     # Poor agreement (range_width > agreement_threshold) -> confidence decreases
@@ -294,11 +295,11 @@ def calculate_detection_confidence(
         # Larger disagreement reduces confidence more
         excess = range_width - agreement_threshold
         confidence = max(0.2, 0.6 - excess / 100)
-    
+
     # Boost confidence for more detection sources
     source_bonus = min(0.1, (len(valid_detections) - 1) * 0.05)
     confidence = min(1.0, confidence + source_bonus)
-    
+
     return round(confidence, 2), (min_val, max_val), round(variability, 1)
 
 
@@ -320,21 +321,21 @@ def calculate_temporal_stability(
     """
     if not threshold_history or len(threshold_history) < 2:
         return 0.0, 0.0
-    
+
     valid_history = [v for v in threshold_history if v is not None and v > 0]
-    
+
     if len(valid_history) < 2:
         return 0.0, 0.0
-    
+
     import numpy as np
     mean_val = np.mean(valid_history)
     std_val = np.std(valid_history)
-    
+
     if mean_val == 0:
         return 0.0, 0.0
-    
+
     cv = std_val / mean_val
-    
+
     # Convert CV to stability score
     # CV = 0 -> stability = 1.0
     # CV >= max_cv_for_stable -> stability decreases linearly
@@ -343,7 +344,7 @@ def calculate_temporal_stability(
     else:
         # Higher CV = lower stability
         stability = max(0.0, 0.7 - (cv - max_cv_for_stable) * 5)
-    
+
     return round(stability, 2), round(float(std_val), 1)
 
 
@@ -373,19 +374,19 @@ def create_transition_zone(
     confidence, range_watts, variability = calculate_detection_confidence(
         detections, agreement_threshold
     )
-    
+
     # Calculate stability if historical data available
     stability_score = 0.0
     if historical_values and len(historical_values) >= 2:
         stability_score, _ = calculate_temporal_stability(historical_values)
-    
+
     # Calculate HR range if available
     range_hr = None
     if hr_detections:
         valid_hr = [h for h in hr_detections if h is not None and h > 0]
         if valid_hr:
             range_hr = (min(valid_hr), max(valid_hr))
-    
+
     # Create description
     sources_str = ", ".join(detection_sources) if detection_sources else "unknown"
     desc = f"Detected via {sources_str}"
@@ -395,7 +396,7 @@ def create_transition_zone(
         desc += " (moderate confidence)"
     else:
         desc += " (low confidence)"
-    
+
     return TransitionZone(
         range_watts=range_watts,
         range_hr=range_hr,

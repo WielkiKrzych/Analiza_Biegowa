@@ -4,17 +4,17 @@ PDF Styles Module.
 Defines typography, colors, and reusable styles for PDF generation.
 Uses ReportLab library. No physiological logic.
 """
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import HexColor, black, white
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 import os
 from dataclasses import dataclass
 from typing import Dict
 
+from reportlab.lib.colors import HexColor, black, white
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -52,7 +52,7 @@ COLORS = {
 # TYPOGRAPHY (Polish Characters & UTF-8 Support)
 # ============================================================================
 
-# NOTE: Standard PDF fonts like "Helvetica" do NOT support Polish characters 
+# NOTE: Standard PDF fonts like "Helvetica" do NOT support Polish characters
 # in ReportLab. Using DejaVuSans TrueType font for full UTF-8 support.
 
 def register_fonts():
@@ -61,12 +61,12 @@ def register_fonts():
         # Try to find DejaVuSans font from matplotlib (usually bundled)
         import matplotlib
         font_dir = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
-        
+
         pdfmetrics.registerFont(TTFont("DejaVuSans", os.path.join(font_dir, "DejaVuSans.ttf")))
         pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", os.path.join(font_dir, "DejaVuSans-Bold.ttf")))
         pdfmetrics.registerFont(TTFont("DejaVuSans-Italic", os.path.join(font_dir, "DejaVuSans-Oblique.ttf")))
         pdfmetrics.registerFont(TTFont("DejaVuSans-BoldItalic", os.path.join(font_dir, "DejaVuSans-BoldOblique.ttf")))
-        
+
         return "DejaVuSans", "DejaVuSans-Bold", "DejaVuSans-Italic", "DejaVuSans-BoldItalic"
     except Exception:
         # Fallback to standard fonts if registration fails
@@ -98,9 +98,9 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         Dictionary mapping style names to ParagraphStyle objects.
     """
     base_styles = getSampleStyleSheet()
-    
+
     styles = {}
-    
+
     # Title style (main report title)
     styles["title"] = ParagraphStyle(
         "Title",
@@ -111,7 +111,7 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         spaceAfter=8 * mm,
         alignment=TA_CENTER,
     )
-    
+
     # Heading style (section headers)
     styles["heading"] = ParagraphStyle(
         "Heading",
@@ -123,7 +123,7 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         spaceAfter=4 * mm,
         alignment=TA_LEFT,
     )
-    
+
     # Subheading style (made bolder and more prominent)
     styles["subheading"] = ParagraphStyle(
         "Subheading",
@@ -135,7 +135,7 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         spaceAfter=3 * mm,
         alignment=TA_LEFT,
     )
-    
+
     # Body text style
     styles["body"] = ParagraphStyle(
         "Body",
@@ -147,14 +147,14 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         spaceAfter=3 * mm,
         alignment=TA_LEFT,
     )
-    
+
     # Body Italic style
     styles["body_italic"] = ParagraphStyle(
         "BodyItalic",
         parent=styles["body"],
         fontName=FONT_FAMILY_ITALIC,
     )
-    
+
     # Small text style (captions, footnotes)
     styles["small"] = ParagraphStyle(
         "Small",
@@ -165,7 +165,7 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         leading=10,
         alignment=TA_LEFT,
     )
-    
+
     # Footer style
     styles["footer"] = ParagraphStyle(
         "Footer",
@@ -175,14 +175,14 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         textColor=COLORS["text_light"],
         alignment=TA_CENTER,
     )
-    
+
     # Centered text
     styles["center"] = ParagraphStyle(
         "Center",
         parent=styles["body"],
         alignment=TA_CENTER,
     )
-    
+
     # Warning text (for conditional tests)
     styles["warning"] = ParagraphStyle(
         "Warning",
@@ -196,7 +196,7 @@ def create_styles() -> Dict[str, ParagraphStyle]:
         spaceAfter=2 * mm,
         alignment=TA_LEFT,
     )
-    
+
     return styles
 
 
@@ -207,7 +207,7 @@ def get_table_style():
         List of table style commands.
     """
     from reportlab.platypus import TableStyle
-    
+
     return TableStyle([
         # Header row
         ("BACKGROUND", (0, 0), (-1, 0), COLORS["primary"]),
@@ -215,20 +215,20 @@ def get_table_style():
         ("FONTNAME", (0, 0), (-1, 0), FONT_FAMILY_BOLD),
         ("FONTSIZE", (0, 0), (-1, 0), FONT_SIZE_BODY),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-        
+
         # Data rows
         ("FONTNAME", (0, 1), (-1, -1), FONT_FAMILY),
         ("FONTSIZE", (0, 1), (-1, -1), FONT_SIZE_BODY),
         ("ALIGN", (0, 1), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        
+
         # Alternating row colors
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [COLORS["white"], COLORS["background"]]),
-        
+
         # Borders
         ("GRID", (0, 0), (-1, -1), 0.5, COLORS["border"]),
         ("BOX", (0, 0), (-1, -1), 1, COLORS["border"]),
-        
+
         # Padding
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
@@ -244,7 +244,7 @@ def get_card_style():
         List of table style commands for cards.
     """
     from reportlab.platypus import TableStyle
-    
+
     return TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), COLORS["background"]),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),

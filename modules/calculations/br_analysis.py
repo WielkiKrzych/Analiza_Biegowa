@@ -7,10 +7,11 @@ Based on:
 All functions are pure/immutable - no mutation of input data.
 """
 
+from typing import Dict, Optional
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-from typing import Optional, Dict
 
 # BR zone boundaries (breaths/min)
 _BR_ZONES = (

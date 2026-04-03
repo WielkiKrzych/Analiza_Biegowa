@@ -1,9 +1,10 @@
-import streamlit as st
-import plotly.graph_objects as go
+from typing import Any
+
 import numpy as np
-import pandas as pd
-from typing import Any, Optional
-from modules.calculations.hrv import calculate_dynamic_dfa_v2, calculate_ddfa, detect_hrv_thresholds
+import plotly.graph_objects as go
+import streamlit as st
+
+from modules.calculations.hrv import calculate_ddfa, calculate_dynamic_dfa_v2, detect_hrv_thresholds
 
 
 def render_hrv_tab(df_clean_pl: Any) -> None:

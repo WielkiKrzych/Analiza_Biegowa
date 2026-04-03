@@ -42,7 +42,7 @@ class SettingsManager:
         """Callback do aktualizacji konkretnego ustawienia."""
         if 'user_settings' not in st.session_state:
              st.session_state['user_settings'] = self.load_settings()
-        
+
         st.session_state['user_settings'][key] = value
         # Save is disabled, but we update session state
         # self.save_settings(st.session_state['user_settings'])

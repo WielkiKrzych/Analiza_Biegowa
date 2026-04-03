@@ -6,13 +6,12 @@ Uses diskcache as a simple alternative to Redis (no external dependencies).
 """
 
 import hashlib
-import json
-import pickle
 from functools import wraps
-from typing import Any, Callable, Optional, TypeVar
 from pathlib import Path
-import pandas as pd
+from typing import Any, Callable, Optional, TypeVar
+
 import numpy as np
+import pandas as pd
 
 # Try to use diskcache (file-based, no external dependencies)
 try:

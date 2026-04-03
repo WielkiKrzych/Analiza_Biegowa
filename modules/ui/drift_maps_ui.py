@@ -3,16 +3,17 @@ Drift Maps UI Module.
 
 Displays Pace-HR-SmO2 scatter plots and drift analysis at constant pace.
 """
-import streamlit as st
-import pandas as pd
 import json
 
+import pandas as pd
+import streamlit as st
+
 from modules.physio_maps import (
+    analyze_drift_pace_hr,
+    detect_constant_pace_segments,
     scatter_pace_hr,
     scatter_pace_smo2,
-    detect_constant_pace_segments,
     trend_at_constant_pace,
-    analyze_drift_pace_hr,
 )
 
 
@@ -30,38 +31,38 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
         df_plot: Session DataFrame with pace, hr, and optionally smo2 data
     """
     st.header("📊 Drift Maps: Tempo-HR-SmO₂")
-    
+
     st.markdown("""
     Analiza relacji między tempem, tętnem i saturacją mięśniową (SmO₂).
     **Drift HR** wskazuje na zmęczenie sercowo-naczyniowe, 
     **spadek SmO₂** sugeruje narastający deficyt tlenowy.
     """)
-    
+
     # Check data availability
     has_hr = any(col in df_plot.columns for col in ['heartrate', 'hr', 'heart_rate', 'HeartRate'])
     has_smo2 = any(col in df_plot.columns for col in ['smo2', 'SmO2', 'muscle_oxygen'])
     has_pace = any(col in df_plot.columns for col in ['pace', 'pace_sec_per_km', 'tempo'])
-    
+
     if not has_hr:
         st.warning("Brak danych HR - nie można wygenerować wykresów.")
         return
-    
+
     if not has_pace:
         st.warning("Brak danych tempa - nie można wygenerować wykresów.")
         return
-    
+
     # ===== SCATTER PLOTS =====
     st.subheader("🔵 Scatter Plots")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         fig_pace_hr = scatter_pace_hr(df_plot, title="Tempo vs HR")
         if fig_pace_hr:
             st.plotly_chart(fig_pace_hr, use_container_width=True)
         else:
             st.info("Za mało danych do wygenerowania wykresu Tempo vs HR.")
-    
+
     with col2:
         if has_smo2:
             fig_pace_smo2 = scatter_pace_smo2(df_plot, title="Tempo vs SmO₂")
@@ -71,25 +72,25 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 st.info("Za mało danych SmO₂ do wygenerowania wykresu.")
         else:
             st.info("📉 Brak danych SmO₂ - wykres niedostępny.")
-    
+
     st.divider()
-    
+
     # ===== CONSTANT PACE SEGMENT ANALYSIS =====
     st.subheader("📏 Analiza Dryfu przy Stałym Temie")
-    
+
     # Detect segments
     segments = detect_constant_pace_segments(df_plot, tolerance_pct=10, min_duration_sec=120)
-    
+
     # Get pace column for manual input
     pace_col = None
     for col in ['pace', 'pace_sec_per_km', 'tempo']:
         if col in df_plot.columns:
             pace_col = col
             break
-    
+
     if not segments:
         st.info("Nie wykryto segmentów stałego tempa (min. 2 minuty, ±10%).")
-        
+
         # Manual pace input fallback
         st.markdown("**Ręczny wybór tempa:**")
         col_manual1, col_manual2 = st.columns(2)
@@ -111,11 +112,11 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 value=10,
                 key="drift_tolerance"
             )
-        
+
         fig_drift, drift_metrics = trend_at_constant_pace(
             df_plot, pace_target_sec, tolerance_pct=tolerance
         )
-        
+
         if fig_drift:
             st.plotly_chart(fig_drift, use_container_width=True)
             _display_drift_metrics(drift_metrics)
@@ -128,17 +129,17 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
             f"{i+1}. {(seg[2]/60.0):.2f} min/km ({_format_min_to_mmss((seg[1]-seg[0])/60)})"
             for i, seg in enumerate(segments)
         ]
-        
+
         selected_idx = st.selectbox(
             "Wybierz segment stałego tempa:",
             range(len(segments)),
             format_func=lambda x: segment_options[x],
             key="segment_selector"
         )
-        
+
         selected_segment = segments[selected_idx]
         pace_target_sec = selected_segment[2]
-        
+
         col_opts1, col_opts2 = st.columns(2)
         with col_opts1:
             tolerance = st.slider(
@@ -148,28 +149,28 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 value=10,
                 key="drift_tolerance_seg"
             )
-        
+
         fig_drift, drift_metrics = trend_at_constant_pace(
             df_plot, pace_target_sec, tolerance_pct=tolerance
         )
-        
+
         if fig_drift:
             st.plotly_chart(fig_drift, use_container_width=True)
             _display_drift_metrics(drift_metrics)
         else:
             st.warning("Nie można obliczyć dryfu dla wybranego segmentu.")
-    
+
     st.divider()
-    
+
     # ===== OVERALL METRICS JSON (Hidden in Expander) =====
     with st.expander("📋 Metryki Sesji (JSON)"):
         overall_metrics = analyze_drift_pace_hr(df_plot)
-        
+
         col_json1, col_json2 = st.columns([2, 1])
-        
+
         with col_json1:
             st.json(overall_metrics)
-        
+
         with col_json2:
             st.download_button(
                 "📥 Pobierz JSON",
@@ -178,7 +179,7 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
                 mime="application/json",
                 key="download_drift_json"
             )
-    
+
     # Interpretation
     with st.expander("📚 Interpretacja metryk"):
         st.markdown("""
@@ -203,9 +204,9 @@ def _display_drift_metrics(metrics) -> None:
     """Display drift metrics in a formatted way."""
     if metrics is None:
         return
-    
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         hr_drift = metrics.hr_drift_slope
         if hr_drift is not None:
@@ -218,7 +219,7 @@ def _display_drift_metrics(metrics) -> None:
             )
         else:
             st.metric("HR Drift", "—")
-    
+
     with col2:
         smo2_slope = metrics.smo2_slope
         if smo2_slope is not None:
@@ -231,13 +232,13 @@ def _display_drift_metrics(metrics) -> None:
             )
         else:
             st.metric("SmO₂ Slope", "—")
-    
+
     with col3:
         st.metric(
             "Czas segmentu",
             _format_min_to_mmss(metrics.segment_duration_min)
         )
-    
+
     with col4:
         # Display pace instead of power
         avg_pace_min = metrics.avg_pace / 60.0 if hasattr(metrics, 'avg_pace') else None

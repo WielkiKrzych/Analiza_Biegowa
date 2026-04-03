@@ -6,17 +6,14 @@ Generates:
    - Left Axis: VE (L/min)
    - Right Axis: Pace (min/km)
 """
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from .common import (
-    apply_common_style, 
-    save_figure,
-    create_empty_figure,
-    get_color
-)
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from .common import apply_common_style, create_empty_figure, get_color, save_figure
+
 
 def _find_column(df: pd.DataFrame, aliases: list) -> Optional[str]:
     """Find first existing column from aliases."""
@@ -48,7 +45,7 @@ def generate_full_vent_chart(
     dpi = cfg.get('dpi', 150)
     font_size = cfg.get('font_size', 10)
     title_size = cfg.get('title_size', 14)
-    
+
     if source_df is None or source_df.empty:
         empty_result = create_empty_figure("Brak danych źródłowych", "Dynamika Wentylacji", output_path, **cfg)
         return empty_result if output_path else empty_result.to_image(format='png')
@@ -58,7 +55,7 @@ def generate_full_vent_chart(
     ve_col = _find_column(df, ['tymeventilation', 've', 'ventilation', 've_smooth'])
     pace_col = _find_column(df, ['pace', 'pace_smooth', 'pace_sec_per_km', 'tempo'])
     time_col = _find_column(df, ['time_min', 'time'])
-    
+
     if not ve_col:
         empty_result = create_empty_figure("Brak danych Wentylacji", "Dynamika Wentylacji", output_path, **cfg)
         return empty_result if output_path else empty_result.to_image(format='png')
@@ -69,12 +66,12 @@ def generate_full_vent_chart(
         time_vals = df['time_min']
     else:
         time_vals = df[time_col]
-        
+
     fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
-    
+
     # VE (Left Axis - Primary)
     l1, = ax1.plot(time_vals, df[ve_col], color=get_color("vt1"), label="VE (L/min)", linewidth=2)
-    
+
     # Set x-axis ticks to hh:mm:ss format
     time_max = time_vals.max()
     tick_step = 5  # 5 minute intervals
@@ -85,7 +82,7 @@ def generate_full_vent_chart(
     ax1.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size)
     ax1.set_ylabel("Wentylacja [L/min]", fontsize=font_size, color=get_color("vt1"))
     ax1.tick_params(axis='y', labelcolor=get_color("vt1"))
-    
+
     # Pace (Right Axis - Secondary)
     if pace_col:
         ax2 = ax1.twinx()
@@ -97,18 +94,18 @@ def generate_full_vent_chart(
         ax2.grid(False)
         # Invert Y-axis (lower pace = faster)
         ax2.invert_yaxis()
-        
+
         lines = [l1, l2]
     else:
         lines = [l1]
-        
+
     # Title & Legend
     ax1.set_title("Dynamika Wentylacji vs Tempo", fontsize=title_size, fontweight='bold')
-    
+
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc='upper left', framealpha=0.9)
-    
+
     apply_common_style(fig, ax1, **cfg)
     plt.tight_layout()
-    
+
     return save_figure(fig, output_path, **cfg)

@@ -1,14 +1,14 @@
-import streamlit as st
-import plotly.graph_objects as go
-import pandas as pd
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from scipy import stats
-from modules.calculations.kinetics import generate_state_timeline
+
 from modules.calculations.quality import check_signal_quality
 from modules.calculations.smo2_phases import (
-    detect_smo2_phases,
-    classify_smo2_slope,
     calculate_smo2_recovery_halftime,
+    classify_smo2_slope,
+    detect_smo2_phases,
 )
 
 

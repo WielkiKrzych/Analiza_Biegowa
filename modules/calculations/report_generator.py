@@ -13,10 +13,13 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from models.results import (
-    RampTestResult, ThresholdRange, ValidityLevel, ConfidenceLevel,
-    ConflictReport, TestValidity
+    ConfidenceLevel,
+    ConflictReport,
+    RampTestResult,
+    TestValidity,
+    ThresholdRange,
+    ValidityLevel,
 )
-
 
 # ============================================================
 # LANGUAGE MAPPINGS (per methodology/07_report_structure.md)
@@ -89,37 +92,37 @@ def generate_report(result: RampTestResult) -> RampTestReport:
         overall_confidence=result.overall_confidence,
         methodology_disclaimer=_generate_disclaimer()
     )
-    
+
     # VT1 section
     if result.vt1:
         report.vt1_section = _generate_threshold_section(
             result.vt1, "Próg Aerobowy (VT1)"
         )
-    
+
     # VT2 section
     if result.vt2:
         report.vt2_section = _generate_threshold_section(
             result.vt2, "Próg Anaerobowy (VT2)"
         )
-    
+
     # SmO2 section (LOCAL signal)
     if result.smo2_lt1 or result.smo2_interpretation:
         report.smo2_section = _generate_smo2_section(result)
-    
+
     # Conflicts section
     if result.conflicts.has_conflicts:
         report.conflicts_section = _generate_conflicts_section(result.conflicts)
-    
+
     # Recommendations
     report.recommendations_section = _generate_recommendations_section(result)
-    
+
     return report
 
 
 def _generate_summary(result: RampTestResult) -> str:
     """Generate executive summary."""
     lines = []
-    
+
     # Validity status
     validity_text = {
         ValidityLevel.VALID: "Test przeprowadzony poprawnie.",
@@ -127,7 +130,7 @@ def _generate_summary(result: RampTestResult) -> str:
         ValidityLevel.INVALID: "Test nieważny — wymagana powtórka."
     }
     lines.append(validity_text[result.validity.validity])
-    
+
     # VT1/VT2 summary with confidence qualifiers
     if result.vt1:
         qualifier = _get_language_qualifier(result.vt1.confidence)
@@ -137,34 +140,34 @@ def _generate_summary(result: RampTestResult) -> str:
         )
     else:
         lines.append("VT1 nie wykryto.")
-    
+
     if result.vt2:
         qualifier = _get_language_qualifier(result.vt2.confidence)
         lines.append(
             f"VT2 {qualifier}w okolicach **{result.vt2.lower_watts:.0f}–{result.vt2.upper_watts:.0f} W** "
             f"(pewność: {result.vt2.confidence:.0%})."
         )
-    
+
     # Overall confidence
     overall_level = _get_confidence_level(result.overall_confidence)
     lines.append(f"\nOgólna pewność wyników: **{result.overall_confidence:.0%}** ({overall_level}).")
-    
+
     return " ".join(lines)
 
 
 def _generate_validity_section(validity: TestValidity) -> ReportSection:
     """Generate validity section."""
     header = VALIDITY_HEADERS[validity.validity]
-    
+
     content_lines = [header, ""]
-    
+
     if validity.issues:
         content_lines.append("**Zastrzeżenia:**")
         for issue in validity.issues:
             content_lines.append(f"- {issue}")
     else:
         content_lines.append("Wszystkie kryteria jakości spełnione.")
-    
+
     return ReportSection(
         title="Ważność Testu",
         content="\n".join(content_lines),
@@ -175,19 +178,19 @@ def _generate_validity_section(validity: TestValidity) -> ReportSection:
 def _generate_threshold_section(threshold: ThresholdRange, title: str) -> ReportSection:
     """Generate section for a threshold (VT1 or VT2)."""
     qualifier = _get_language_qualifier(threshold.confidence)
-    
+
     # Range format (never a point!)
     range_text = f"{threshold.lower_watts:.0f}–{threshold.upper_watts:.0f} W"
     midpoint_text = f"~{threshold.midpoint_watts:.0f} W"
-    
+
     # HR range if available
     hr_text = ""
     if threshold.lower_hr and threshold.upper_hr:
         hr_text = f"\n- Zakres HR: ~{threshold.lower_hr:.0f}–{threshold.upper_hr:.0f} bpm"
-    
+
     # Confidence visualization
     confidence_bar = _confidence_bar(threshold.confidence)
-    
+
     content = f"""**Przedział mocy:** {qualifier}{range_text}
 **Wartość centralna:** {midpoint_text}{hr_text}
 
@@ -200,7 +203,7 @@ def _generate_threshold_section(threshold: ThresholdRange, title: str) -> Report
         warnings.append(
             f"⚠️ Pewność NISKA — przedział {range_text} wymaga ostrożnej interpretacji"
         )
-    
+
     return ReportSection(
         title=title,
         content=content,
@@ -216,13 +219,13 @@ def _generate_smo2_section(result: RampTestResult) -> ReportSection:
         "Wyniki tej sekcji stanowią dodatkowy kontekst, NIE samodzielny próg.",
         ""
     ]
-    
+
     if result.smo2_lt1:
         qualifier = _get_language_qualifier(result.smo2_lt1.confidence)
         content_lines.append(
             f"**Punkt spadku SmO₂:** {qualifier}~{result.smo2_lt1.midpoint_watts:.0f} W"
         )
-    
+
     if result.smo2_deviation_from_vt is not None:
         deviation = result.smo2_deviation_from_vt
         if deviation < 0:
@@ -232,10 +235,10 @@ def _generate_smo2_section(result: RampTestResult) -> ReportSection:
         else:
             diff_text = "zgodny z VT"
         content_lines.append(f"**Różnica vs VT:** {diff_text}")
-    
+
     if result.smo2_interpretation:
         content_lines.append(f"\n**Interpretacja:** {result.smo2_interpretation}")
-    
+
     return ReportSection(
         title="SmO₂ — Sygnał Lokalny",
         content="\n".join(content_lines),
@@ -250,15 +253,15 @@ def _generate_conflicts_section(conflicts: ConflictReport) -> ReportSection:
         "**Zaobserwowane rozbieżności:**",
         ""
     ]
-    
+
     for i, conflict in enumerate(conflicts.conflicts, 1):
         content_lines.append(f"{i}. **{conflict.signal_a}** vs **{conflict.signal_b}**")
         content_lines.append(f"   {conflict.description}")
         content_lines.append(f"   *Interpretacja: {conflict.physiological_interpretation}*")
         content_lines.append("")
-    
+
     content_lines.append(f"**Ogólna zgodność sygnałów:** {conflicts.agreement_score:.0%}")
-    
+
     return ReportSection(
         title="Konflikty i Zastrzeżenia",
         content="\n".join(content_lines),
@@ -269,7 +272,7 @@ def _generate_conflicts_section(conflicts: ConflictReport) -> ReportSection:
 def _generate_recommendations_section(result: RampTestResult) -> ReportSection:
     """Generate recommendations with confidence-appropriate language."""
     confidence_level = _get_confidence_level(result.overall_confidence)
-    
+
     # Get language qualifier
     if result.overall_confidence >= 0.7:
         prefix = "Sugeruję"
@@ -277,23 +280,23 @@ def _generate_recommendations_section(result: RampTestResult) -> ReportSection:
         prefix = "Rozważ"
     else:
         prefix = "⚠️ Dane niepewne — poniższe sugestie traktuj z ostrożnością"
-    
+
     content_lines = [f"**{prefix}:**", ""]
-    
+
     # Only provide recommendations if confidence is sufficient
     if result.overall_confidence >= 0.3 and result.vt1:
         vt1_mid = result.vt1.midpoint_watts
         content_lines.append(f"- Trening Z2 (wytrzymałość): do ~{vt1_mid - 10:.0f} W")
         content_lines.append(f"- Trening Z3 (tempo): ~{vt1_mid - 5:.0f}–{vt1_mid + 15:.0f} W")
-        
+
         if result.vt2:
             vt2_mid = result.vt2.midpoint_watts
             content_lines.append(f"- Trening Z4 (próg): ~{vt1_mid + 10:.0f}–{vt2_mid - 10:.0f} W")
-    
+
     if result.overall_confidence < 0.5:
         content_lines.append("")
         content_lines.append("*Zalecam powtórzenie testu dla większej pewności.*")
-    
+
     return ReportSection(
         title="Sugestie Treningowe",
         content="\n".join(content_lines),
@@ -355,14 +358,14 @@ def format_report_markdown(report: RampTestReport) -> str:
         report.summary,
         "",
     ]
-    
+
     # Validity
     sections.extend([
         f"## {report.validity.title}",
         report.validity.content,
         ""
     ])
-    
+
     # VT1
     if report.vt1_section:
         sections.extend([
@@ -373,7 +376,7 @@ def format_report_markdown(report: RampTestReport) -> str:
         for warning in report.vt1_section.warnings:
             sections.append(f"> {warning}")
             sections.append("")
-    
+
     # VT2
     if report.vt2_section:
         sections.extend([
@@ -381,7 +384,7 @@ def format_report_markdown(report: RampTestReport) -> str:
             report.vt2_section.content,
             ""
         ])
-    
+
     # SmO2
     if report.smo2_section:
         sections.extend([
@@ -389,7 +392,7 @@ def format_report_markdown(report: RampTestReport) -> str:
             report.smo2_section.content,
             ""
         ])
-    
+
     # Conflicts
     if report.conflicts_section:
         sections.extend([
@@ -397,7 +400,7 @@ def format_report_markdown(report: RampTestReport) -> str:
             report.conflicts_section.content,
             ""
         ])
-    
+
     # Recommendations
     if report.recommendations_section:
         sections.extend([
@@ -405,10 +408,10 @@ def format_report_markdown(report: RampTestReport) -> str:
             report.recommendations_section.content,
             ""
         ])
-    
+
     # Disclaimer
     sections.append(report.methodology_disclaimer)
-    
+
     return "\n".join(sections)
 
 

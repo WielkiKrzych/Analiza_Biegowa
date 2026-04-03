@@ -12,18 +12,18 @@ Sub-modules:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 import pandas as pd
 
 # Re-export data classes from modules.calculations
 from modules.calculations.threshold_types import (
-    TransitionZone,
-    ThresholdResult,
-    StepTestResult,
     HysteresisResult,
     SensitivityResult,
+    StepTestResult,
+    ThresholdResult,
+    TransitionZone,
 )
-
 
 # ============================================================
 # Calculation Result Dataclasses
@@ -36,7 +36,7 @@ class NormalizedPowerResult:
     rolling_window_sec: int
     samples_count: int
     data_quality: float  # 0.0-1.0 based on missing/outlier data
-    
+
     def __float__(self) -> float:
         """Allow using result as float for backward compatibility."""
         return self.value
@@ -80,22 +80,22 @@ class DFAResult:
     windows_analyzed: int
     data_quality: float
     error: Optional[str] = None
-    
+
     # NEW: Uncertainty and quality
     is_uncertain: bool = False
     uncertainty_reasons: List[str] = field(default_factory=list)
     quality_grade: str = "A"  # A=excellent, B=good, C=acceptable, D=poor, F=unusable
-    
+
     # NEW: Minimum window validation
     min_window_sec: int = 120  # 2 min minimum for reliable DFA
     window_meets_minimum: bool = True
-    
+
     # NEW: Artifact sensitivity warning
-    artifact_sensitivity_note: str = field(default_factory=lambda: 
+    artifact_sensitivity_note: str = field(default_factory=lambda:
         "⚠️ DFA-a1 jest BARDZO wrażliwy na artefakty. "
         "Nawet 1-2% błędnych wartości RR może znacząco wpłynąć na wynik."
     )
-    
+
     def get_interpretation(self) -> str:
         """Get interpretation of the result."""
         if self.is_uncertain:
@@ -137,7 +137,7 @@ class SessionRecord:
     extra_metrics: Optional[Dict[str, Any]] = None
 
 
-@dataclass  
+@dataclass
 class AthleteProfile:
     """Athlete profile with physiological parameters."""
     weight_kg: float

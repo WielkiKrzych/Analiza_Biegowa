@@ -1,8 +1,9 @@
-import streamlit as st
-import plotly.graph_objects as go
-import pandas as pd
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from scipy import stats
+
 from modules.calculations.quality import check_signal_quality
 
 
@@ -43,11 +44,7 @@ def _render_br_only_section(target_df):
     if has_ve or not has_br:
         return False
 
-    from modules.calculations.br_analysis import (
-        classify_br_zone,
-        calculate_br_zones_time,
-        detect_vt_from_br,
-    )
+    from modules.calculations.br_analysis import calculate_br_zones_time, detect_vt_from_br
 
     target_df = target_df.copy()
     br_series = target_df["tymebreathrate"].dropna()
@@ -67,7 +64,6 @@ def _render_br_only_section(target_df):
         zones_time = calculate_br_zones_time(br_series)
         total_sec = sum(zones_time.values())
         if total_sec > 0:
-            import plotly.graph_objects as go_br
 
             zone_names = list(zones_time.keys())
             zone_pcts = [zones_time[z] / total_sec * 100 for z in zone_names]

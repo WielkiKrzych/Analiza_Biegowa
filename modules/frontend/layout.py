@@ -3,11 +3,14 @@ Frontend Layout Manager.
 
 Handles the main application shell, sidebar, and high-level routing.
 """
+from typing import Any, Tuple
+
 import streamlit as st
-from typing import Tuple, Any
 
 from modules.config import Config
+
 from .state import StateManager
+
 
 class AppLayout:
     """Main application layout and shell."""
@@ -22,9 +25,9 @@ class AppLayout:
             Tuple of (uploaded_file, user_params_dict)
         """
         st.sidebar.header("Ustawienia Biegacza")
-        
+
         params = {}
-        
+
         with st.sidebar.expander("⚙️ Parametry Podstawowe", expanded=True):
             params['runner_weight'] = st.number_input(
                 "Waga [kg]", step=0.5, min_value=30.0, max_value=200.0, value=95.0,
@@ -41,7 +44,7 @@ class AppLayout:
             params['is_male'] = st.checkbox(
                 "Mężczyzna?", value=True, key="gender_m", on_change=self.state.save_settings_callback
             )
-        
+
         with st.sidebar.expander("🏃 Parametry Progowe", expanded=True):
             params['threshold_pace'] = st.number_input(
                 "Tempo Progowe [s/km]", min_value=120, max_value=600, value=233,
@@ -56,7 +59,7 @@ class AppLayout:
                 "MaxHR [bpm]", min_value=120, max_value=220, value=184,
                 key="max_hr", on_change=self.state.save_settings_callback
             )
-        
+
         with st.sidebar.expander("🫁 Wentylacja", expanded=False):
             params['vt1_vent'] = st.number_input(
                 "VT1 [L/min]", min_value=0.0, value=0.0,
@@ -68,7 +71,7 @@ class AppLayout:
             )
 
         uploaded_file = st.sidebar.file_uploader("Wgraj plik (CSV / TXT)", type=['csv', 'txt'])
-            
+
         return uploaded_file, params
 
     def render_header(self) -> None:
@@ -79,7 +82,7 @@ class AppLayout:
         """Render the export section in sidebar."""
         if not uploaded_file:
             return
-            
+
         st.sidebar.markdown("---")
         st.sidebar.header("📄 Export Raportu")
         pass

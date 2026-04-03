@@ -7,8 +7,10 @@ Key Metrics:
 - SEM (Standard Error of Measurement): Typical error range.
 - Reproducibility Classification: Excellent (<3%), Good (<6%), Moderate (<10%), Unstable (>10%).
 """
+from typing import Dict, List, Union
+
 import numpy as np
-from typing import List, Dict, Union
+
 
 def calculate_cv(values: List[float]) -> float:
     """Calculate Coefficient of Variation (%)."""
@@ -56,7 +58,7 @@ def calculate_repeatability_metrics(
     """
     if not sessions_metrics:
         return {}
-        
+
     # Aggregate values by key
     aggregated = {}
     for session in sessions_metrics:
@@ -65,7 +67,7 @@ def calculate_repeatability_metrics(
             if k not in aggregated:
                 aggregated[k] = []
             aggregated[k].append(float(v))
-            
+
     results = {}
     for metric, values in aggregated.items():
         if len(values) < 2:
@@ -77,12 +79,12 @@ def calculate_repeatability_metrics(
                 "class": "N/A (1 sample)"
             }
             continue
-            
+
         mean_val = np.mean(values)
         std_val = np.std(values, ddof=1)
         cv = (std_val / mean_val * 100.0) if mean_val != 0 else 0
         sem = std_val / np.sqrt(len(values))
-        
+
         results[metric] = {
             "mean": round(mean_val, 2),
             "std": round(std_val, 2),
@@ -90,7 +92,7 @@ def calculate_repeatability_metrics(
             "sem": round(sem, 2),
             "class": classify_reproducibility(cv)
         }
-        
+
     return results
 
 def compare_session_to_baseline(
@@ -108,30 +110,30 @@ def compare_session_to_baseline(
         Dict with comparison details per metric.
     """
     comparison = {}
-    
+
     for metric, current_val in current_metrics.items():
         if metric not in baseline_stats:
             continue
-            
+
         stats = baseline_stats[metric]
         baseline_mean = stats.get('mean', 0)
         baseline_cv = stats.get('cv', 0)
-        
+
         if baseline_mean == 0:
             pct_diff = 0
         else:
             pct_diff = ((current_val - baseline_mean) / baseline_mean) * 100.0
-            
+
         # Interpretation
         # If change is > 1.5-2x CV, it's likely significant
         threshold_cv = max(baseline_cv, 1.0) # Min threshold 1%
-        
+
         is_significant = abs(pct_diff) > (threshold_cv * 1.5)
-        
+
         status = "Stable"
         if is_significant:
             status = "Significant Change" if abs(pct_diff) > (threshold_cv * 2.0) else "Possible Change"
-            
+
         comparison[metric] = {
             "current": current_val,
             "baseline": baseline_mean,
@@ -140,5 +142,5 @@ def compare_session_to_baseline(
             "status": status,
             "baseline_cv": baseline_cv
         }
-        
+
     return comparison

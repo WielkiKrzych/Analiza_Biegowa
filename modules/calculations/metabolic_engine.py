@@ -13,9 +13,9 @@ Analyzes metabolic profile and generates periodized training blocks:
 - 6-8 week training block design
 - KPI monitoring recommendations
 """
-from typing import Dict, Any, List
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 logger = logging.getLogger("Tri_Dashboard.MetabolicEngine")
 
@@ -31,21 +31,21 @@ class MetabolicProfile:
     vo2max: float = 0.0                   # ml/kg/min - FROM CANONICAL ONLY
     vo2max_source: str = "unknown"        # Source tracking
     vo2max_confidence: float = 0.0        # Confidence from canonical
-    
+
     vlamax: float = 0.0                   # mmol/L/s (estimated from power)
     cp_watts: float = 0.0                 # Critical Power
     ftp_watts: float = 0.0                # FTP (if different from CP)
     w_prime_kj: float = 0.0               # W' in kJ
-    
+
     # Derived
     vo2max_vlamax_ratio: float = 0.0      # Higher = more aerobic
     anaerobic_reserve_pct: float = 0.0    # (Pmax - CP) / CP
-    
+
     # Classification
     phenotype: str = "unknown"            # diesel, puncher, sprinter, allrounder
     limiter: str = "unknown"              # aerobic, glycolytic, mixed
     limiter_confidence: float = 0.0
-    
+
     # Strategy
     adaptation_target: str = "unknown"    # increase_vo2max, lower_vlamax, maintain
     strategy_interpretation: str = ""
@@ -104,17 +104,17 @@ def estimate_vlamax(
     """
     if pmax_watts <= 0 or cp_watts <= 0:
         return 0.0
-    
+
     # Anaerobic reserve
     anaerobic_reserve = pmax_watts - cp_watts
-    
+
     # W' contribution (higher W' = higher glycolytic capacity)
     w_prime_factor = w_prime_kj / 20  # Normalize around 20kJ
-    
+
     # Estimate VLaMax (mmol/L/s) - simplified model
     # Reference: 0.3-0.5 for endurance, 0.6-0.8 for sprinters
     vlamax = 0.3 + (anaerobic_reserve / pmax_watts) * 0.5 + (w_prime_factor - 1) * 0.1
-    
+
     return max(0.2, min(1.0, vlamax))
 
 
@@ -151,9 +151,9 @@ def classify_phenotype(
     """
     if vo2max <= 0:
         return "unknown"
-    
+
     ratio = vo2max / vlamax if vlamax > 0 else 0
-    
+
     if vo2max >= 65 and vlamax < 0.4:
         return "diesel"  # High VO2max, low glycolytic
     elif vo2max >= 60 and 0.4 <= vlamax < 0.6:
@@ -182,12 +182,12 @@ def diagnose_limiter(
     """
     if vo2max <= 0:
         return "unknown", 0.0, "Brak danych VO₂max – nie można określić limitera."
-    
+
     ratio = vo2max / vlamax if vlamax > 0 else 0
     cp_per_kg = cp_watts / weight_kg if weight_kg > 0 else 0
-    
+
     scores = {"aerobic": 0.0, "glycolytic": 0.0, "mixed": 0.0}
-    
+
     # VO2max analysis
     if vo2max < 50:
         scores["aerobic"] += 3.0
@@ -196,7 +196,7 @@ def diagnose_limiter(
         scores["mixed"] += 1.0
     else:
         scores["glycolytic"] += 1.0  # Good aerobic = glycolytic may be limiter
-    
+
     # VLaMax analysis
     if vlamax > 0.6:
         scores["glycolytic"] += 2.5  # High VLaMax limits endurance
@@ -205,7 +205,7 @@ def diagnose_limiter(
         scores["mixed"] += 2.0
     else:
         scores["aerobic"] += 1.0  # Low VLaMax = aerobic capacity limiting
-    
+
     # Ratio analysis
     if ratio < 100:
         scores["glycolytic"] += 1.5
@@ -213,13 +213,13 @@ def diagnose_limiter(
         scores["aerobic"] += 1.5
     else:
         scores["mixed"] += 1.5
-    
+
     # Determine winner
     total = sum(scores.values()) or 1.0
     max_score = max(scores.values())
     limiter = max(scores, key=scores.get)
     confidence = max_score / total
-    
+
     # Interpretation
     if limiter == "aerobic":
         interp = (
@@ -236,7 +236,7 @@ def diagnose_limiter(
             "Zbalansowany profil metaboliczny. "
             "Priorytet: utrzymanie proporcji przy podnoszeniu obu parametrów."
         )
-    
+
     return limiter, confidence, interp
 
 
@@ -280,14 +280,14 @@ def generate_training_block(
     """
     block = TrainingBlock()
     block.duration_weeks = weeks
-    
+
     target = profile.adaptation_target
     cp = profile.cp_watts
-    
+
     if target == "increase_vo2max":
         block.name = "VO₂max Development Block"
         block.primary_focus = "Podniesienie pułapu tlenowego"
-        
+
         block.sessions = [
             TrainingSession(
                 name="VO₂max Intervals",
@@ -323,7 +323,7 @@ def generate_training_block(
                 frequency="1-2×/tydzień"
             )
         ]
-        
+
         block.kpi_progress = [
             "HR przy CP spada o 3-5 bpm",
             "SmO₂ baseline wzrasta o 2-3%",
@@ -336,11 +336,11 @@ def generate_training_block(
             "Niemożność ukończenia interwałów",
             "Przewlekłe zmęczenie nóg"
         ]
-    
+
     elif target == "lower_vlamax":
         block.name = "VLaMax Reduction Block"
         block.primary_focus = "Optymalizacja metabolizmu tłuszczowego"
-        
+
         block.sessions = [
             TrainingSession(
                 name="Fasted Z2",
@@ -376,7 +376,7 @@ def generate_training_block(
                 frequency="1×/tydzień"
             )
         ]
-        
+
         block.kpi_progress = [
             "FatMax przesuwa się w prawo o 10-20W",
             "RER przy Z2 spada <0.85",
@@ -389,11 +389,11 @@ def generate_training_block(
             "Spadek masy ciała >2% (niezamierzony)",
             "Anemia (sprawdź ferrytynę)"
         ]
-    
+
     else:  # maintain_balance
         block.name = "Polarized Maintenance Block"
         block.primary_focus = "Zbalansowany rozwój obu systemów"
-        
+
         block.sessions = [
             TrainingSession(
                 name="Threshold Intervals",
@@ -429,7 +429,7 @@ def generate_training_block(
                 frequency="1-2×/tydzień"
             )
         ]
-        
+
         block.kpi_progress = [
             "CP wzrasta o 2-3%",
             "Peak power w rampie stabilny lub rosnący",
@@ -442,7 +442,7 @@ def generate_training_block(
             "Rosnące zmęczenie subiektywne",
             "Zaburzenia snu"
         ]
-    
+
     return block
 
 
@@ -478,40 +478,40 @@ def analyze_metabolic_engine(
     """
     strategy = MetabolicStrategy()
     profile = strategy.profile
-    
+
     # =========================================================================
     # CRITICAL: Use CANONICAL VO2max - DO NOT CALCULATE LOCALLY
     # =========================================================================
     profile.vo2max = vo2max
     profile.vo2max_source = vo2max_source
     profile.vo2max_confidence = vo2max_confidence
-    
+
     # Power metrics
     profile.cp_watts = cp_watts
     profile.ftp_watts = ftp_watts or cp_watts
     profile.w_prime_kj = w_prime_kj
-    
+
     # Estimate VLaMax (only locally estimated metric)
     profile.vlamax = estimate_vlamax(cp_watts, w_prime_kj, pmax_watts, weight_kg)
-    
+
     # Calculate ratios (using canonical VO2max)
     profile.vo2max_vlamax_ratio = calculate_vo2max_vlamax_ratio(vo2max, profile.vlamax)
     profile.anaerobic_reserve_pct = (pmax_watts - cp_watts) / cp_watts if cp_watts > 0 else 0
-    
+
     # Classifications (using canonical VO2max)
     profile.phenotype = classify_phenotype(vo2max, profile.vlamax, profile.anaerobic_reserve_pct)
-    
+
     limiter, confidence, interp = diagnose_limiter(vo2max, profile.vlamax, cp_watts, weight_kg)
     profile.limiter = limiter
     profile.limiter_confidence = confidence
-    
+
     target, strategy_desc = determine_adaptation_target(limiter, profile.phenotype)
     profile.adaptation_target = target
     profile.strategy_interpretation = strategy_desc
-    
+
     # Generate training block
     strategy.training_block = generate_training_block(profile)
-    
+
     return strategy
 
 
@@ -523,26 +523,26 @@ def format_metabolic_strategy_for_report(strategy: MetabolicStrategy) -> Dict[st
     """
     profile = strategy.profile
     block = strategy.training_block
-    
+
     return {
         "profile": {
             # CANONICAL VO2max (read-only, from upstream)
             "vo2max": round(profile.vo2max, 1) if profile.vo2max > 0 else None,
             "vo2max_source": profile.vo2max_source,
             "vo2max_confidence": round(profile.vo2max_confidence, 2),
-            
+
             # VLaMax (locally estimated)
             "vlamax": round(profile.vlamax, 3),
-            
+
             # Power metrics
             "cp_watts": round(profile.cp_watts, 0),
             "ftp_watts": round(profile.ftp_watts, 0),
             "w_prime_kj": round(profile.w_prime_kj, 1),
-            
+
             # Derived
             "vo2max_vlamax_ratio": round(profile.vo2max_vlamax_ratio, 1) if profile.vo2max > 0 else None,
             "anaerobic_reserve_pct": round(profile.anaerobic_reserve_pct * 100, 1),
-            
+
             # Classification
             "phenotype": profile.phenotype,
             "limiter": profile.limiter,

@@ -12,10 +12,11 @@ Functions for power-based metrics:
 - Athlete phenotype classification
 """
 
+import logging
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-import logging
-from typing import Dict, List, Optional, Tuple, Union
 
 from .common import DEFAULT_PDC_DURATIONS
 

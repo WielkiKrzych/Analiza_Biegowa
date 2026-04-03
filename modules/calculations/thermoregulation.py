@@ -9,10 +9,11 @@ Key metrics:
 - Time to critical thresholds (38.0°C, 38.5°C)
 - Peak HSI (Heat Strain Index)
 """
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
-import numpy as np
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 logger = logging.getLogger("Tri_Dashboard.Thermoregulation")
 
@@ -25,24 +26,24 @@ class ThermoProfile:
     min_core_temp: float = 0.0           # Baseline temperature [°C]
     delta_core_temp: float = 0.0         # Total temperature rise [°C]
     delta_per_10min: float = 0.0         # Temperature rise rate [°C / 10min]
-    
+
     # Critical thresholds crossing times (minutes from start)
     time_to_38_0: Optional[float] = None   # Time to reach 38.0°C
     time_to_38_5: Optional[float] = None   # Time to reach 38.5°C (critical)
-    
+
     # Heat strain
     peak_hsi: float = 0.0                # Peak Heat Strain Index
     mean_hsi: float = 0.0                # Mean HSI
-    
+
     # Classification
     heat_tolerance: str = "unknown"       # good, moderate, poor
     classification_color: str = "#808080"
-    
+
     # Interpretation
     mechanism_description: str = ""
     hr_ef_connection: str = ""
     recommendations: List[str] = field(default_factory=list)
-    
+
     # Quality
     data_points: int = 0
     confidence: float = 0.0
@@ -76,40 +77,40 @@ def analyze_thermoregulation(
         ThermoProfile with analysis results
     """
     profile = ThermoProfile()
-    
+
     # Filter valid data
     mask = (~np.isnan(core_temp)) & (core_temp > 35) & (core_temp < 42)
     temp_valid = core_temp[mask]
     time_valid = time_seconds[mask]
-    
+
     if len(temp_valid) < 30:
         logger.warning("Insufficient temperature data for analysis")
         profile.mechanism_description = "Niewystarczajace dane temperatury do analizy."
         return profile
-    
+
     profile.data_points = len(temp_valid)
-    
+
     # === CORE METRICS ===
     profile.max_core_temp = float(np.max(temp_valid))
     profile.min_core_temp = float(np.min(temp_valid[:min(60, len(temp_valid))]))  # First minute baseline
     profile.delta_core_temp = profile.max_core_temp - profile.min_core_temp
-    
+
     # Temperature rise rate (°C per 10 minutes)
     duration_min = (time_valid[-1] - time_valid[0]) / 60
     if duration_min > 0:
         profile.delta_per_10min = (profile.delta_core_temp / duration_min) * 10
-    
+
     # === CRITICAL THRESHOLD TIMES ===
     time_min = (time_valid - time_valid[0]) / 60
-    
+
     idx_38_0 = np.where(temp_valid >= 38.0)[0]
     if len(idx_38_0) > 0:
         profile.time_to_38_0 = float(time_min[idx_38_0[0]])
-    
+
     idx_38_5 = np.where(temp_valid >= 38.5)[0]
     if len(idx_38_5) > 0:
         profile.time_to_38_5 = float(time_min[idx_38_5[0]])
-    
+
     # === HSI ===
     if hsi is not None:
         hsi_valid = hsi[mask] if len(hsi) == len(core_temp) else hsi
@@ -117,27 +118,27 @@ def analyze_thermoregulation(
         if len(hsi_valid) > 0:
             profile.peak_hsi = float(np.max(hsi_valid))
             profile.mean_hsi = float(np.mean(hsi_valid))
-    
+
     # ==========================================================================
-    # ENHANCED CLASSIFICATION (Multi-Factor) 
+    # ENHANCED CLASSIFICATION (Multi-Factor)
     # Considers: temp rise rate, HSI, cardiac drift, EF drop
     # ==========================================================================
-    
+
     # Initialize scores (0 = good, higher = worse)
     tolerance_score = 0
-    
+
     # Factor 1: Temperature rise rate (legacy)
     if profile.delta_per_10min >= 0.5:
         tolerance_score += 2
     elif profile.delta_per_10min >= 0.3:
         tolerance_score += 1
-    
+
     # Factor 2: Peak HSI
     if profile.peak_hsi >= 8:
         tolerance_score += 2  # Critical HSI
     elif profile.peak_hsi >= 6:
         tolerance_score += 1  # Elevated HSI
-    
+
     # Factor 3: Cardiac Drift (CRITICAL - reflects actual physiological cost)
     if cardiac_drift_pct is not None:
         abs_drift = abs(cardiac_drift_pct)
@@ -148,7 +149,7 @@ def analyze_thermoregulation(
             tolerance_score += 2
         elif abs_drift >= 6:
             tolerance_score += 1
-    
+
     # Factor 4: EF Drop (CRITICAL - efficiency cost due to heat)
     if ef_drop_pct is not None:
         abs_ef_drop = abs(ef_drop_pct)
@@ -159,12 +160,12 @@ def analyze_thermoregulation(
             tolerance_score += 2
         elif abs_ef_drop >= 6:
             tolerance_score += 1
-    
+
     # === FINAL CLASSIFICATION ===
     # Score >= 4: POOR (even if temp rise is slow, physiological cost is high)
     # Score 2-3: MODERATE
     # Score 0-1: GOOD
-    
+
     if tolerance_score >= 4:
         profile.heat_tolerance = "poor"
         profile.classification_color = "#E74C3C"  # Red
@@ -174,19 +175,19 @@ def analyze_thermoregulation(
     else:
         profile.heat_tolerance = "good"
         profile.classification_color = "#27AE60"  # Green
-    
+
     logger.info(f"Thermal tolerance: {profile.heat_tolerance} (score={tolerance_score}, "
                 f"delta={profile.delta_per_10min:.2f}, HSI={profile.peak_hsi:.1f}, "
                 f"drift={cardiac_drift_pct}, ef_drop={ef_drop_pct})")
-    
+
     # === INTERPRETATION ===
     profile.mechanism_description = _generate_thermo_mechanism(profile, cardiac_drift_pct, ef_drop_pct)
     profile.hr_ef_connection = _generate_hr_ef_connection(profile, hr, power, cardiac_drift_pct, ef_drop_pct)
     profile.recommendations = _generate_thermo_recommendations(profile)
-    
+
     # Confidence
     profile.confidence = min(1.0, profile.data_points / 500)
-    
+
     return profile
 
 
@@ -198,7 +199,7 @@ def _generate_thermo_mechanism(
     """Generate thermoregulation mechanism description."""
     drift_text = f"Dryf HR: {abs(cardiac_drift_pct):.1f}%. " if cardiac_drift_pct and abs(cardiac_drift_pct) > 5 else ""
     ef_text = f"Spadek EF: {abs(ef_drop_pct):.1f}%. " if ef_drop_pct and abs(ef_drop_pct) > 5 else ""
-    
+
     if profile.heat_tolerance == "poor":
         return (
             f"SLABA tolerancja cieplna. {drift_text}{ef_text}"

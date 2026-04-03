@@ -6,8 +6,8 @@ Displays anonymized comparisons with other athletes:
 - VO2max rankings
 - Category placement
 """
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
 
 from modules.social.comparison import ComparisonService
 
@@ -29,23 +29,23 @@ def render_community_tab(
         gender: 'M' or 'F'
     """
     st.header("👥 Community Comparison")
-    
+
     if weight <= 0 or ftp <= 0:
         st.warning("Uzupełnij wagę i FTP w panelu bocznym aby zobaczyć porównanie.")
         return
-    
+
     service = ComparisonService()
-    
+
     # Get rankings
     rankings = service.get_summary_rankings(ftp, weight, vo2max, age, gender)
-    
+
     if not rankings:
         st.info("Brak danych do porównania.")
         return
-    
+
     # Display rankings
     col1, col2 = st.columns(2)
-    
+
     for i, ranking in enumerate(rankings):
         with col1 if i == 0 else col2:
             # Percentile gauge
@@ -69,15 +69,15 @@ def render_community_tab(
                     }
                 }
             ))
-            
+
             fig.update_layout(
                 template="plotly_dark",
                 height=200,
                 margin=dict(t=50, b=0)
             )
-            
+
             st.plotly_chart(fig, use_container_width=True)
-            
+
             st.markdown(f"""
             **{ranking.metric}:** {ranking.value:.2f}
             
@@ -85,11 +85,11 @@ def render_community_tab(
             
             📊 Lepszy od **{ranking.percentile:.0f}%** zawodników
             """)
-    
+
     # Category explanation
     st.divider()
     st.subheader("🏅 Kategorie Kolarskie")
-    
+
     categories_data = [
         ("World Tour Pro", 7.0, "🌍"),
         ("Cat 1 / Elite", 5.8, "🥇"),
@@ -99,15 +99,15 @@ def render_community_tab(
         ("Cat 5", 3.0, ""),
         ("Recreational", 2.5, ""),
     ]
-    
+
     ftp_wkg = ftp / weight
-    
+
     for cat_name, threshold, emoji in categories_data:
         if ftp_wkg >= threshold:
             st.success(f"{emoji} **{cat_name}** (≥{threshold} W/kg) ← Tu jesteś!")
         else:
             st.markdown(f"- {cat_name} (≥{threshold} W/kg)")
-    
+
     # Privacy notice
     st.divider()
     st.caption("""

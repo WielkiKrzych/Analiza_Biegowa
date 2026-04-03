@@ -34,12 +34,12 @@ def build_colored_box(text: str, styles: Dict, bg_color: str = "navy") -> List:
         "green": PREMIUM_COLORS["green"],
     }
     bg = color_map.get(bg_color, PREMIUM_COLORS["navy"])
-    
+
     table_data = [[Paragraph(
         f"<font color='white'><b>{text}</b></font>",
         styles["center"]
     )]]
-    
+
     box_table = Table(table_data, colWidths=[170 * mm])
     box_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), bg),
@@ -50,7 +50,7 @@ def build_colored_box(text: str, styles: Dict, bg_color: str = "navy") -> List:
         ('LEFTPADDING', (0, 0), (-1, -1), 15),
         ('RIGHTPADDING', (0, 0), (-1, -1), 15),
     ]))
-    
+
     return [box_table, Spacer(1, 4 * mm)]
 
 

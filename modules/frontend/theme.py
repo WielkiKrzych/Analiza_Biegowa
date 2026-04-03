@@ -4,7 +4,9 @@ Frontend Theme Management.
 Handles CSS loading and theme configuration.
 """
 import streamlit as st
+
 from modules.config import Config
+
 
 class ThemeManager:
     """Manages application theme and styling."""

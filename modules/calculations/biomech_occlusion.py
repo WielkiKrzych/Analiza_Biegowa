@@ -9,11 +9,12 @@ Key metrics:
 - Torque at SmO2 thresholds (baseline, -10%, -20%)
 - Regression slope (SmO2 vs Torque)
 """
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 from scipy import stats
-import logging
 
 logger = logging.getLogger("Tri_Dashboard.BiomechOcclusion")
 
@@ -25,22 +26,22 @@ class OcclusionProfile:
     occlusion_index: float = 0.0          # |ΔSmO₂| / ΔTorque
     regression_slope: float = 0.0          # %SmO₂ / Nm
     regression_r2: float = 0.0             # R² of regression
-    
+
     # Torque at SmO2 thresholds
     smo2_baseline: float = 0.0             # Baseline SmO2 %
     torque_at_baseline: float = 0.0        # Nm at baseline
     torque_at_minus_10: float = 0.0        # Nm at SmO2 -10%
     torque_at_minus_20: float = 0.0        # Nm at SmO2 -20% (significant occlusion)
-    
+
     # Classification
     classification: str = "unknown"         # low, moderate, high
     classification_color: str = "#808080"
-    
+
     # Interpretation
     mechanism_description: str = ""
     riding_style_impact: str = ""
     training_recommendations: List[str] = field(default_factory=list)
-    
+
     # Data quality
     data_points: int = 0
     confidence: float = 0.0
@@ -63,19 +64,19 @@ def analyze_biomech_occlusion(
         OcclusionProfile with analysis results
     """
     profile = OcclusionProfile()
-    
+
     # Filter valid data
     mask = (torque > 0) & (smo2 > 10) & (~np.isnan(torque)) & (~np.isnan(smo2))
     torque_valid = torque[mask]
     smo2_valid = smo2[mask]
-    
+
     if len(torque_valid) < 30:
         logger.warning("Insufficient data for occlusion analysis")
         profile.mechanism_description = "Niewystarczające dane do analizy okluzji."
         return profile
-    
+
     profile.data_points = len(torque_valid)
-    
+
     # === BASELINE SmO2 ===
     # Use lower quartile of torque for baseline
     low_torque_mask = torque_valid < np.percentile(torque_valid, 25)
@@ -85,29 +86,29 @@ def analyze_biomech_occlusion(
     else:
         profile.smo2_baseline = float(np.percentile(smo2_valid, 75))
         profile.torque_at_baseline = float(np.min(torque_valid))
-    
+
     # === REGRESSION: SmO2 vs Torque ===
     slope, intercept, r_value, p_value, std_err = stats.linregress(torque_valid, smo2_valid)
     profile.regression_slope = float(slope)  # %SmO2 per Nm
     profile.regression_r2 = float(r_value ** 2)
-    
+
     # === TORQUE AT SmO2 THRESHOLDS ===
     target_smo2_10 = profile.smo2_baseline - 10
     target_smo2_20 = profile.smo2_baseline - 20
-    
+
     if slope != 0:
         # From linear regression: torque = (smo2 - intercept) / slope
         profile.torque_at_minus_10 = float((target_smo2_10 - intercept) / slope) if slope != 0 else 0
         profile.torque_at_minus_20 = float((target_smo2_20 - intercept) / slope) if slope != 0 else 0
-    
+
     # === OCCLUSION INDEX ===
     # |ΔSmO₂| / ΔTorque over full range
     delta_smo2 = np.max(smo2_valid) - np.min(smo2_valid)
     delta_torque = np.max(torque_valid) - np.min(torque_valid)
-    
+
     if delta_torque > 0:
         profile.occlusion_index = abs(delta_smo2) / delta_torque
-    
+
     # === CLASSIFICATION ===
     if profile.occlusion_index < 0.15:
         profile.classification = "low"
@@ -118,15 +119,15 @@ def analyze_biomech_occlusion(
     else:
         profile.classification = "high"
         profile.classification_color = "#E74C3C"  # Red
-    
+
     # === MECHANISM DESCRIPTION ===
     profile.mechanism_description = _generate_mechanism_description(profile)
     profile.riding_style_impact = _generate_riding_style_impact(profile, cadence)
     profile.training_recommendations = _generate_training_recommendations(profile)
-    
+
     # Confidence based on R² and data points
     profile.confidence = min(1.0, profile.regression_r2 * (profile.data_points / 100))
-    
+
     return profile
 
 
@@ -160,7 +161,7 @@ def _generate_mechanism_description(profile: OcclusionProfile) -> str:
 
 
 def _generate_riding_style_impact(
-    profile: OcclusionProfile, 
+    profile: OcclusionProfile,
     cadence: Optional[np.ndarray] = None
 ) -> str:
     """Generate riding style impact analysis."""
@@ -262,12 +263,12 @@ def minimal_safe_cadence(power: float, torque_threshold: float) -> float:
     """
     if torque_threshold <= 0 or power <= 0:
         return 0.0
-    
+
     # Cadence [RPM] = Power [W] / (2π × Torque [Nm]) × 60
     # Note: Power = Torque × 2π × (Cadence/60), so Cadence/60 = Power / (2π × Torque)
     cadence_rps = power / (2 * np.pi * torque_threshold)  # revolutions per second
     cadence_rpm = cadence_rps * 60  # revolutions per minute
-    
+
     return max(0.0, cadence_rpm)
 
 
@@ -288,16 +289,16 @@ def calculate_power_zone_cadences(
         List of dicts with zone info and cadence thresholds
     """
     results = []
-    
+
     for zone_name, (power_min, power_max) in power_zones.items():
         power_mid = (power_min + power_max) / 2
-        
+
         # Calculate minimum cadence for moderate occlusion (-10%)
         cad_moderate = minimal_safe_cadence(power_mid, torque_at_minus_10) if torque_at_minus_10 > 0 else 0
-        
+
         # Calculate minimum cadence for critical occlusion (-20%)
         cad_critical = minimal_safe_cadence(power_mid, torque_at_minus_20) if torque_at_minus_20 > 0 else 0
-        
+
         results.append({
             "zone": zone_name,
             "power_range": f"{power_min}-{power_max} W",
@@ -305,7 +306,7 @@ def calculate_power_zone_cadences(
             "cadence_safe": round(cad_moderate, 0) if cad_moderate > 0 else "---",
             "cadence_critical": round(cad_critical, 0) if cad_critical > 0 else "---",
         })
-    
+
     return results
 
 

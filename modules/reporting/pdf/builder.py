@@ -15,39 +15,37 @@ Pages:
 No physiological calculations - only document assembly.
 """
 
+import logging
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime
-import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
-from reportlab.platypus import SimpleDocTemplate, PageBreak
 from reportlab.lib.units import mm
+from reportlab.platypus import PageBreak, SimpleDocTemplate
 
-from .styles import PDFConfig, create_styles, PAGE_SIZE, COLORS, FONT_FAMILY
+from ...calculations.executive_summary import generate_executive_summary
 from .layout import (
+    build_contact_footer,
+    build_page_cardiovascular,
     build_page_cover,
-    build_page_thresholds,
-    build_page_pdc,
-    build_page_interpretation,
-    build_page_zones,
-    build_page_limitations,
-    build_page_smo2,
-    build_page_theory,
-    build_page_thermal,
     build_page_executive_summary,
     build_page_executive_verdict,
-    build_page_cardiovascular,
-    build_page_ventilation,
-    build_page_metabolic_engine,
+    build_page_interpretation,
+    build_page_limitations,
     build_page_limiter_radar,
+    build_page_metabolic_engine,
+    build_page_pdc,
+    build_page_smo2,
+    build_page_test_profile,
+    build_page_theory,
+    build_page_thermal,
+    build_page_thresholds,
+    build_page_ventilation,
     build_table_of_contents,
     build_title_page,
-    build_contact_footer,
-    build_page_test_profile,
 )
-from ...calculations.executive_summary import generate_executive_summary
-
+from .styles import COLORS, FONT_FAMILY, PAGE_SIZE, PDFConfig, create_styles
 
 # Setup logger
 logger = logging.getLogger("Tri_Dashboard.PDFBuilder")

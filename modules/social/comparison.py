@@ -6,9 +6,10 @@ Enables anonymous comparison with other athletes:
 - Percentile calculations
 - Community leaderboards
 """
+import hashlib
 from dataclasses import dataclass
 from typing import List
-import hashlib
+
 import pandas as pd
 
 
@@ -19,11 +20,11 @@ class AnonymizedProfile:
     age_bracket: str   # e.g., "30-35"
     weight_bracket: str  # e.g., "70-75"
     gender: str        # "M" or "F"
-    
+
     # Relative metrics only
     ftp_wkg: float     # W/kg
     vo2max_estimate: float
-    
+
     # MMP percentiles (not absolute values)
     mmp_5s_wkg: float
     mmp_1m_wkg: float
@@ -43,15 +44,15 @@ class PercentileRanking:
 
 class DataAnonymizer:
     """Anonymizes training data for safe sharing."""
-    
-    AGE_BRACKETS = [(18, 25), (25, 30), (30, 35), (35, 40), (40, 45), 
+
+    AGE_BRACKETS = [(18, 25), (25, 30), (30, 35), (35, 40), (40, 45),
                     (45, 50), (50, 55), (55, 60), (60, 100)]
     WEIGHT_BRACKETS = [(45, 50), (50, 55), (55, 60), (60, 65), (65, 70),
                        (70, 75), (75, 80), (80, 85), (85, 90), (90, 100)]
-    
+
     def __init__(self, salt: str = "tri_dashboard_2024"):
         self.salt = salt
-    
+
     def create_anonymous_id(self, identifier: str) -> str:
         """Create anonymous, non-reversible ID.
         
@@ -63,10 +64,10 @@ class DataAnonymizer:
         """
         salted = f"{self.salt}:{identifier}"
         return hashlib.sha256(salted.encode()).hexdigest()[:16]
-    
+
     def get_bracket(
-        self, 
-        value: float, 
+        self,
+        value: float,
         brackets: List[tuple]
     ) -> str:
         """Get bracket label for a value."""
@@ -74,7 +75,7 @@ class DataAnonymizer:
             if low <= value < high:
                 return f"{low}-{high}"
         return "unknown"
-    
+
     def anonymize_session(
         self,
         df: pd.DataFrame,
@@ -107,11 +108,11 @@ class DataAnonymizer:
         """
         if weight <= 0:
             weight = 70  # Default
-        
+
         # Calculate W/kg values
         avg_watts = metrics.get('avg_watts', 0)
         np_val = metrics.get('np', avg_watts)
-        
+
         # MMP in W/kg
         mmp_data = {}
         if 'watts' in df.columns:
@@ -120,13 +121,13 @@ class DataAnonymizer:
                     mmp = df['watts'].rolling(window).mean().max()
                     if not pd.isna(mmp):
                         mmp_data[f'mmp_{label}_wkg'] = mmp / weight
-        
+
         # Zone distribution (no absolute values)
         zone_dist = {}
         if 'Zone' in df.columns:
             zone_counts = df['Zone'].value_counts(normalize=True)
             zone_dist = zone_counts.to_dict()
-        
+
         return {
             'age_bracket': self.get_bracket(age, self.AGE_BRACKETS),
             'weight_bracket': self.get_bracket(weight, self.WEIGHT_BRACKETS),
@@ -137,7 +138,7 @@ class DataAnonymizer:
             'zone_distribution': zone_dist,
             **mmp_data
         }
-    
+
     def anonymize_profile(
         self,
         user_id: str,
@@ -179,19 +180,19 @@ class ComparisonService:
     
     Uses embedded percentile data from published studies.
     """
-    
+
     # FTP/kg percentiles by gender (from various sources)
     FTP_PERCENTILES_MALE = {
         # W/kg: percentile
         2.0: 10, 2.5: 25, 3.0: 40, 3.5: 55, 4.0: 70,
         4.5: 82, 5.0: 90, 5.5: 95, 6.0: 98, 6.5: 99
     }
-    
+
     FTP_PERCENTILES_FEMALE = {
         1.5: 10, 2.0: 25, 2.5: 40, 3.0: 55, 3.5: 70,
         4.0: 85, 4.5: 93, 5.0: 97, 5.5: 99
     }
-    
+
     # VO2max percentiles by age and gender
     VO2MAX_PERCENTILES = {
         'M': {
@@ -207,7 +208,7 @@ class ComparisonService:
             '50-59': [(14, 10), (22, 25), (28, 50), (32, 75), (37, 90)],
         }
     }
-    
+
     # Cycling categories by FTP/kg (men)
     CYCLING_CATEGORIES = [
         (7.0, "World Tour Pro"),
@@ -219,10 +220,10 @@ class ComparisonService:
         (2.5, "Recreational"),
         (0.0, "Beginner"),
     ]
-    
+
     def __init__(self):
         self.anonymizer = DataAnonymizer()
-    
+
     def get_ftp_percentile(
         self,
         ftp_wkg: float,
@@ -237,9 +238,9 @@ class ComparisonService:
         Returns:
             PercentileRanking
         """
-        percentiles = (self.FTP_PERCENTILES_MALE if gender == 'M' 
+        percentiles = (self.FTP_PERCENTILES_MALE if gender == 'M'
                       else self.FTP_PERCENTILES_FEMALE)
-        
+
         # Interpolate percentile
         last_pct = 0
         for wkg, pct in sorted(percentiles.items()):
@@ -254,7 +255,7 @@ class ComparisonService:
                     sample_size=10000  # Approximate based on published data
                 )
             last_pct = pct
-        
+
         return PercentileRanking(
             metric="FTP/kg",
             value=ftp_wkg,
@@ -262,14 +263,14 @@ class ComparisonService:
             category=self._get_cycling_category(ftp_wkg),
             sample_size=10000
         )
-    
+
     def _get_cycling_category(self, ftp_wkg: float) -> str:
         """Get cycling racing category based on FTP/kg."""
         for threshold, category in self.CYCLING_CATEGORIES:
             if ftp_wkg >= threshold:
                 return category
         return "Beginner"
-    
+
     def get_vo2max_percentile(
         self,
         vo2max: float,
@@ -293,10 +294,10 @@ class ComparisonService:
             if low <= age <= high:
                 age_bracket = bracket
                 break
-        
+
         data = self.VO2MAX_PERCENTILES.get(gender, self.VO2MAX_PERCENTILES['M'])
         brackets = data.get(age_bracket, data['30-39'])
-        
+
         # Interpolate
         last_pct = 0
         for vo2_threshold, pct in brackets:
@@ -309,7 +310,7 @@ class ComparisonService:
                     sample_size=5000
                 )
             last_pct = pct
-        
+
         return PercentileRanking(
             metric="VO2max",
             value=vo2max,
@@ -317,7 +318,7 @@ class ComparisonService:
             category="Elite",
             sample_size=5000
         )
-    
+
     def _get_fitness_level(self, percentile: float) -> str:
         """Get fitness level description from percentile."""
         if percentile >= 90:
@@ -330,7 +331,7 @@ class ComparisonService:
             return "Average"
         else:
             return "Below Average"
-    
+
     def get_summary_rankings(
         self,
         ftp: float,
@@ -352,12 +353,12 @@ class ComparisonService:
             List of PercentileRanking objects
         """
         rankings = []
-        
+
         if weight > 0:
             ftp_wkg = ftp / weight
             rankings.append(self.get_ftp_percentile(ftp_wkg, gender))
-        
+
         if vo2max > 0:
             rankings.append(self.get_vo2max_percentile(vo2max, age, gender))
-        
+
         return rankings

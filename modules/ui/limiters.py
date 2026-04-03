@@ -1,6 +1,7 @@
-import streamlit as st
-import plotly.graph_objects as go
 import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
 
 def render_limiters_tab(df_plot, cp_input, vt2_vent):
     st.header("Analiza Limiterów Fizjologicznych (INSCYD-style)")
@@ -8,19 +9,19 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
 
     # Normalize columns
     df_plot.columns = df_plot.columns.str.lower().str.strip()
-    
+
     # Handle HR aliases
     if 'hr' not in df_plot.columns:
         for alias in ['heartrate', 'heart_rate', 'bpm']:
             if alias in df_plot.columns:
                 df_plot.rename(columns={alias: 'hr'}, inplace=True)
                 break
-    
+
     has_hr = 'hr' in df_plot.columns
     has_ve = any(c in df_plot.columns for c in ['tymeventilation', 've', 'ventilation'])
     has_smo2 = 'smo2' in df_plot.columns
     has_watts = 'watts' in df_plot.columns
-    
+
     # Sport detection: running uses pace, cycling uses watts
     is_running = "pace" in df_plot.columns and "watts" not in df_plot.columns
 
@@ -30,33 +31,33 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
     if is_running:
         st.header("Analiza Limiterów Biegowych")
         st.markdown("Identyfikujemy Twój profil biegacza i ograniczenia wydolnościowe na podstawie tempa.")
-        
+
         # --- SEKCJA 1: PROFIL BIEGACZA ---
         st.subheader("🏃 Profil Biegacza")
-        
+
         # Calculate best pace for different windows (lower = faster)
         df_plot['pace_1min'] = df_plot['pace'].rolling(window=60, min_periods=60).mean()
         df_plot['pace_5min'] = df_plot['pace'].rolling(window=300, min_periods=300).mean()
         df_plot['pace_10min'] = df_plot['pace'].rolling(window=600, min_periods=600).mean()
         df_plot['pace_20min'] = df_plot['pace'].rolling(window=1200, min_periods=1200).mean()
-        
+
         # Best (minimum) pace values
         best_1min = df_plot['pace_1min'].min() if not df_plot['pace_1min'].isna().all() else None
         best_5min = df_plot['pace_5min'].min() if not df_plot['pace_5min'].isna().all() else None
         best_10min = df_plot['pace_10min'].min() if not df_plot['pace_10min'].isna().all() else None
         best_20min = df_plot['pace_20min'].min() if not df_plot['pace_20min'].isna().all() else None
-        
+
         # Display pace metrics
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Najlepsze 1 min", f"{best_1min/60:.2f} min/km" if best_1min else "N/A")
         col2.metric("Najlepsze 5 min", f"{best_5min/60:.2f} min/km" if best_5min else "N/A")
         col3.metric("Najlepsze 10 min", f"{best_10min/60:.2f} min/km" if best_10min else "N/A")
         col4.metric("Najlepsze 20 min", f"{best_20min/60:.2f} min/km" if best_20min else "N/A")
-        
+
         # Classify runner phenotype based on pace ratio
         if best_5min and best_10min and best_5min > 0:
             pace_ratio = best_10min / best_5min  # Lower ratio = better endurance
-            
+
             if pace_ratio < 1.03:
                 profile = "🏃 Maratończyk / Ultra"
                 profile_color = "#4ecdc4"
@@ -81,7 +82,7 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 strength = "Wysoka prędkość maksymalna, dynamika"
                 weakness = "Szybki spadek tempa na dłuższych dystansach"
                 phenotype = "sprinter"
-            
+
             # Display profile
             st.markdown(f"""
             <div style="padding:15px; border-radius:8px; border:2px solid {profile_color}; background-color: #222; margin-top:15px;">
@@ -97,38 +98,38 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
             phenotype = "unknown"
             pace_ratio = None
             st.info("Trening zbyt krótki dla pełnej analizy profilu (min. 10 min).")
-        
+
         st.divider()
-        
+
         # --- SEKCJA 2: ANALIZA LIMITERÓW BIEGOWYCH ---
         st.subheader("📊 Analiza Limiterów Biegowych")
-        
+
         if best_1min and best_5min and best_20min:
             # Calculate limiter scores (0-100)
             # 1. Speed - based on how fast 1min pace is relative to 5min
             speed_drop = (best_1min / best_5min) if best_5min > 0 else 1
             speed_score = max(0, min(100, (1 - speed_drop) * 1000 + 50))  # Higher = more speed reserve
-            
+
             # 2. Aerobic endurance - based on pace degradation 5min → 20min
             endurance_drop = (best_20min / best_5min) if best_5min > 0 else 1.5
             endurance_score = max(0, min(100, (1.2 - endurance_drop) * 500))  # Higher = better endurance
-            
+
             # 3. Threshold capacity - based on ratio to estimated threshold pace
             threshold_pace_est = best_20min * 1.01 if best_20min else best_5min * 1.1
             avg_pace = df_plot['pace'].mean()
             threshold_score = max(0, min(100, (threshold_pace_est / avg_pace - 0.8) * 250)) if avg_pace else 50
-            
+
             # Normalize to 0-100 range with better scaling
             speed_score = min(100, max(0, speed_score))
             endurance_score = min(100, max(0, endurance_score))
             threshold_score = min(100, max(0, threshold_score))
-            
+
             # Radar chart
             categories = ['Szybkość', 'Wytrzymałość', 'Próg']
             values = [speed_score, endurance_score, threshold_score]
             values_closed = values + [values[0]]
             categories_closed = categories + [categories[0]]
-            
+
             fig_radar = go.Figure()
             fig_radar.add_trace(go.Scatterpolar(
                 r=values_closed,
@@ -139,16 +140,16 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 fillcolor='rgba(0, 204, 150, 0.3)',
                 hovertemplate="%{theta}: <b>%{r:.0f}</b><extra></extra>"
             ))
-            
+
             fig_radar.update_layout(
                 polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
                 template="plotly_dark",
                 title="Radar Limitatorów Biegowych",
                 height=400
             )
-            
+
             st.plotly_chart(fig_radar, use_container_width=True)
-            
+
             # Identify weakest limiter
             limiters = {
                 "Szybkość": speed_score,
@@ -156,7 +157,7 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 "Próg": threshold_score
             }
             weakest = min(limiters, key=lambda k: limiters[k])
-            
+
             # Display limiter table
             st.markdown(f"""
             ### 🔍 Diagnoza Limiterów
@@ -169,12 +170,12 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
             
             **Główny Limiter: {weakest}**
             """)
-            
+
             st.divider()
-            
+
             # --- SEKCJA 3: REKOMENDACJE TRENINGOWE ---
             st.subheader("💡 Rekomendacje Treningowe")
-            
+
             if weakest == "Wytrzymałość":
                 st.info("""
                 **🏃 Ograniczenie: Wytrzymałość Aerobowa**
@@ -211,7 +212,7 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 - Cruise intervals: 6-8x 5 min @ pół-maratońskie tempo
                 - Podwójne sesje progowe w okresie specjalnym
                 """)
-            
+
             # Additional phenotype-specific advice
             st.markdown("#### 🎯 Porady dla Twojego Fenotypu")
             if phenotype == "marathoner":
@@ -244,9 +245,9 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 """)
         else:
             st.warning("Za mało danych do pełnej analizy limiterów (wymagane min. 20 min danych).")
-        
+
         st.divider()
-        
+
         # --- SEKCJA 4: TEORIA PROFILÓW BIEGOWYCH ---
         with st.expander("📚 Teoria: Typy Biegaczy i Profilowanie", expanded=False):
             st.markdown("""
@@ -298,28 +299,28 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
             
             *Analiza oparta na stosunku tempa 10min/5min.*
             """)
-    
+
     # =========================================================================
     # CYCLING MODE - Power-based athlete profiling (EXISTING CODE)
     # =========================================================================
     elif has_watts:
         # --- SEKCJA 1: PROFIL METABOLICZNY (INSCYD-style) ---
         st.subheader("🧬 Profil Metaboliczny (Szacunkowy)")
-        
+
         # Oblicz MMP dla różnych okien
         df_plot['mmp_1min'] = df_plot['watts'].rolling(window=60, min_periods=60).mean()
         df_plot['mmp_5min'] = df_plot['watts'].rolling(window=300, min_periods=300).mean()
         df_plot['mmp_20min'] = df_plot['watts'].rolling(window=1200, min_periods=1200).mean()
-        
+
         mmp_1min = df_plot['mmp_1min'].max() if not df_plot['mmp_1min'].isna().all() else 0
         mmp_5min = df_plot['mmp_5min'].max() if not df_plot['mmp_5min'].isna().all() else 0
         mmp_20min = df_plot['mmp_20min'].max() if not df_plot['mmp_20min'].isna().all() else 0
-        
+
         # Klasyfikacja typu zawodnika
         if mmp_20min > 0:
             anaerobic_ratio = mmp_5min / mmp_20min
             sprint_ratio = mmp_1min / mmp_5min if mmp_5min > 0 else 1.0
-            
+
             if anaerobic_ratio > 1.08:
                 profile = "🏃 Sprinter / Puncheur"
                 vlamax_est = "Wysoki (>0.5 mmol/L/s)"
@@ -338,13 +339,13 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 profile_color = "#ffd93d"
                 strength = "Wszechstronność"
                 weakness = "Brak dominującej cechy"
-            
+
             # Wyświetl profil
             col1, col2, col3 = st.columns(3)
             col1.metric("Typ Zawodnika", profile)
             col2.metric("Est. VLaMax", vlamax_est)
             col3.metric("Ratio 5min/20min", f"{anaerobic_ratio:.2f}")
-            
+
             st.markdown(f"""
             <div style="padding:15px; border-radius:8px; border:2px solid {profile_color}; background-color: #222;">
                 <p style="margin:0;"><b>💪 Mocna strona:</b> {strength}</p>
@@ -354,16 +355,16 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
         else:
             st.info("Trening zbyt krótki dla analizy profilu metabolicznego (min. 20 min).")
             anaerobic_ratio = None
-        
+
         st.divider()
 
         # --- SEKCJA 2: RADAR LIMITERÓW ---
         if has_hr or has_ve or has_smo2:
             st.subheader("📊 Radar Obciążenia Systemów")
-            
+
             window_options = {
-                "1 min (Anaerobic)": 60, 
-                "5 min (VO2max)": 300, 
+                "1 min (Anaerobic)": 60,
+                "5 min (VO2max)": 300,
                 "20 min (FTP)": 1200,
                 "60 min (Endurance)": 3600
             }
@@ -380,20 +381,20 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                 if not pd.isna(peak_idx):
                     start_idx = max(0, peak_idx - window_sec + 1)
                     df_peak = df_plot.iloc[start_idx:peak_idx+1]
-                    
+
                     # Obliczenia %
                     peak_hr_avg = df_peak['hr'].mean() if has_hr else 0
                     max_hr_user = df_plot['hr'].max() if has_hr else 1
                     pct_hr = (peak_hr_avg / max_hr_user * 100) if max_hr_user > 0 else 0
-                    
+
                     col_ve_nm = next((c for c in ['tymeventilation', 've', 'ventilation'] if c in df_plot.columns), None)
                     peak_ve_avg = df_peak[col_ve_nm].mean() if col_ve_nm else 0
                     max_ve_user = vt2_vent * 1.1 if vt2_vent > 0 else 1
                     pct_ve = (peak_ve_avg / max_ve_user * 100) if max_ve_user > 0 else 0
-                    
+
                     peak_smo2_avg = df_peak['smo2'].mean() if has_smo2 else 100
                     pct_smo2_util = 100 - peak_smo2_avg
-                    
+
                     peak_w_avg = df_peak['watts'].mean()
                     pct_power = (peak_w_avg / cp_input * 100) if cp_input > 0 else 0
 
@@ -423,12 +424,12 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                         title=f"Profil Obciążenia: {selected_window_name} ({peak_w_avg:.0f} W)",
                         height=450
                     )
-                    
+
                     st.plotly_chart(fig_radar, use_container_width=True)
-                    
+
                     # Diagnoza
                     limiting_factor = "Serce" if pct_hr >= max(pct_ve, pct_smo2_util) else ("Płuca" if pct_ve >= pct_smo2_util else "Mięśnie")
-                    
+
                     st.markdown(f"""
                     ### 🔍 Diagnoza: {selected_window_name}
                     
@@ -441,7 +442,7 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                     
                     **Główny Limiter: {limiting_factor}**
                     """)
-                    
+
                     # Rekomendacje
                     if limiting_factor == "Serce":
                         st.warning("""
@@ -470,9 +471,9 @@ def render_limiters_tab(df_plot, cp_input, vt2_vent):
                         - Interwały "over-under" (93-97% FTP / 103-107% FTP)
                         - Sprawdź pozycję na rowerze (okluzja mechaniczna?)
                         """)
-        
+
         st.divider()
-        
+
         # --- SEKCJA 3: TEORIA INSCYD ---
         with st.expander("📚 Teoria: Model INSCYD i Typy Zawodników", expanded=False):
             st.markdown("""

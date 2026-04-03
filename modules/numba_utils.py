@@ -5,8 +5,9 @@ Provides 10-100x speedup for numerical computations by compiling
 Python code to machine code at runtime.
 """
 
-import numpy as np
 from typing import Tuple
+
+import numpy as np
 
 # Try to import Numba
 try:

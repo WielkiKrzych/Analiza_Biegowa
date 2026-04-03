@@ -7,7 +7,7 @@ from power and heart rate data when direct gas exchange measurements are unavail
 Uses ACSM and Wasserman equations for estimation.
 """
 
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pandas as pd

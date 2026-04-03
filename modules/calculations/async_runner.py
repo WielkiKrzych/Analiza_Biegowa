@@ -6,10 +6,10 @@ Uses ThreadPoolExecutor for parallel processing.
 """
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor, Future
-from functools import wraps
-from typing import Callable, Any, Optional, TypeVar, ParamSpec
 import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from functools import wraps
+from typing import Any, Callable, Optional, ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +108,13 @@ async def run_async(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> 
     """
     loop = asyncio.get_event_loop()
     executor = get_executor()
-    
+
     # Wrap with kwargs if needed
     if kwargs:
         def wrapped():
             return func(*args, **kwargs)
         return await loop.run_in_executor(executor, wrapped)
-    
+
     return await loop.run_in_executor(executor, func, *args)
 
 
@@ -153,26 +153,26 @@ class AsyncCalculationManager:
         w_prime_result = results["w_prime"]
         pdc_result = results["pdc"]
     """
-    
+
     def __init__(self):
         self._futures: dict[str, Future] = {}
-    
+
     def submit(self, name: str, func: Callable, *args, **kwargs) -> None:
         """Submit a named calculation."""
         self._futures[name] = submit_task(func, *args, **kwargs)
-    
+
     def is_done(self, name: str) -> bool:
         """Check if a calculation is done."""
         if name not in self._futures:
             return False
         return self._futures[name].done()
-    
+
     def get_result(self, name: str, timeout: Optional[float] = None) -> Any:
         """Get result of a calculation (blocking)."""
         if name not in self._futures:
             raise KeyError(f"No calculation named '{name}'")
         return self._futures[name].result(timeout=timeout)
-    
+
     def wait_all(self, timeout: Optional[float] = None) -> dict[str, Any]:
         """Wait for all calculations and return results."""
         results = {}
@@ -183,7 +183,7 @@ class AsyncCalculationManager:
                 logger.error(f"Calculation '{name}' failed: {e}")
                 results[name] = None
         return results
-    
+
     def cancel_all(self) -> None:
         """Cancel all pending calculations."""
         for future in self._futures.values():
@@ -212,10 +212,10 @@ def run_with_progress(
     """
     if progress_callback:
         progress_callback(0.0)
-    
+
     result = run_in_thread(func, *args, **kwargs)
-    
+
     if progress_callback:
         progress_callback(1.0)
-    
+
     return result

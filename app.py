@@ -1,9 +1,9 @@
-import streamlit as st
-import os
 import logging
-import json
-import time
+import os
+
 import numpy as np  # FIX: Added for distance calculation
+import streamlit as st
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s'
@@ -11,17 +11,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- FRONTEND IMPORTS ---
-from modules.frontend.theme import ThemeManager
-from modules.frontend.state import StateManager
-from modules.frontend.layout import AppLayout
+from modules.db import SessionRecord, SessionStore
 from modules.frontend.components import UIComponents
+from modules.frontend.layout import AppLayout
+from modules.frontend.state import StateManager
+from modules.frontend.theme import ThemeManager
+from modules.ml_logic import MLX_AVAILABLE, MODEL_FILE, predict_only
+from modules.notes import TrainingNotes
+from modules.reporting.persistence import check_git_tracking
 
 # --- MODULE IMPORTS ---
 from modules.utils import load_data
-from modules.ml_logic import MLX_AVAILABLE, predict_only, MODEL_FILE
-from modules.notes import TrainingNotes
-from modules.db import SessionStore, SessionRecord
-from modules.reporting.persistence import check_git_tracking
 
 # --- SERVICES IMPORTS ---
 from services import prepare_session_record, prepare_sticky_header_data
@@ -60,7 +60,7 @@ class TabRegistry:
         """
         import logging
         logger = logging.getLogger(__name__)
-        
+
         if tab_name not in cls._tabs:
             st.error(f"Unknown tab: {tab_name}")
             return
@@ -125,8 +125,9 @@ if uploaded_file is not None:
             df_raw = load_data(uploaded_file)
 
             # --- SESSION TYPE CLASSIFICATION (MUST run first) ---
-            from modules.domain import SessionType, classify_session_type, classify_ramp_test
             import hashlib
+
+            from modules.domain import SessionType, classify_ramp_test, classify_session_type
 
             # FIX: Use MD5 hash of file content instead of name+size to avoid collisions
             uploaded_file.seek(0)
@@ -134,7 +135,7 @@ if uploaded_file is not None:
             uploaded_file.seek(0)  # Reset for later use
             current_file_hash = hashlib.md5(file_content).hexdigest()
             cached_hash = st.session_state.get("current_file_hash")
-            
+
             if cached_hash != current_file_hash:
                 # New file - process and cache
                 session_type = classify_session_type(df_raw, uploaded_file.name)
@@ -179,7 +180,7 @@ if uploaded_file is not None:
             decoupling_percent = metrics.get("_decoupling_percent", 0.0)
             drift_z2 = metrics.get("_drift_z2", 0.0)
             df_clean_pl = metrics.get("_df_clean_pl", df_raw)
-            
+
             # If _df_clean_pl is in metrics, use it; otherwise use df_raw for HRV
             if df_clean_pl is None or (hasattr(df_clean_pl, 'empty') and df_clean_pl.empty):
                 df_clean_pl = df_raw
@@ -223,16 +224,16 @@ if uploaded_file is not None:
     # Calculate running metrics
     from modules.calculations.dual_mode import calculate_running_stress_score
     from modules.calculations.pace_utils import format_pace
-    
+
     # FIX: Calculate duration from time column, not len(df_plot) which assumes 1Hz
     if "time" in df_plot.columns:
         duration_sec = float(df_plot["time"].max() - df_plot["time"].min())
     else:
         duration_sec = len(df_plot)  # Fallback assumption of 1Hz
-    
+
     rss_header = calculate_running_stress_score(df_plot, threshold_pace_input, duration_sec)
     intensity_factor = threshold_pace_input / np_header if np_header > 0 else 0
-    
+
     # FIX: Calculate distance cumulatively from pace (speed integration)
     if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
         distance_km = float(df_plot["distance"].max()) / 1000.0
@@ -274,9 +275,9 @@ if uploaded_file is not None:
         elif session_type == SessionType.TRAINING:
             bg_color = "rgba(52, 152, 219, 0.2)"
             if ramp_classification and not ramp_classification.is_ramp:
-                msg = f"Sesja treningowa – analiza badawcza pominięta"
+                msg = "Sesja treningowa – analiza badawcza pominięta"
             else:
-                msg = f"Rozpoznano: <b>Sesja treningowa</b>"
+                msg = "Rozpoznano: <b>Sesja treningowa</b>"
         else:
             bg_color = "rgba(149, 165, 166, 0.2)"
             msg = f"Typ sesji: <b>{session_type}</b>"

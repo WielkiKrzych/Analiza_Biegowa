@@ -1,11 +1,12 @@
-import streamlit as st
-import plotly.graph_objects as go
-import pandas as pd
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
 
 def render_hr_tab(df):
     st.markdown("### ❤️ Analiza Tętna")
-    
+
     if df is None or df.empty:
         st.error("Brak danych.")
         return
@@ -14,7 +15,7 @@ def render_hr_tab(df):
     df_chart = df.copy()
     # Ensure columns are lowercased and stripped (though load_data usually does this)
     df_chart.columns = df_chart.columns.str.lower().str.strip()
-    
+
     # Aliasy dla HR
     if 'hr' not in df_chart.columns:
         for alias in ['heart_rate', 'heart rate', 'bpm', 'tętno', 'heartrate', 'heart_rate_bpm']:
@@ -22,7 +23,7 @@ def render_hr_tab(df):
                 # FIX: Avoid inplace=True - use assignment instead
                 df_chart = df_chart.rename(columns={alias: 'hr'})
                 break
-                
+
     if 'hr' not in df_chart.columns:
         st.warning("⚠️ Brak danych tętna (HR) w wczytanym pliku.")
         with st.expander("Pokaż dostępne kolumny"):
@@ -33,12 +34,12 @@ def render_hr_tab(df):
     if 'time' not in df_chart.columns:
         # Spróbuj wygenerować czas z indexu jeśli brak
         df_chart['time'] = np.arange(len(df_chart))
-    
+
     # 2. Selektor zakresu
-    # Konwersja czasu na ładny format HH:MM:SS do wyświetlania w sliderze byłaby super, 
+    # Konwersja czasu na ładny format HH:MM:SS do wyświetlania w sliderze byłaby super,
     # ale slider na sekundach jest bardziej precyzyjny/prostszy w kodzie.
     # Dodamy formatowanie czasu w opisie.
-    
+
     # Konwersja czasu
     def parse_time(t_str):
         try:
@@ -49,7 +50,7 @@ def render_hr_tab(df):
         except Exception:
             return None
         return None
-    
+
     def format_time(seconds):
         m, s = divmod(int(seconds), 60)
         h, m = divmod(m, 60)
@@ -57,17 +58,17 @@ def render_hr_tab(df):
 
     min_time = df_chart['time'].min()
     max_time = df_chart['time'].max()
-    
+
     st.markdown("#### Wybierz zakres analizy")
-    
+
     c1, c2 = st.columns(2)
     # Domyślne wartości to cały zakres
     start_str = c1.text_input("Start (hh:mm:ss/mm:ss)", value=format_time(min_time))
     end_str = c2.text_input("Koniec (hh:mm:ss/mm:ss)", value=format_time(max_time))
-    
+
     start_s = parse_time(start_str)
     end_s = parse_time(end_str)
-    
+
     if start_s is None or end_s is None:
         st.error("Nieprawidłowy format czasu. Użyj formatu HH:MM:SS lub MM:SS")
         return # Stop execution until fixed
@@ -75,11 +76,11 @@ def render_hr_tab(df):
     if start_s >= end_s:
         st.error("Czas końcowy musi być większy niż startowy.")
         return
-    
+
     # Filtrowanie
     mask = (df_chart['time'] >= start_s) & (df_chart['time'] <= end_s)
     df_segment = df_chart.loc[mask]
-    
+
     if df_segment.empty:
         st.info("Brak danych w wybranym zakresie.")
         return
@@ -94,7 +95,7 @@ def render_hr_tab(df):
     avg_hr = df_segment['hr'].mean()
     min_hr = df_segment['hr'].min()
     max_hr = df_segment['hr'].max()
-    
+
     # Wyświetlenie metryk
     # Stylizacja metryk w kontenerze
     with st.container():
@@ -102,22 +103,22 @@ def render_hr_tab(df):
         c1.metric("Średnie HR", f"{avg_hr:.0f} bpm")
         c2.metric("Min HR", f"{min_hr:.0f} bpm")
         c3.metric("Max HR", f"{max_hr:.0f} bpm")
-    
+
     st.markdown("---")
 
     # 4. Wykres z wygładzaniem (10s średnia krocząca)
     # Wyliczamy window (zakładamy 1Hz, można by sprawdzić częstotliwość, ale 10 wierszy to bezpieczny default)
     # Jeśli dane są rzadsze, rolling(window=10) i tak zadziała.
     df_segment['hr_smooth'] = df_segment['hr'].rolling(window=10, center=True, min_periods=1).mean()
-    
+
     fig = go.Figure()
-    
+
     # Linia HR (wygładzona)
     # Dodajemy sformatowany czas do tooltipa
     df_segment['time_str'] = pd.to_datetime(df_segment['time'], unit='s').dt.strftime('%H:%M:%S')
 
     fig.add_trace(go.Scatter(
-        x=df_segment['time'], 
+        x=df_segment['time'],
         y=df_segment['hr_smooth'],
         mode='lines',
         name='HR (10s avg)',
@@ -125,7 +126,7 @@ def render_hr_tab(df):
         customdata=df_segment['time_str'],
         hovertemplate="<b>Czas:</b> %{customdata} (%{x}s)<br><b>HR (10s):</b> %{y:.1f} bpm<extra></extra>"
     ))
-    
+
     # Linia średniej wizualnie
     fig.add_hline(y=avg_hr, line_dash="dash", line_color="white", opacity=0.5, annotation_text="Avg", annotation_position="bottom right")
 
@@ -138,5 +139,5 @@ def render_hr_tab(df):
         hovermode="x unified",
         showlegend=False
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)

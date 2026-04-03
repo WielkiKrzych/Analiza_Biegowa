@@ -9,10 +9,10 @@ Fetches weather data and calculates TSS corrections based on:
 """
 
 import logging
-from dataclasses import dataclass
-from typing import Optional, Tuple
-from datetime import datetime
 import os
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class EnvironmentService:
             import requests
 
             # Use current weather API (historical requires paid plan)
-            url = f"https://api.openweathermap.org/data/2.5/weather"
+            url = "https://api.openweathermap.org/data/2.5/weather"
             params = {"lat": lat, "lon": lon, "appid": self.api_key, "units": "metric"}
 
             response = requests.get(url, params=params, timeout=5)

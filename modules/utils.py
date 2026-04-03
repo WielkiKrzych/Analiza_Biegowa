@@ -1,11 +1,12 @@
 """Utility functions for data loading and parsing."""
 
-import streamlit as st
-import pandas as pd
-import numpy as np
 import io
 import logging
 from typing import Optional
+
+import numpy as np
+import pandas as pd
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -358,13 +359,13 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
                 1000.0 / chunk["velocity_smooth"],
                 np.nan
             )
-        
+
         # Running cadence doubling (Garmin exports half-steps as RPM)
         if "pace" in chunk.columns and "cadence" in chunk.columns:
             cad_median = chunk["cadence"].median()
             if 0 < cad_median < 120:
                 chunk["cadence"] = chunk["cadence"] * 2
-        
+
         # GCT estimation from cadence (if no dedicated GCT column)
         gct_columns = ["stance_time", "ground_contact", "gct", "GroundContactTime"]
         has_gct = any(col in chunk.columns for col in gct_columns)
@@ -376,13 +377,13 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
                 np.nan
             )
             chunk.loc[(chunk["gct"] < 150) | (chunk["gct"] > 400), "gct"] = np.nan
-        
+
         # Stride length derivation
         if "pace" in chunk.columns and "cadence" in chunk.columns and "stride_length" not in chunk.columns:
             speed = np.where(chunk["pace"] > 0, 1000.0 / chunk["pace"], 0.0)
             cadence_hz = chunk["cadence"] / 60.0
             chunk["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)
-        
+
         chunk = _process_hrv_column(chunk)
 
         if "time" not in chunk.columns:

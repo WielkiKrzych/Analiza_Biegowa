@@ -7,22 +7,24 @@ Implements pace zones, pace duration curve, and phenotype classification.
 PERFORMANCE: Uses Numba JIT for speed-critical calculations.
 """
 
-from typing import Union, Any, Dict, Tuple, Optional
+from typing import Any, Dict, Optional, Union
+
 import numpy as np
 import pandas as pd
 
-from .pace_utils import pace_to_speed, speed_to_pace, format_pace
-from .common import ensure_pandas
 from modules.numba_utils import is_numba_available
+
+from .common import ensure_pandas
+from .pace_utils import format_pace, speed_to_pace
 
 NUMBA_AVAILABLE = is_numba_available()
 
 if NUMBA_AVAILABLE:
-    from numba import njit, prange
+    from numba import njit
 
 
 def calculate_pace_zones_time(
-    df_pl: Union[pd.DataFrame, Any], 
+    df_pl: Union[pd.DataFrame, Any],
     threshold_pace: float,
     zones: dict = None
 ) -> dict:
@@ -48,10 +50,10 @@ def calculate_pace_zones_time(
         Dict mapping zone name to seconds spent
     """
     df = ensure_pandas(df_pl)
-    
+
     if "pace" not in df.columns or threshold_pace <= 0:
         return {}
-    
+
     if zones is None:
         # Zones as % of threshold pace
         # Lower pace % = faster = higher zone
@@ -64,7 +66,7 @@ def calculate_pace_zones_time(
             "Z5 Interval": (0.75, 0.88),   # 12-25% faster
             "Z6 Repetition": (0.0, 0.75),  # >25% faster
         }
-    
+
     # NOTE: This function assumes 1Hz (1-second) sampled data.
     # mask.sum() counts rows, which equals seconds only at 1Hz.
     # Data MUST be resampled to 1s before calling this function.
@@ -92,29 +94,29 @@ if NUMBA_AVAILABLE:
         n = len(pace)
         m = len(durations)
         results = np.empty(m, dtype=np.float64)
-        
+
         for i in range(m):
             duration = int(durations[i])
             if n < duration:
                 results[i] = np.nan
                 continue
-            
+
             best_pace = np.inf
             for j in range(n - duration + 1):
                 window_mean = np.mean(pace[j:j + duration])
                 if window_mean < best_pace:
                     best_pace = window_mean
-            
+
             if best_pace == np.inf:
                 results[i] = np.nan
             else:
                 results[i] = best_pace
-        
+
         return results
 
 
 def calculate_pace_duration_curve(
-    df_pl: Union[pd.DataFrame, Any], 
+    df_pl: Union[pd.DataFrame, Any],
     durations: list = None
 ) -> dict:
     """Calculate Pace Duration Curve (best pace for each duration).
@@ -123,21 +125,21 @@ def calculate_pace_duration_curve(
     Returns the BEST (lowest) pace achieved for each duration.
     """
     df = ensure_pandas(df_pl)
-    
+
     if "pace" not in df.columns:
         return {}
-    
+
     if durations is None:
         durations = DEFAULT_PDC_DURATIONS
-    
+
     pace = df["pace"].ffill().bfill().values
     n = len(pace)
-    
+
     if NUMBA_AVAILABLE and n > 100:
         try:
             durations_arr = np.array(durations, dtype=np.float64)
             results_arr = _calculate_pdc_numba(pace, durations_arr)
-            
+
             results = {}
             for i, duration in enumerate(durations):
                 val = results_arr[i]
@@ -145,21 +147,21 @@ def calculate_pace_duration_curve(
             return results
         except Exception:
             pass
-    
+
     results = {}
     for duration in durations:
         if n < duration:
             results[duration] = None
             continue
-        
+
         rolling = pd.Series(pace).rolling(window=duration, min_periods=duration).mean()
         best_pace = rolling.min()
-        
+
         if pd.notna(best_pace):
             results[duration] = float(best_pace)
         else:
             results[duration] = None
-    
+
     return results
 
 
@@ -241,13 +243,13 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     available_durations = sum(1 for p in [p60s, p5min, p10min, p20min, p60min] if p is not None)
     if available_durations >= 3 and max(scores.values()) <= 2:
         scores["all_rounder"] += 2
-    
+
     # Find highest scoring phenotype
     phenotype = max(scores, key=scores.get)
-    
+
     if scores[phenotype] == 0:
         return "unknown"
-    
+
     return phenotype
 
 
@@ -293,7 +295,7 @@ def get_phenotype_description(phenotype: str) -> tuple:
             "Za mało danych do klasyfikacji."
         )
     }
-    
+
     return phenotypes.get(phenotype, phenotypes["unknown"])
 
 

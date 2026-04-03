@@ -11,8 +11,8 @@ RULE: MANUAL > AUTO > MISSING
 """
 
 from dataclasses import dataclass
-from typing import Optional, Any, Dict, List
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class MetricSource(Enum):
@@ -37,7 +37,7 @@ class ResolvedMetric:
     source: MetricSource
     confidence: float
     name: str = ""
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -45,7 +45,7 @@ class ResolvedMetric:
             "source": self.source.value,
             "confidence": self.confidence
         }
-    
+
     def is_valid(self) -> bool:
         """Check if this metric has a valid value."""
         return self.value is not None and self.confidence > 0
@@ -84,7 +84,7 @@ def resolve_metric(
             confidence=manual_confidence,
             name=name
         )
-    
+
     # AUTO is fallback
     if auto is not None and auto != 0:
         return ResolvedMetric(
@@ -93,7 +93,7 @@ def resolve_metric(
             confidence=auto_confidence,
             name=name
         )
-    
+
     # MISSING - no valid value
     return ResolvedMetric(
         value=None,
@@ -122,13 +122,13 @@ def resolve_all_thresholds(
         "vt1", "vt2",
         "smo2_lt1", "smo2_lt2",
         "vo2max", "cp", "ftp",
-        "vlamax", 
+        "vlamax",
         "vt1_hr", "vt2_hr",
         "vt1_ve", "vt2_ve",
         "vt1_br", "vt2_br",
         "reoxy_halftime", "cci_breakpoint", "ve_breakpoint"
     ]
-    
+
     # Map for manual key aliases
     manual_key_map = {
         "vt1": ["manual_vt1_watts", "vt1_watts", "vt1"],
@@ -141,9 +141,9 @@ def resolve_all_thresholds(
         "cci_breakpoint": ["cci_breakpoint_manual", "cci_breakpoint"],
         "ve_breakpoint": ["ve_breakpoint_manual", "ve_breakpoint"],
     }
-    
+
     results = {}
-    
+
     for metric in metrics:
         # Get manual value (try aliases)
         manual_val = None
@@ -151,13 +151,13 @@ def resolve_all_thresholds(
             if key in manual_overrides and manual_overrides[key]:
                 manual_val = manual_overrides[key]
                 break
-        
+
         # Get auto value
         auto_val = auto_values.get(metric)
-        
+
         # Resolve
         results[metric] = resolve_metric(metric, manual_val, auto_val)
-    
+
     return results
 
 
@@ -194,7 +194,7 @@ def build_data_policy(resolved: Dict[str, ResolvedMetric]) -> Dict[str, Any]:
     manual_fields = []
     auto_fields = []
     missing_fields = []
-    
+
     for name, metric in resolved.items():
         if metric.source == MetricSource.MANUAL:
             manual_fields.append(name)
@@ -202,7 +202,7 @@ def build_data_policy(resolved: Dict[str, ResolvedMetric]) -> Dict[str, Any]:
             auto_fields.append(name)
         else:
             missing_fields.append(name)
-    
+
     return {
         "mode": "manual_preferred",
         "manual_fields_used": sorted(manual_fields),
@@ -230,7 +230,7 @@ def format_with_source(value: Any, source: MetricSource, unit: str = "") -> str:
     """
     if value is None:
         return "–"
-    
+
     # Format value
     if isinstance(value, float):
         if value == int(value):
@@ -239,15 +239,15 @@ def format_with_source(value: Any, source: MetricSource, unit: str = "") -> str:
             formatted = f"{value:.1f}"
     else:
         formatted = str(value)
-    
+
     # Add unit
     if unit:
         formatted = f"{formatted} {unit}"
-    
+
     # Add source indicator
     if source == MetricSource.MANUAL:
         formatted = f"{formatted} ✍️"
-    
+
     return formatted
 
 
@@ -303,21 +303,21 @@ def apply_manual_overrides_to_thresholds(
         ("ve_breakpoint", "ve_breakpoint_manual", lambda t: t.get("ve_breakpoint") or t.get("ve_breakpoint_watts")),
         ("reoxy_halftime", "reoxy_halftime_manual", lambda t: t.get("reoxy_halftime") or t.get("halftime_reoxy_sec")),
     ]
-    
+
     result = {}
     sources = {}
-    
+
     for output_key, manual_key, auto_getter in mappings:
         manual_val = manual_overrides.get(manual_key)
         auto_val = auto_getter(thresholds_dict)
-        
+
         resolved = resolve_metric(output_key, manual_val, auto_val)
         result[output_key] = resolved.value
         sources[output_key] = resolved.source.value
-    
+
     # Add _sources dict for tracking
     result["_sources"] = sources
-    
+
     return result
 
 
@@ -354,7 +354,7 @@ def format_power_dual(
         if watts:
             return f"{int(watts)} W"
         return "---"
-    
+
     pct = (watts / reference_watts) * 100
     return f"{int(watts)} W ({int(pct)}% {reference_name})"
 
@@ -380,8 +380,8 @@ def format_power_range_dual(
         if low_watts and high_watts:
             return f"{int(low_watts)}–{int(high_watts)} W"
         return "---"
-    
+
     pct_low = (low_watts / reference_watts) * 100
     pct_high = (high_watts / reference_watts) * 100
-    
+
     return f"{int(low_watts)}–{int(high_watts)} W ({int(pct_low)}–{int(pct_high)}% {reference_name})"

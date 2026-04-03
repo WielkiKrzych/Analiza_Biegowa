@@ -1,61 +1,59 @@
-import streamlit as st
-import plotly.graph_objects as go
-import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
 from scipy import stats
 
+from modules.calculations.pace_utils import pace_array_to_speed_array
 from modules.calculations.running_dynamics import (
     calculate_cadence_stats,
     calculate_gct_stats,
     calculate_stride_metrics,
-    analyze_cadence_drift
 )
-from modules.calculations.pace_utils import pace_to_speed, pace_array_to_speed_array
 
 
 def render_biomech_tab(df_plot, df_plot_resampled):
     st.header("Biomechaniczny Stres")
-    
+
     # =========================================================================
     # DETEKCJA TYPU SPORTU
     # =========================================================================
     sport_type = st.session_state.get("sport_type", "unknown")
     is_running = sport_type == "running" or 'pace' in df_plot.columns
-    
+
     # =========================================================================
     # SEKCJE BIEGOWE (tylko dla running)
     # =========================================================================
     if is_running:
         runner_weight = st.session_state.get('rider_weight', 70.0)
         runner_height = st.session_state.get('runner_height', 175)
-        
+
         # ---------------------------------------------------------------------
         # KADENCJA BIEGOWA (SPM)
         # ---------------------------------------------------------------------
         st.subheader("🏃 Kadencja Biegowa (SPM)")
-        
+
         cad_col = None
         for col in ['cadence_smooth', 'cadence', 'spm']:
             if col in df_plot.columns:
                 cad_col = col
                 break
-        
+
         if cad_col:
             cad_data = df_plot[cad_col].dropna().values
             cad_stats = calculate_cadence_stats(cad_data)
-            
+
             if cad_stats.get('mean_spm', 0) > 0:
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Średnia Kadencja", f"{cad_stats['mean_spm']:.0f} SPM")
                 c2.metric("Min Kadencja", f"{cad_stats.get('min_spm', '-')}")
                 c3.metric("Max Kadencja", f"{cad_stats.get('max_spm', '-')}")
                 c4.metric("CV", f"{cad_stats.get('cv_pct', 0):.1f}%")
-                
+
                 # Wykres kadencji w czasie
                 time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
                 if time_col in df_plot.columns:
                     fig_cad = go.Figure()
-                    
+
                     cad_smooth = df_plot[cad_col].rolling(10, center=True).mean()
                     fig_cad.add_trace(go.Scatter(
                         x=df_plot[time_col],
@@ -64,7 +62,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         line=dict(color='#00D4FF', width=2),
                         hovertemplate="Kadencja: %{y:.0f} SPM<extra></extra>"
                     ))
-                    
+
                     # Linia trendu
                     valid_mask = ~np.isnan(df_plot[cad_col])
                     if valid_mask.sum() > 100:
@@ -83,13 +81,13 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                             ))
                         except (ValueError, TypeError):
                             pass
-                    
+
                     # Strefy kadencji (hlines)
-                    fig_cad.add_hline(y=170, line_dash="dot", line_color="green", 
+                    fig_cad.add_hline(y=170, line_dash="dot", line_color="green",
                                       annotation_text="Opt min", annotation_position="right")
                     fig_cad.add_hline(y=185, line_dash="dot", line_color="green",
                                       annotation_text="Opt max", annotation_position="right")
-                    
+
                     # Convert time to hh:mm:ss format for x-axis
                     time_vals_cad = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
                     tick_step_cad = 5
@@ -112,7 +110,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         legend=dict(orientation="h", y=1.1, x=0)
                     )
                     st.plotly_chart(fig_cad, use_container_width=True)
-                
+
                 st.info("""
                 **💡 Interpretacja Kadencji:**
                 
@@ -124,14 +122,14 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 
                 **Wskazówka:** Zwiększenie kadencji o 5-10% może zmniejszyć obciążenie stawów bez utraty prędkości.
                 """)
-        
+
         st.divider()
-        
+
         # ---------------------------------------------------------------------
         # GROUND CONTACT TIME (GCT)
         # ---------------------------------------------------------------------
         st.subheader("⏱️ Ground Contact Time (GCT)")
-        
+
         gct_col = None
         gct_is_real = False
         for col in ['stance_time', 'ground_contact', 'gct', 'GroundContactTime']:
@@ -139,17 +137,17 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 gct_col = col
                 gct_is_real = col in ('stance_time', 'ground_contact')
                 break
-        
+
         if gct_col:
             gct_data = df_plot[gct_col].dropna().values
             gct_stats = calculate_gct_stats(gct_data)
-            
+
             if gct_stats.get('mean_ms', 0) > 0:
                 g1, g2, g3 = st.columns(3)
                 g1.metric("Średnie GCT", f"{gct_stats['mean_ms']:.0f} ms")
                 g2.metric("Min GCT", f"{gct_stats.get('min_ms', '-')}")
                 g3.metric("Max GCT", f"{gct_stats.get('max_ms', '-')}")
-                
+
                 classification = gct_stats.get('classification', 'unknown')
                 class_labels = {
                     'excellent': '🟢 Excellent (<200ms)',
@@ -158,12 +156,12 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     'needs-improvement': '🔴 Wymaga poprawy (>240ms)'
                 }
                 st.metric("Klasyfikacja", class_labels.get(classification, classification))
-                
+
                 # Wykres GCT w czasie
                 time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
                 if time_col in df_plot.columns:
                     fig_gct = go.Figure()
-                    
+
                     gct_smooth = df_plot[gct_col].rolling(10, center=True).mean()
                     fig_gct.add_trace(go.Scatter(
                         x=df_plot[time_col],
@@ -172,13 +170,13 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         line=dict(color='#FF6B6B', width=2),
                         hovertemplate="GCT: %{y:.0f} ms<extra></extra>"
                     ))
-                    
+
                     # Strefy GCT (matching classification labels)
                     fig_gct.add_hrect(y0=0, y1=200, fillcolor="green", opacity=0.1, line_width=0)
                     fig_gct.add_hrect(y0=200, y1=220, fillcolor="limegreen", opacity=0.1, line_width=0)
                     fig_gct.add_hrect(y0=220, y1=240, fillcolor="yellow", opacity=0.1, line_width=0)
                     fig_gct.add_hrect(y0=240, y1=400, fillcolor="red", opacity=0.1, line_width=0)
-                    
+
                     # Convert time to hh:mm:ss format for x-axis
                     time_vals_gct = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
                     tick_step_gct = 5
@@ -201,7 +199,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                         legend=dict(orientation="h", y=1.1, x=0)
                     )
                     st.plotly_chart(fig_gct, use_container_width=True)
-                
+
                 st.info("""
                 **💡 Interpretacja GCT:**
                 
@@ -218,7 +216,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     st.caption("✅ GCT z czujnika (Garmin FIT) — dane rzeczywiste.")
         else:
             st.info("ℹ️ Brak danych GCT - wymagany czujnik biegowy (np. Garmin HRM-Run, Stryd)")
-        
+
         st.divider()
 
         # ---------------------------------------------------------------------
@@ -368,7 +366,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
         # STRIDE LENGTH (Długość kroku)
         # ---------------------------------------------------------------------
         st.subheader("📏 Długość Kroku (Stride Length)")
-        
+
         # Prefer real step_length from FIT, fall back to calculation
         has_real_step = "step_length" in df_plot.columns and df_plot["step_length"].notna().sum() > 10
 
@@ -437,7 +435,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     legend=dict(orientation="h", y=1.1, x=0)
                 )
                 st.plotly_chart(fig_stride, use_container_width=True)
-                
+
                 st.info("""
                 **💡 Interpretacja długości kroku:**
                 
@@ -449,33 +447,33 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 """)
         else:
             st.info("ℹ️ Do obliczenia długości kroku wymagane dane kadencji i tempa")
-        
+
         st.divider()
-        
+
         # ---------------------------------------------------------------------
         # RUNNING EFFECTIVENESS (RE)
         # ---------------------------------------------------------------------
         st.subheader("⚡ Running Effectiveness (RE)")
-        
+
         if 'watts' in df_plot.columns and 'pace' in df_plot.columns:
             # Oblicz RE dla każdego punktu: RE = speed (m/s) / power (W/kg) * weight
             valid_mask = (df_plot['watts'] > 50) & (df_plot['pace'] > 0)
             df_re = df_plot[valid_mask].copy()
-            
+
             if not df_re.empty:
                 speed_m_s = pace_array_to_speed_array(df_re['pace'].values)
                 power_w = df_re['watts'].values
                 power_per_kg = power_w / runner_weight
-                
+
                 # RE = speed / power_per_kg
                 df_re['re'] = np.where(power_per_kg > 0, speed_m_s / power_per_kg, np.nan)
-                
+
                 avg_re = df_re['re'].mean()
-                
+
                 re1, re2, re3 = st.columns(3)
-                re1.metric("Średnie RE", f"{avg_re:.3f} m/s/W/kg", 
+                re1.metric("Średnie RE", f"{avg_re:.3f} m/s/W/kg",
                           help="RE = prędkość (m/s) / moc (W/kg)")
-                
+
                 # Trend RE
                 time_col = 'time_min' if 'time_min' in df_re.columns else 'time'
                 if time_col in df_re.columns:
@@ -485,9 +483,9 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                             valid_re[time_col], valid_re['re']
                         )
                         total_drift = slope * (valid_re[time_col].iloc[-1] - valid_re[time_col].iloc[0])
-                        re2.metric("Trend RE", f"{total_drift:+.3f}", 
+                        re2.metric("Trend RE", f"{total_drift:+.3f}",
                                   delta_color="inverse" if total_drift < 0 else "normal")
-                
+
                 # Klasyfikacja
                 if avg_re > 1.0:
                     re3.metric("Klasyfikacja", "🟢 Bardzo dobra")
@@ -495,10 +493,10 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     re3.metric("Klasyfikacja", "🟡 Dobra")
                 else:
                     re3.metric("Klasyfikacja", "🔴 Wymaga poprawy")
-                
+
                 # Wykres RE w czasie
                 fig_re = go.Figure()
-                
+
                 re_smooth = df_re['re'].rolling(15, center=True).mean()
                 fig_re.add_trace(go.Scatter(
                     x=df_re[time_col],
@@ -507,11 +505,11 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     line=dict(color='#F39C12', width=2),
                     hovertemplate="RE: %{y:.3f}<extra></extra>"
                 ))
-                
+
                 # Linia odniesienia 1.0
                 fig_re.add_hline(y=1.0, line_dash="dash", line_color="green",
                                 annotation_text="RE = 1.0 (dobre)")
-                
+
                 # Convert time to hh:mm:ss format for x-axis
                 time_vals_re = df_re[time_col].values if hasattr(df_re[time_col], 'values') else np.array(df_re[time_col])
                 tick_step_re = 5
@@ -534,7 +532,7 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                     legend=dict(orientation="h", y=1.1, x=0)
                 )
                 st.plotly_chart(fig_re, use_container_width=True)
-                
+
                 st.info("""
                 **💡 Interpretacja Running Effectiveness:**
                 
@@ -546,9 +544,9 @@ def render_biomech_tab(df_plot, df_plot_resampled):
                 """)
         else:
             st.info("ℹ️ Do obliczenia RE wymagane dane mocy (watts) i tempa (pace)")
-        
+
         st.divider()
-    
+
     _render_vertical_oscillation_section(df_plot, df_plot_resampled)
 
 
@@ -556,14 +554,14 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
     """Render Vertical Oscillation analysis section."""
     st.divider()
     st.subheader("📊 Vertical Oscillation (Oscylacja Pionowa)")
-    
+
     # Sprawdź czy mamy dane VO
     vo_col = None
     for col in ["verticaloscillation", "VerticalOscillation", "vo", "oscillation"]:
         if col in df_plot.columns:
             vo_col = col
             break
-    
+
     if vo_col is None:
         st.info("""
         ℹ️ **Brak danych Vertical Oscillation**
@@ -574,31 +572,31 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
         **Brakująca kolumna:** `VerticalOscillation` (oscylacja pionowa w cm)
         """)
         return
-    
+
     # Oblicz statystyki
     from modules.calculations.running_dynamics import (
-        calculate_vo_stats, 
         analyze_vo_efficiency,
-        calculate_running_effectiveness_from_vo
+        calculate_running_effectiveness_from_vo,
+        calculate_vo_stats,
     )
-    
+
     vo_data = df_plot[vo_col].values
     vo_stats = calculate_vo_stats(vo_data)
-    
+
     if not vo_stats:
         st.warning("Brak wystarczających danych VO do analizy.")
         return
-    
+
     # Wyświetl metryki
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Średnie VO", f"{vo_stats.get('mean_vo', 0):.1f} cm")
     col2.metric("Min VO", f"{vo_stats.get('min_vo', 0):.1f} cm")
     col3.metric("Max VO", f"{vo_stats.get('max_vo', 0):.1f} cm")
     col4.metric("CV", f"{vo_stats.get('cv_vo', 0):.1f}%")
-    
+
     # Wykres VO w czasie
     fig_vo = go.Figure()
-    
+
     time_col = 'time_min' if 'time_min' in df_plot.columns else 'time'
     if time_col in df_plot.columns:
         vo_smooth = df_plot[vo_col].rolling(5, center=True).mean()
@@ -609,14 +607,14 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
             line=dict(color='#ff6b6b', width=2),
             hovertemplate="VO: %{y:.1f} cm<extra></extra>"
         ))
-        
+
         # Dodaj linię trendu
         valid_mask = ~np.isnan(df_plot[vo_col])
         if valid_mask.sum() > 100:
             from scipy import stats
             try:
                 slope, intercept, _, _, _ = stats.linregress(
-                    df_plot.loc[valid_mask, time_col], 
+                    df_plot.loc[valid_mask, time_col],
                     df_plot.loc[valid_mask, vo_col]
                 )
                 trend = intercept + slope * df_plot[time_col]
@@ -629,7 +627,7 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
                 ))
             except Exception:
                 pass
-    
+
     # Convert time to hh:mm:ss format for x-axis
     time_vals_vo = df_plot[time_col].values if hasattr(df_plot[time_col], 'values') else np.array(df_plot[time_col])
     tick_step_vo = 5
@@ -652,21 +650,21 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
         legend=dict(orientation="h", y=1.1, x=0)
     )
     st.plotly_chart(fig_vo, use_container_width=True)
-    
+
     # Analiza efektywności z kadencją
     cad_col = None
     for col in ['cadence_smooth', 'cadence', 'spm']:
         if col in df_plot.columns:
             cad_col = col
             break
-    
+
     if cad_col:
         efficiency = analyze_vo_efficiency(vo_data, df_plot[cad_col].values)
-        
+
         if efficiency.get('optimal_cadence'):
             st.success(f"🎯 **Optymalna kadencja:** {efficiency['optimal_cadence']} SPM "
                       f"(najniższa oscylacja)")
-        
+
         # Wykres VO vs Cadence
         fig_scatter = go.Figure()
         fig_scatter.add_trace(go.Scatter(
@@ -686,25 +684,25 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
             margin=dict(l=10, r=10, t=40, b=10)
         )
         st.plotly_chart(fig_scatter, use_container_width=True)
-    
+
     # Analiza efektywności biegowej (jeśli mamy pace i wzrost)
     if 'pace' in df_plot.columns:
         st.subheader("🏃 Efektywność Biegu z VO")
-        
+
         runner_height = st.session_state.get('runner_height', 180)
         avg_pace = df_plot['pace'].mean()
         avg_vo = vo_stats['mean_vo']
-        
+
         effectiveness = calculate_running_effectiveness_from_vo(
             avg_pace, avg_vo, runner_height
         )
-        
+
         if effectiveness:
             col1, col2, col3 = st.columns(3)
             col1.metric("VO % wzrostu", f"{effectiveness['vo_percent_height']:.1f}%")
             col2.metric("Efektywność", f"{effectiveness['effectiveness_score']:.0f}/100")
             col3.metric("Klasyfikacja", effectiveness['classification'])
-    
+
     # Interpretacja
     st.info("""
     **💡 Interpretacja Vertical Oscillation:**

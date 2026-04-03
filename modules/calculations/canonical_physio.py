@@ -11,9 +11,9 @@ This module provides:
 - Weight
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Tri_Dashboard.CanonicalPhysio")
 

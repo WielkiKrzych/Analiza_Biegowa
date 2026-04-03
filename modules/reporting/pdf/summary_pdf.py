@@ -6,32 +6,23 @@ Generates a multi-page PDF from the Summary tab with each chart and values on se
 
 import io
 import logging
-from typing import Dict, Any, Optional
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.units import cm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    PageBreak,
-    Spacer,
-    Paragraph,
-    Table,
-    TableStyle,
-    Image as RLImage,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from typing import Any, Dict, Optional
+
 import pandas as pd
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import Image as RLImage
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 logger = logging.getLogger(__name__)
 
 # Import existing PDF styles with Polish font support
-from .styles import (
-    FONT_FAMILY,
-    FONT_FAMILY_BOLD,
-)
-
 # Set matplotlib backend to Agg (no display required)
 import matplotlib
+
+from .styles import FONT_FAMILY, FONT_FAMILY_BOLD
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

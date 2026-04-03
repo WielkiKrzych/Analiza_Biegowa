@@ -4,8 +4,10 @@ Data Validation Service
 Handles DataFrame validation logic for uploaded training files.
 """
 
-import pandas as pd
 from typing import Tuple
+
+import pandas as pd
+
 from modules.config import Config
 
 

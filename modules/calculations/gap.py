@@ -6,8 +6,8 @@ Uses Minetti et al. (2002) metabolic cost model for physiological accuracy.
 """
 
 from typing import Union
-import numpy as np
 
+import numpy as np
 
 # Minetti et al. (2002) metabolic cost of running on grades
 # Table: grade (%) -> relative cost compared to flat (cost_grade / cost_0%)

@@ -9,10 +9,12 @@ Analyzes biomechanical metrics from Garmin/Stryd:
 - Running Effectiveness
 """
 
-from typing import Dict, Optional, Union, Any
+from typing import Any, Dict, Optional, Union
+
 import numpy as np
 import pandas as pd
-from .pace_utils import pace_to_speed, pace_array_to_speed_array
+
+from .pace_utils import pace_array_to_speed_array, pace_to_speed
 
 
 def calculate_cadence_stats(cadence_spm: np.ndarray) -> Dict:

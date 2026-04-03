@@ -8,8 +8,8 @@ personalized training recommendations based on:
 - PPARGC1A (mitochondrial efficiency)
 """
 from dataclasses import dataclass
-from typing import Optional, List, Literal, Dict
 from enum import Enum
+from typing import Dict, List, Literal, Optional
 
 
 class GeneVariant(Enum):
@@ -17,11 +17,11 @@ class GeneVariant(Enum):
     ACTN3_RR = "RR"  # Power athlete
     ACTN3_RX = "RX"  # Mixed
     ACTN3_XX = "XX"  # Endurance athlete
-    
+
     ACE_II = "II"    # Endurance
     ACE_ID = "ID"    # Mixed
     ACE_DD = "DD"    # Power/strength
-    
+
     PPARGC1A_GG = "GG"  # Normal
     PPARGC1A_GA = "GA"  # Enhanced
     PPARGC1A_AA = "AA"  # Highly enhanced
@@ -33,22 +33,22 @@ class GeneticProfile:
     actn3: Optional[Literal["RR", "RX", "XX"]] = None
     ace: Optional[Literal["II", "ID", "DD"]] = None
     ppargc1a: Optional[Literal["GG", "GA", "AA"]] = None
-    
+
     # Calculated scores (0-100)
     endurance_score: float = 50.0
     power_score: float = 50.0
     recovery_score: float = 50.0
     injury_risk_score: float = 50.0
-    
+
     def __post_init__(self):
         self._calculate_scores()
-    
+
     def _calculate_scores(self):
         """Calculate fitness scores based on genetic variants."""
         endurance_points = 0
         power_points = 0
         recovery_points = 0
-        
+
         # ACTN3 scoring
         if self.actn3 == "XX":
             endurance_points += 30
@@ -59,7 +59,7 @@ class GeneticProfile:
         elif self.actn3 == "RX":
             endurance_points += 10
             power_points += 10
-        
+
         # ACE scoring
         if self.ace == "II":
             endurance_points += 25
@@ -69,7 +69,7 @@ class GeneticProfile:
         elif self.ace == "ID":
             endurance_points += 10
             power_points += 10
-        
+
         # PPARGC1A scoring (mitochondrial efficiency)
         if self.ppargc1a == "AA":
             endurance_points += 20
@@ -77,12 +77,12 @@ class GeneticProfile:
         elif self.ppargc1a == "GA":
             endurance_points += 10
             recovery_points += 5
-        
+
         # Normalize to 0-100
         self.endurance_score = max(0, min(100, 50 + endurance_points))
         self.power_score = max(0, min(100, 50 + power_points))
         self.recovery_score = max(0, min(100, 50 + recovery_points))
-    
+
     @property
     def athlete_type(self) -> str:
         """Determine primary athlete type."""
@@ -96,14 +96,14 @@ class GeneticProfile:
 
 class GeneticAnalyzer:
     """Analyzes genetic data and provides recommendations."""
-    
+
     # SNP identifiers for 23andMe
     SNPS = {
         'ACTN3': 'rs1815739',
         'ACE': 'rs1799752',
         'PPARGC1A': 'rs8192678',
     }
-    
+
     def parse_23andme(self, raw_data: str) -> GeneticProfile:
         """Parse 23andMe raw data file.
         
@@ -114,18 +114,18 @@ class GeneticAnalyzer:
             GeneticProfile with detected variants
         """
         profile = GeneticProfile()
-        
+
         for line in raw_data.split('\n'):
             if line.startswith('#') or not line.strip():
                 continue
-            
+
             parts = line.split('\t')
             if len(parts) < 4:
                 continue
-            
+
             rsid = parts[0]
             genotype = parts[3].strip()
-            
+
             # ACTN3 (rs1815739)
             if rsid == self.SNPS['ACTN3']:
                 if genotype in ['CC']:
@@ -134,7 +134,7 @@ class GeneticAnalyzer:
                     profile.actn3 = "RX"
                 elif genotype in ['TT']:
                     profile.actn3 = "XX"
-            
+
             # ACE (rs1799752) - Note: This is actually a deletion, simplified
             elif rsid == self.SNPS['ACE']:
                 if genotype in ['II', '--']:
@@ -143,7 +143,7 @@ class GeneticAnalyzer:
                     profile.ace = "DD"
                 else:
                     profile.ace = "ID"
-            
+
             # PPARGC1A (rs8192678)
             elif rsid == self.SNPS['PPARGC1A']:
                 if genotype in ['GG']:
@@ -152,12 +152,12 @@ class GeneticAnalyzer:
                     profile.ppargc1a = "GA"
                 elif genotype in ['AA']:
                     profile.ppargc1a = "AA"
-        
+
         # Recalculate scores with parsed data
         profile._calculate_scores()
-        
+
         return profile
-    
+
     def parse_ancestry(self, raw_data: str) -> GeneticProfile:
         """Parse Ancestry DNA raw data file.
         
@@ -165,9 +165,9 @@ class GeneticAnalyzer:
         """
         # Ancestry uses similar format
         return self.parse_23andme(raw_data)
-    
+
     def get_recommendations(
-        self, 
+        self,
         profile: GeneticProfile
     ) -> List[Dict[str, str]]:
         """Generate personalized training recommendations.
@@ -179,7 +179,7 @@ class GeneticAnalyzer:
             List of recommendation dicts with 'category', 'title', 'description'
         """
         recommendations = []
-        
+
         # ACTN3-based recommendations
         if profile.actn3 == "XX":
             recommendations.append({
@@ -205,7 +205,7 @@ Twój genotyp ACTN3 (RR) wskazuje na przewagę włókien szybkokurczliwych.
 - Rozważ periodyzację mocy przed sezonem
 """
             })
-        
+
         # ACE-based recommendations
         if profile.ace == "II":
             recommendations.append({
@@ -229,7 +229,7 @@ Genotyp ACE (DD) sprzyja adaptacji siłowej.
 - Treningi górskie/wzniesienia
 """
             })
-        
+
         # PPARGC1A-based recommendations
         if profile.ppargc1a in ["GA", "AA"]:
             recommendations.append({
@@ -242,7 +242,7 @@ Twój wariant PPARGC1A sprzyja biogenezie mitochondriów.
 - Możesz efektywniej spalać tłuszcze
 """
             })
-        
+
         # General recommendation based on overall profile
         recommendations.append({
             'category': 'Ogólne',
@@ -256,11 +256,11 @@ Twój wariant PPARGC1A sprzyja biogenezie mitochondriów.
 {"Skup się na budowaniu bazy tlenowej i długich dystansach." if profile.endurance_score > profile.power_score else "Wykorzystaj potencjał mocy i regularnie trenuj siłę."}
 """
         })
-        
+
         return recommendations
-    
+
     def get_zone_adjustments(
-        self, 
+        self,
         profile: GeneticProfile,
         cp: float
     ) -> Dict[str, tuple]:
@@ -282,17 +282,17 @@ Twój wariant PPARGC1A sprzyja biogenezie mitochondriów.
             'Z5': (1.05, 1.20),
             'Z6': (1.20, 1.50),
         }
-        
+
         # Adjust for endurance athletes (XX genotype)
         if profile.actn3 == "XX":
             # Slightly lower threshold zones (fatigue faster at high intensity)
             zones['Z4'] = (0.88, 1.02)
             zones['Z5'] = (1.02, 1.15)
-        
+
         # Adjust for power athletes (RR genotype)
         elif profile.actn3 == "RR":
             # Can sustain higher relative intensities
             zones['Z4'] = (0.92, 1.08)
             zones['Z5'] = (1.08, 1.25)
-        
+
         return zones

@@ -4,35 +4,39 @@ Moduł UI: Zakładka Podsumowanie (Summary)
 Agreguje kluczowe wykresy i metryki z całego dashboardu w jednym miejscu.
 """
 
-import streamlit as st
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pandas as pd
-import numpy as np
-from scipy import stats
 import hashlib
 from typing import Optional
-from modules.config import Config
-from modules.calculations.thresholds import analyze_step_test
-from modules.calculations.smo2_advanced import detect_smo2_thresholds_moxy
-from modules.calculations.durability import (
-    calculate_aerobic_decoupling, detect_decoupling_onset, calculate_durability_index,
-)
-from modules.calculations.race_predictor import (
-    vdot_from_race, multi_model_predict, format_time,
-)
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from plotly.subplots import make_subplots
+from scipy import stats
+
 from modules.calculations.br_analysis import (
-    calculate_br_zones_time, detect_vt_from_br, calculate_br_decoupling,
+    calculate_br_decoupling,
+    calculate_br_zones_time,
+    detect_vt_from_br,
 )
+from modules.calculations.durability import (
+    calculate_aerobic_decoupling,
+    calculate_durability_index,
+    detect_decoupling_onset,
+)
+from modules.calculations.race_predictor import format_time, multi_model_predict
+from modules.calculations.running_effectiveness import (
+    calculate_gct_asymmetry_index,
+    calculate_leg_spring_stiffness,
+    calculate_running_effectiveness,
+)
+from modules.calculations.smo2_advanced import detect_smo2_thresholds_moxy
 from modules.calculations.thermal import (
-    classify_core_temp_zone, calculate_core_temp_zones_time,
+    calculate_core_temp_zones_time,
     calculate_thermal_drift_rate,
 )
-from modules.calculations.running_effectiveness import (
-    calculate_running_effectiveness, calculate_gct_asymmetry_index,
-    calculate_leg_spring_stiffness,
-)
-from modules.calculations.pace_utils import format_pace
+from modules.calculations.thresholds import analyze_step_test
+from modules.config import Config
 
 
 def _hash_dataframe(df: pd.DataFrame) -> str:

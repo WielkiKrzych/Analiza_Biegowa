@@ -20,10 +20,9 @@ Usage:
     summary_pdf_bytes = generate_summary_pdf(df_plot, metrics, ...)
 """
 
-from .styles import PDFConfig, create_styles, COLORS, PAGE_SIZE, MARGIN
 from .builder import build_ramp_pdf, generate_ramp_pdf
+from .styles import COLORS, MARGIN, PAGE_SIZE, PDFConfig, create_styles
 from .summary_pdf import generate_summary_pdf
-
 
 __all__ = [
     # Main API

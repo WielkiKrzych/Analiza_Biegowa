@@ -12,9 +12,9 @@ Each model has different use cases:
 - LTHR: Most accurate for trained athletes (Joe Friel methodology)
 """
 
-from typing import Dict, Optional, Union, Any
 from dataclasses import dataclass
-import numpy as np
+from typing import Any, Dict, Optional, Union
+
 import pandas as pd
 
 from .common import ensure_pandas
@@ -70,13 +70,13 @@ def calculate_hr_zones_hrmax(hr: float, max_hr: float) -> Dict[str, bool]:
     """
     if max_hr <= 0:
         return {}
-    
+
     hr_pct = hr / max_hr
     zones = {}
-    
+
     for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
         zones[zone_name] = low_pct <= hr_pct < high_pct
-    
+
     return zones
 
 
@@ -95,19 +95,19 @@ def calculate_hr_zones_karvonen(hr: float, max_hr: float, resting_hr: float) -> 
     """
     if max_hr <= 0 or resting_hr >= max_hr:
         return {}
-    
+
     hrr = max_hr - resting_hr  # Heart Rate Reserve
     if hrr <= 0:
         return {}
-    
+
     # Calculate % of HRR used
     hrr_used = hr - resting_hr
     hrr_pct = hrr_used / hrr if hrr > 0 else 0
-    
+
     zones = {}
     for zone_name, (low_pct, high_pct) in ZONES_KARVONEN.items():
         zones[zone_name] = low_pct <= hrr_pct < high_pct
-    
+
     return zones
 
 
@@ -126,13 +126,13 @@ def calculate_hr_zones_lthr(hr: float, lthr: float) -> Dict[str, bool]:
     """
     if lthr <= 0:
         return {}
-    
+
     lthr_pct = hr / lthr
     zones = {}
-    
+
     for zone_name, (low_pct, high_pct) in ZONES_LTHR.items():
         zones[zone_name] = low_pct <= lthr_pct < high_pct
-    
+
     return zones
 
 
@@ -154,7 +154,7 @@ def get_hr_zone(hr: float, config: HRZoneConfig, model: str = "auto") -> str:
             model = "karvonen"
         else:
             model = "hrmax"
-    
+
     if model == "hrmax":
         zones = calculate_hr_zones_hrmax(hr, config.max_hr)
     elif model == "karvonen":
@@ -167,12 +167,12 @@ def get_hr_zone(hr: float, config: HRZoneConfig, model: str = "auto") -> str:
             zones = calculate_hr_zones_lthr(hr, config.lthr)
     else:
         zones = calculate_hr_zones_hrmax(hr, config.max_hr)
-    
+
     # Return the zone that's True
     for zone_name, in_zone in zones.items():
         if in_zone:
             return zone_name
-    
+
     return "Unknown"
 
 
@@ -281,10 +281,10 @@ def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, 
             model = "karvonen"
         else:
             model = "hrmax"
-    
+
     boundaries = {}
     hrr = config.max_hr - config.resting_hr
-    
+
     if model == "hrmax":
         for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
             boundaries[zone_name] = (
@@ -310,7 +310,7 @@ def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, 
                 int(config.max_hr * low_pct),
                 int(config.max_hr * high_pct)
             )
-    
+
     return boundaries
 
 

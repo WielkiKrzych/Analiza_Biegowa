@@ -2,9 +2,11 @@
 Step and Phase Detection for Workout Sessions.
 """
 
+from typing import Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Optional, Tuple
+
 from .threshold_types import DetectedStep, StepTestRange
 
 

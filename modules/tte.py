@@ -5,18 +5,20 @@ Computes the maximum continuous duration an athlete can sustain
 a target power percentage (e.g., 100% FTP ±5%).
 """
 
-import logging
-from typing import Dict, List, Optional, Tuple, Callable
 import json
-import numpy as np
+import logging
 import sqlite3
-import pandas as pd
-from datetime import datetime, timedelta
-from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Callable, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 from pathlib import Path
+
 from modules.config import Config
 
 
@@ -265,8 +267,8 @@ def _compute_single_session_tte(
     csv_path: Path, target_pcts: List[float], ftp: float, tol_pct: float
 ) -> Optional[Dict]:
     """Helper for parallel processing of a single file."""
-    from modules.utils import load_data
     from modules.calculations import process_data
+    from modules.utils import load_data
 
     try:
         with open(csv_path, "rb") as f:

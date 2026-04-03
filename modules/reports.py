@@ -1,12 +1,13 @@
-from docx import Document
-from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 import zipfile
+from datetime import datetime
 from io import BytesIO
+from typing import Any, Dict, Optional
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, RGBColor
 
 
 def _calculate_fallback_metrics(metrics: Dict[str, Any], df_plot: pd.DataFrame) -> Dict[str, Any]:
@@ -128,23 +129,23 @@ def _add_thresholds_section(
     doc.add_heading("2. Progi i Parametry Fizjologiczne", level=1)
 
     p = doc.add_paragraph()
-    p.add_run(f"VT1 (Próg Tlenowy): ").bold = True
+    p.add_run("VT1 (Próg Tlenowy): ").bold = True
     p.add_run(f"{vt1_watts} W @ {vt1_vent} L/min\n")
 
-    p.add_run(f"VT2 (Próg Beztlenowy): ").bold = True
+    p.add_run("VT2 (Próg Beztlenowy): ").bold = True
     p.add_run(f"{vt2_watts} W @ {vt2_vent} L/min\n")
 
-    p.add_run(f"CP (Moc Krytyczna): ").bold = True
+    p.add_run("CP (Moc Krytyczna): ").bold = True
     p.add_run(f"{cp_input} W\n")
 
-    p.add_run(f"W' (Pojemność Beztlenowa): ").bold = True
+    p.add_run("W' (Pojemność Beztlenowa): ").bold = True
     p.add_run(f"{w_prime_input} J\n")
 
     vo2_max = metrics.get("vo2_max_est", 0)
-    p.add_run(f"Szacunkowe VO2max (MMP 5'): ").bold = True
+    p.add_run("Szacunkowe VO2max (MMP 5'): ").bold = True
     p.add_run(f"{vo2_max:.1f} ml/kg/min\n")
 
-    p.add_run(f"Waga zawodnika: ").bold = True
+    p.add_run("Waga zawodnika: ").bold = True
     p.add_run(f"{rider_weight} kg")
 
     doc.add_paragraph()

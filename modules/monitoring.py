@@ -4,15 +4,15 @@ Performance monitoring and metrics collection.
 Provides timing, memory profiling, and metrics export for performance analysis.
 """
 
-import time
 import functools
 import logging
+import threading
+import time
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, TypeVar
-from collections import defaultdict
-import threading
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")

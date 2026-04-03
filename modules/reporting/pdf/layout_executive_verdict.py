@@ -1,8 +1,10 @@
 """Executive verdict page layout extracted from layout.py."""
 from typing import Any, Dict, List
+
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
+
 
 def build_page_executive_verdict(canonical_physio: Dict[str, Any], smo2_advanced: Dict[str, Any], biomech_occlusion: Dict[str, Any], thermo_analysis: Dict[str, Any], cardio_advanced: Dict[str, Any], metadata: Dict[str, Any], styles: Dict) -> List:
     """Build Page 2: EXECUTIVE VERDICT - 1-page decision summary.
@@ -69,7 +71,7 @@ def build_page_executive_verdict(canonical_physio: Dict[str, Any], smo2_advanced
     elements.append(Paragraph("<font size='14'>5.3 WERDYKT FIZJOLOGICZNY</font>", styles['center']))
     elements.append(Paragraph("<font size='10' color='#7F8C8D'>Decyzyjne podsumowanie całego raportu fizjologicznego</font>", styles['center']))
     elements.append(Spacer(1, 6 * mm))
-    hero_content = [[Paragraph(f"<font size='12' color='#FFFFFF'><b>WERDYKT GŁÓWNY</b></font>", styles['center'])], [Paragraph(f"<font size='11' color='#F1C40F'><b>Profil wydolnościowy: {profile_description}</b></font>", styles['center'])], [Spacer(1, 2 * mm)], [Paragraph(f"<font size='10' color='#FFFFFF'>{main_interpretation}</font>", styles['center'])], [Spacer(1, 2 * mm)], [Paragraph(f"<font size='8' color='#BDC3C7'>Confidence score: {confidence_score:.2f} | Źródła: VO₂max ({vo2max_source}), SmO₂, HR coupling, Core Temp</font>", styles['center'])]]
+    hero_content = [[Paragraph("<font size='12' color='#FFFFFF'><b>WERDYKT GŁÓWNY</b></font>", styles['center'])], [Paragraph(f"<font size='11' color='#F1C40F'><b>Profil wydolnościowy: {profile_description}</b></font>", styles['center'])], [Spacer(1, 2 * mm)], [Paragraph(f"<font size='10' color='#FFFFFF'>{main_interpretation}</font>", styles['center'])], [Spacer(1, 2 * mm)], [Paragraph(f"<font size='8' color='#BDC3C7'>Confidence score: {confidence_score:.2f} | Źródła: VO₂max ({vo2max_source}), SmO₂, HR coupling, Core Temp</font>", styles['center'])]]
     hero_table = Table(hero_content, colWidths=[170 * mm])
     hero_table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), HexColor('#1a1a2e')), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('TOPPADDING', (0, 0), (-1, -1), 8), ('BOTTOMPADDING', (0, 0), (-1, -1), 8), ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 10)]))
     elements.append(hero_table)

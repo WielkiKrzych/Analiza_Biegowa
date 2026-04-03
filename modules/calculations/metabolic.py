@@ -8,9 +8,10 @@ instead of slope thresholds. This better identifies LT1/LT2 as points where
 the rate of SmO2 desaturation changes, not just where it drops.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy import signal
+
 from .threshold_types import StepSmO2Result, StepTestRange, TransitionZone
 from .ventilatory import calculate_slope
 

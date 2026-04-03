@@ -5,9 +5,9 @@ Running equivalent of W' in cycling.
 D' is the finite distance that can be run above Critical Speed (CS).
 """
 
-from typing import Union, Optional
 import numpy as np
-from .pace_utils import pace_to_speed, speed_to_pace, pace_array_to_speed_array
+
+from .pace_utils import pace_array_to_speed_array, pace_to_speed
 
 
 def calculate_d_prime_balance(
@@ -36,18 +36,18 @@ def calculate_d_prime_balance(
     n = len(pace_sec_per_km)
     if n == 0:
         return np.array([])
-    
+
     # Convert paces to speeds
     speeds = pace_array_to_speed_array(pace_sec_per_km)  # m/s
     critical_speed = pace_to_speed(critical_speed_pace)  # m/s
-    
+
     d_prime_balance = np.zeros(n)
     d_prime_balance[0] = d_prime_capacity
-    
+
     for i in range(1, n):
         dt = time_sec[i] - time_sec[i-1]
         current_speed = speeds[i]
-        
+
         if current_speed > critical_speed:
             # Above CS: deplete D' based on excess speed
             excess_speed = current_speed - critical_speed  # m/s
@@ -59,7 +59,7 @@ def calculate_d_prime_balance(
             recharge_rate = (d_prime_capacity - d_prime_balance[i-1]) / tau
             recharge = recharge_rate * dt
             d_prime_balance[i] = min(d_prime_capacity, d_prime_balance[i-1] + recharge)
-    
+
     return d_prime_balance
 
 
@@ -92,17 +92,17 @@ def estimate_time_to_exhaustion_pace(
         raise ValueError(f"critical_speed_pace cannot be negative, got {critical_speed_pace}")
     if d_prime < 0:
         raise ValueError(f"d_prime cannot be negative, got {d_prime}")
-    
+
     # Convert to speeds
     target_speed = pace_to_speed(target_pace)
     critical_speed = pace_to_speed(critical_speed_pace)
-    
+
     if target_speed <= critical_speed:
         return float("inf")
-    
+
     if d_prime <= 0:
         return 0.0
-    
+
     excess_speed = target_speed - critical_speed
     return d_prime / excess_speed
 
@@ -129,13 +129,13 @@ def count_surges(
     """
     if d_prime_balance is None or len(d_prime_balance) == 0 or d_prime_capacity <= 0:
         return 0
-    
+
     threshold = d_prime_capacity * threshold_pct
     recovery = d_prime_capacity * recovery_pct
-    
+
     surges = 0
     below_threshold = False
-    
+
     for val in d_prime_balance:
         if val < threshold and not below_threshold:
             # Just dropped below threshold
@@ -144,7 +144,7 @@ def count_surges(
         elif val >= recovery:
             # Recovered enough to count next drop as new surge
             below_threshold = False
-    
+
     return surges
 
 
@@ -164,15 +164,15 @@ def calculate_d_prime_utilization(
     """
     if len(d_prime_balance) == 0:
         return {}
-    
+
     min_balance = np.min(d_prime_balance)
     max_depletion = d_prime_capacity - min_balance
     utilization_pct = (max_depletion / d_prime_capacity) * 100
-    
+
     # Time below various thresholds
     time_below_50 = np.sum(d_prime_balance < d_prime_capacity * 0.5)
     time_below_25 = np.sum(d_prime_balance < d_prime_capacity * 0.25)
-    
+
     return {
         "min_balance_m": round(min_balance, 1),
         "max_depletion_m": round(max_depletion, 1),

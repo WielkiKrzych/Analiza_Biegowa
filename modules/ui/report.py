@@ -1,10 +1,12 @@
-import streamlit as st
-import plotly.graph_objects as go
-import pandas as pd
-import numpy as np
-from modules.config import Config
-from modules.calculations import calculate_vo2max, calculate_trend
 from typing import Dict
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+from modules.calculations import calculate_trend, calculate_vo2max
+from modules.config import Config
 
 # ============================================================
 # OPTIMIZATION: Pre-computed constants to avoid recalculation
@@ -225,7 +227,7 @@ def render_report_tab(
     st.plotly_chart(fig_exec, use_container_width=True)
 
     st.markdown("---")
-    
+
     # Rozkład tętna - pozostawiony
     st.subheader("Rozkład Tętna")
     if "heartrate" in df_plot.columns:

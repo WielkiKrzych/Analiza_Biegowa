@@ -2,7 +2,8 @@
 Moduł pomocniczy - wspólne funkcje i stałe dla pakietu calculations.
 """
 
-from typing import Union, Any
+from typing import Any, Union
+
 import pandas as pd
 
 # Import constants from centralized config to avoid duplication

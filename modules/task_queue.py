@@ -7,14 +7,13 @@ without blocking the main thread. Uses concurrent.futures for simplicity.
 For production with multiple users, consider migrating to Celery or RQ.
 """
 
+import threading
 import uuid
-import time
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
-import threading
 
 T = TypeVar("T")
 

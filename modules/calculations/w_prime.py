@@ -5,9 +5,10 @@ Implements Skiba's W' balance algorithm for tracking anaerobic capacity
 depletion and reconstitution during exercise.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
-import logging
 
 logger = logging.getLogger(__name__)
 

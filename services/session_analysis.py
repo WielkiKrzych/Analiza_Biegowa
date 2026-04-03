@@ -8,9 +8,11 @@ Handles all session-level metrics calculations including:
 - DataFrame resampling
 """
 
-import pandas as pd
+from typing import Any, Dict, Tuple
+
 import numpy as np
-from typing import Tuple, Dict, Any
+import pandas as pd
+
 from modules.config import Config
 
 # ============================================================
@@ -84,9 +86,8 @@ def calculate_extended_metrics(
     # Import here to avoid circular dependency
     from modules.calculations import (
         calculate_normalized_power,
-        estimate_carbs_burned,
         calculate_power_duration_curve,
-        estimate_vlamax_from_pdc,
+        estimate_carbs_burned,
     )
 
     if "watts" in df.columns:
@@ -101,6 +102,7 @@ def calculate_extended_metrics(
 
         # VO2max estimation from pace (Daniels formula - running-specific)
         from modules.calculations.pace import estimate_vo2max_from_pace
+
         # For running, use pace-based VO2max estimation
         if "pace" in df.columns:
             best_5min_pace = df["pace"].rolling(Config.ROLLING_WINDOW_5MIN).mean().min()

@@ -40,7 +40,8 @@ dev = [
     "black",
     "ruff",
     "mypy",
-    "pytest-cov"
+    "pytest-cov",
+    "isort",
 ]
 
 [tool.setuptools.packages.find]

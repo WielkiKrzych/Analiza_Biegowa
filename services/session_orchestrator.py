@@ -10,31 +10,27 @@ PERFORMANCE OPTIMIZATIONS:
 - Cache invalidation on file changes via hash
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
+import hashlib
 import logging
 from datetime import date
-from typing import Dict, Any, Optional, Tuple
-import hashlib
+from typing import Any, Dict, Optional, Tuple
+
+import pandas as pd
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-from .session_analysis import (
-    calculate_extended_metrics,
-    apply_smo2_smoothing,
-    resample_dataframe,
-)
-from .data_validation import validate_dataframe
-
 from modules.calculations import (
-    calculate_w_prime_balance,
-    calculate_metrics,
     calculate_advanced_kpi,
-    calculate_z2_drift,
     calculate_heat_strain_index,
+    calculate_metrics,
+    calculate_w_prime_balance,
+    calculate_z2_drift,
     process_data,
 )
+
+from .data_validation import validate_dataframe
+from .session_analysis import apply_smo2_smoothing, calculate_extended_metrics, resample_dataframe
 
 
 def _serialize_df_for_cache(df: pd.DataFrame) -> bytes:
@@ -66,11 +62,11 @@ def _process_session_cached(
     """
     import io
     df_raw = pd.read_parquet(io.BytesIO(df_bytes))
-    
+
     is_valid, error_msg = validate_dataframe(df_raw)
     if not is_valid:
         return b'', b'', {'_error': error_msg}
-    
+
     df_clean_pl = process_data(df_raw)
     metrics = calculate_metrics(df_clean_pl, cp_input)
     df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
@@ -83,17 +79,17 @@ def _process_session_cached(
     )
     df_plot = apply_smo2_smoothing(df_plot)
     df_plot_resampled = resample_dataframe(df_plot)
-    
+
     metrics['_decoupling_percent'] = decoupling_percent
     metrics['_drift_z2'] = drift_z2
-    
+
     # FIX: Add _df_clean_pl to cached metrics for HRV analysis
     df_clean_pl_bytes = _serialize_df_for_cache(df_clean_pl)
     metrics['_df_clean_pl_bytes'] = df_clean_pl_bytes
-    
+
     df_plot_bytes = _serialize_df_for_cache(df_plot)
     df_resampled_bytes = _serialize_df_for_cache(df_plot_resampled)
-    
+
     return df_plot_bytes, df_resampled_bytes, metrics
 
 
@@ -121,26 +117,26 @@ def process_uploaded_session(
     (df_plot, df_plot_resampled, metrics, error_message)
     """
     df_bytes = _serialize_df_for_cache(df_raw)
-    
+
     try:
         df_plot_bytes, df_resampled_bytes, metrics = _process_session_cached(
             df_bytes, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
         )
-        
+
         if metrics.get('_error'):
             return None, None, None, metrics['_error']
-        
+
         import io
         df_plot = pd.read_parquet(io.BytesIO(df_plot_bytes))
         df_plot_resampled = pd.read_parquet(io.BytesIO(df_resampled_bytes))
-        
+
         # FIX: Deserialize _df_clean_pl_bytes to _df_clean_pl for HRV analysis
         if '_df_clean_pl_bytes' in metrics:
             metrics['_df_clean_pl'] = pd.read_parquet(io.BytesIO(metrics['_df_clean_pl_bytes']))
             del metrics['_df_clean_pl_bytes']  # Remove bytes to save memory
-        
+
         return df_plot, df_plot_resampled, metrics, None
-        
+
     except Exception as e:
         logger.warning("Cached session processing failed, falling back to uncached: %s", e)
         import io
@@ -148,7 +144,7 @@ def process_uploaded_session(
         is_valid, error_msg = validate_dataframe(df_raw)
         if not is_valid:
             return None, None, None, error_msg
-        
+
         df_clean_pl = process_data(df_raw)
         metrics = calculate_metrics(df_clean_pl, cp_input)
         df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
@@ -161,11 +157,11 @@ def process_uploaded_session(
         )
         df_plot = apply_smo2_smoothing(df_plot)
         df_plot_resampled = resample_dataframe(df_plot)
-        
+
         metrics['_decoupling_percent'] = decoupling_percent
         metrics['_drift_z2'] = drift_z2
         metrics['_df_clean_pl'] = df_clean_pl
-        
+
         return df_plot, df_plot_resampled, metrics, None
 
 

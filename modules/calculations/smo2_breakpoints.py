@@ -12,11 +12,12 @@ Algorithm:
 - Breakpoints correspond to LT1 and LT2
 """
 
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-from typing import Tuple, Optional
-from dataclasses import dataclass
 
 
 @dataclass
@@ -150,9 +151,9 @@ def detect_smo2_breakpoints_segmented(
 
     # Validate against expected ranges
     if not (280 <= best_bp1 <= 310):
-        result.notes.append(f"⚠️ BP1 outside expected range (280-310W)")
+        result.notes.append("⚠️ BP1 outside expected range (280-310W)")
     if not (360 <= best_bp2 <= 400):
-        result.notes.append(f"⚠️ BP2 outside expected range (360-400W)")
+        result.notes.append("⚠️ BP2 outside expected range (360-400W)")
 
     return result
 

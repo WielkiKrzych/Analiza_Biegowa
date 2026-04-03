@@ -1,12 +1,13 @@
 import plotly.graph_objects as go
 
+
 def apply_chart_style(fig, title=None):
     fig.update_layout(
         template="plotly_dark",
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         title=dict(
-            text=title, 
+            text=title,
             font=dict(family="Rajdhani", size=24, color="#f0f6fc")
         ) if title else None,
         font=dict(family="Inter", size=12, color="#c9d1d9"),

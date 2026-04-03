@@ -3,8 +3,8 @@ Pace utilities for running analysis.
 
 Conversions between pace (min/km) and speed (m/s).
 """
+
 import numpy as np
-from typing import Union
 
 
 def pace_to_speed(pace_sec_per_km: float) -> float:
@@ -59,7 +59,7 @@ def format_pace(pace_sec_per_km: float) -> str:
     """
     if pace_sec_per_km <= 0 or not np.isfinite(pace_sec_per_km):
         return "--:--"
-    
+
     minutes = int(pace_sec_per_km // 60)
     seconds = int(pace_sec_per_km % 60)
     return f"{minutes}:{seconds:02d}"

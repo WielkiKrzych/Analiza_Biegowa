@@ -8,9 +8,10 @@ Running-specific: Uses 3rd-power speed normalization (Skiba rTSS model)
 instead of Coggan's 4th-power (which is validated only for cycling power).
 """
 
-from typing import Dict, Optional, Union, Any
-import pandas as pd
+from typing import Any, Dict, Optional, Union
+
 import numpy as np
+import pandas as pd
 
 
 def detect_available_metrics(df: pd.DataFrame) -> Dict[str, bool]:

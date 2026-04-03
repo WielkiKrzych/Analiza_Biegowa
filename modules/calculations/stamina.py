@@ -4,7 +4,7 @@ Stamina Score Module.
 Implements composite endurance metrics inspired by INSCYD/UCI methodologies.
 """
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 
 def calculate_stamina_score(

@@ -2,7 +2,6 @@
 Utilities for formatting time values in charts.
 """
 import pandas as pd
-import numpy as np
 
 
 def format_time_hhmmss(seconds: float) -> str:
@@ -17,11 +16,11 @@ def format_time_hhmmss(seconds: float) -> str:
     """
     if pd.isna(seconds) or seconds < 0:
         return "00:00:00"
-    
+
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
-    
+
     if hours > 0:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     else:
@@ -41,7 +40,7 @@ def format_time_axis(df: pd.DataFrame, time_col: str = 'time_min') -> pd.Series:
     """
     if time_col not in df.columns:
         return pd.Series(index=df.index, dtype=str)
-    
+
     # Convert minutes to seconds, then format
     seconds = df[time_col] * 60
     return seconds.apply(format_time_hhmmss)
@@ -60,9 +59,9 @@ def get_time_axis_config(time_values: pd.Series, is_minutes: bool = True) -> dic
     """
     if is_minutes:
         time_values = time_values * 60
-    
+
     max_time = time_values.max() if len(time_values) > 0 else 3600
-    
+
     # Determine tick format based on duration
     if max_time > 3600:  # More than 1 hour
         tickformat = "%H:%M:%S"
@@ -70,7 +69,7 @@ def get_time_axis_config(time_values: pd.Series, is_minutes: bool = True) -> dic
     else:
         tickformat = "%M:%S"
         title = "Czas [mm:ss]"
-    
+
     return {
         'tickformat': tickformat,
         'title': title,
@@ -92,10 +91,10 @@ def pace_to_seconds(pace: float) -> str:
     """
     if pd.isna(pace) or pace <= 0:
         return "--:--"
-    
+
     minutes = int(pace // 60)
     seconds = int(pace % 60)
-    
+
     return f"{minutes}:{seconds:02d}"
 
 

@@ -3,8 +3,10 @@ Frontend Components Module.
 
 Reusable UI components (widgets) for the application.
 """
+from typing import Any, Dict
+
 import streamlit as st
-from typing import Dict, Any
+
 
 class UIComponents:
     """Namespace for reusable UI components."""
@@ -34,7 +36,7 @@ class UIComponents:
         """Render the sticky metrics header."""
         if not data:
             return
-            
+
         html = f"""
         <div class="sticky-metrics">
             <h4>⚡ Live Training Summary</h4>

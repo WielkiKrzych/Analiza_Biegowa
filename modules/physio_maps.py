@@ -7,15 +7,15 @@ Provides scatter plots and drift analysis for Pace-HR-SmO2 relationships:
 - Constant-pace segment detection
 - HR and SmO2 drift analysis at constant pace
 """
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
+from scipy import stats
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class DriftMetrics:
     correlation_pace_smo2: Optional[float]
     segment_duration_min: float
     avg_pace: float
-    
+
     def to_dict(self) -> Dict:
         avg_pace_min = _sec_to_min(self.avg_pace)
         return {
@@ -74,33 +74,33 @@ def scatter_pace_hr(
         if col in df.columns:
             hr_col = col
             break
-    
+
     # Detect pace column
     pace_col = None
     for col in ['pace', 'pace_sec_per_km', 'tempo']:
         if col in df.columns:
             pace_col = col
             break
-            
+
     if pace_col is None or hr_col is None:
         logger.warning(f"Missing pace or HR columns for scatter_pace_hr. Found: {df.columns.tolist()}")
         return None
-    
+
     # Prepare data
     plot_df = df[[pace_col, hr_col]].dropna()
     if len(plot_df) < 10:
         return None
-    
+
     # Filter valid pace data and convert to min/km
     plot_df = plot_df[(plot_df[pace_col] > 0) & (plot_df[pace_col] < 1200)].copy()
     plot_df['pace_min'] = plot_df[pace_col] / 60.0
-    
+
     # Add time index for coloring
     plot_df['time_min'] = np.arange(len(plot_df)) / 60
-    
+
     # Calculate correlation
     corr = plot_df['pace_min'].corr(plot_df[hr_col])
-    
+
     # Create scatter
     fig = px.scatter(
         plot_df,
@@ -116,14 +116,14 @@ def scatter_pace_hr(
         },
         title=f"{title} (r = {corr:.2f})"
     )
-    
+
     # Add trendline
     slope, intercept, r_value, p_value, std_err = stats.linregress(
         plot_df['pace_min'], plot_df[hr_col]
     )
     x_line = np.array([plot_df['pace_min'].min(), plot_df['pace_min'].max()])
     y_line = slope * x_line + intercept
-    
+
     fig.add_trace(go.Scatter(
         x=x_line,
         y=y_line,
@@ -131,10 +131,10 @@ def scatter_pace_hr(
         name=f'Trend (slope={slope:.2f})',
         line=dict(color='red', width=2, dash='dash')
     ))
-    
+
     # Invert x-axis (lower pace = faster = better)
     fig.update_xaxes(autorange="reversed")
-    
+
     fig.update_layout(
         template='plotly_dark',
         height=450,
@@ -144,7 +144,7 @@ def scatter_pace_hr(
             tickformat=".0f"
         )
     )
-    
+
     return fig
 
 
@@ -167,36 +167,36 @@ def scatter_pace_smo2(
         if col in df.columns:
             pace_col = col
             break
-    
+
     if pace_col is None:
         return None
-    
+
     # Check for SmO2 column variants
     smo2_col = None
     for col in ['smo2', 'SmO2', 'muscle_oxygen']:
         if col in df.columns:
             smo2_col = col
             break
-    
+
     if smo2_col is None:
         logger.info("SmO2 data not available - graceful degradation")
         return None
-    
+
     # Prepare data
     plot_df = df[[pace_col, smo2_col]].dropna()
     if len(plot_df) < 10:
         return None
-    
+
     # Filter valid pace data and convert to min/km
     plot_df = plot_df[(plot_df[pace_col] > 0) & (plot_df[pace_col] < 1200)].copy()
     plot_df['pace_min'] = plot_df[pace_col] / 60.0
-    
+
     # Add time index for coloring
     plot_df['time_min'] = np.arange(len(plot_df)) / 60
-    
+
     # Calculate correlation
     corr = plot_df['pace_min'].corr(plot_df[smo2_col])
-    
+
     # Create scatter
     fig = px.scatter(
         plot_df,
@@ -212,14 +212,14 @@ def scatter_pace_smo2(
         },
         title=f"{title} (r = {corr:.2f})"
     )
-    
+
     # Add trendline
     slope, intercept, r_value, p_value, std_err = stats.linregress(
         plot_df['pace_min'], plot_df[smo2_col]
     )
     x_line = np.array([plot_df['pace_min'].min(), plot_df['pace_min'].max()])
     y_line = slope * x_line + intercept
-    
+
     fig.add_trace(go.Scatter(
         x=x_line,
         y=y_line,
@@ -227,10 +227,10 @@ def scatter_pace_smo2(
         name=f'Trend (slope={slope:.3f})',
         line=dict(color='cyan', width=2, dash='dash')
     ))
-    
+
     # Invert x-axis (lower pace = faster = better)
     fig.update_xaxes(autorange="reversed")
-    
+
     fig.update_layout(
         template='plotly_dark',
         height=450,
@@ -240,7 +240,7 @@ def scatter_pace_smo2(
             tickformat=".0f"
         )
     )
-    
+
     return fig
 
 
@@ -282,34 +282,34 @@ def detect_constant_pace_segments(
         if col in df.columns:
             pace_col = col
             break
-    
+
     if pace_col is None:
         return []
-    
+
     pace = df[pace_col].ffill().values
     n = len(pace)
-    
+
     if n < min_duration_sec:
         return []
-    
+
     segments = []
-    
+
     # Sliding window approach
     window_size = min_duration_sec
-    
+
     i = 0
     while i < n - window_size:
         window = pace[i:i + window_size]
         median_pace = np.median(window)
-        
+
         if median_pace <= 0 or median_pace > 1200:  # Skip invalid pace
             i += window_size // 2
             continue
-        
+
         # Check if window is within tolerance
         lower = median_pace * (1 - tolerance_pct / 100)
         upper = median_pace * (1 + tolerance_pct / 100)
-        
+
         if np.all((window >= lower) & (window <= upper)):
             # Extend segment as far as possible
             end_idx = i + window_size
@@ -318,13 +318,13 @@ def detect_constant_pace_segments(
                     end_idx += 1
                 else:
                     break
-            
+
             avg_pace = np.mean(pace[i:end_idx])
             segments.append((i, end_idx, avg_pace))
             i = end_idx
         else:
             i += 1
-    
+
     return segments
 
 
@@ -365,47 +365,47 @@ def trend_at_constant_pace(
 
     if pace_col is None or hr_col is None:
         return None, None
-    
+
     # Find matching segment
     lower = pace_target_sec * (1 - tolerance_pct / 100)
     upper = pace_target_sec * (1 + tolerance_pct / 100)
-    
+
     mask = (df[pace_col] >= lower) & (df[pace_col] <= upper)
     segment = df[mask].copy()
-    
+
     if len(segment) < min_duration_sec:
         return None, None
-    
+
     # Create time axis in minutes
     segment = segment.reset_index(drop=True)
     segment['time_min'] = segment.index / 60
-    
+
     # Calculate HR drift
     hr_slope, hr_intercept, hr_r, hr_p, hr_se = stats.linregress(
         segment['time_min'], segment[hr_col]
     )
-    
+
     # Calculate SmO2 drift (if available)
     smo2_col = None
     for col in ['smo2', 'SmO2', 'muscle_oxygen']:
         if col in segment.columns:
             smo2_col = col
             break
-    
+
     smo2_slope = None
     smo2_p = None
     corr_pace_smo2 = None
-    
+
     if smo2_col and segment[smo2_col].notna().sum() > 10:
         smo2_clean = segment.dropna(subset=[smo2_col])
         smo2_slope, smo2_int, smo2_r, smo2_p, smo2_se = stats.linregress(
             smo2_clean['time_min'], smo2_clean[smo2_col]
         )
         corr_pace_smo2 = df[pace_col].corr(df[smo2_col]) if smo2_col in df.columns else None
-    
+
     # Create figure
     fig = go.Figure()
-    
+
     # HR trace (smoothed)
     segment[f'{hr_col}_smooth'] = segment[hr_col].rolling(window=30, min_periods=1).mean()
     fig.add_trace(go.Scatter(
@@ -416,7 +416,7 @@ def trend_at_constant_pace(
         line=dict(color='#FF4B4B', width=2),
         yaxis='y'
     ))
-    
+
     # Add trendline for HR
     hr_trend = hr_intercept + hr_slope * segment['time_min']
     fig.add_trace(go.Scatter(
@@ -427,7 +427,7 @@ def trend_at_constant_pace(
         line=dict(color='#FF4B4B', width=1, dash='dash'),
         yaxis='y'
     ))
-    
+
     # SmO2 trace on secondary axis (if available)
     if smo2_col:
         segment[f'{smo2_col}_smooth'] = segment[smo2_col].rolling(window=30, min_periods=1).mean()
@@ -439,7 +439,7 @@ def trend_at_constant_pace(
             line=dict(color='#00CC96', width=2),
             yaxis='y2'
         ))
-        
+
         if smo2_slope is not None:
             smo2_trend = smo2_int + smo2_slope * segment['time_min']
             fig.add_trace(go.Scatter(
@@ -450,7 +450,7 @@ def trend_at_constant_pace(
                 line=dict(color='#00CC96', width=1, dash='dash'),
                 yaxis='y2'
             ))
-    
+
     pace_min_str = _sec_to_min(pace_target_sec)
     fig.update_layout(
         title=f"Fizjologia przy Tempo {pace_min_str:.2f} min/km (±{tolerance_pct}%)",
@@ -473,7 +473,7 @@ def trend_at_constant_pace(
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(x=0.01, y=0.99)
     )
-    
+
     # Build metrics
     duration_min = len(segment) / 60
     metrics = DriftMetrics(
@@ -486,7 +486,7 @@ def trend_at_constant_pace(
         segment_duration_min=duration_min,
         avg_pace=pace_target_sec
     )
-    
+
     return fig, metrics
 
 
@@ -512,14 +512,14 @@ def analyze_drift_pace_hr(
         Dictionary with drift analysis results
     """
     segments = detect_constant_pace_segments(
-        df, 
-        tolerance_pct=5.0, 
+        df,
+        tolerance_pct=5.0,
         min_duration_sec=int(min_segment_duration_min * 60)
     )
-    
+
     if not segments:
         return {"error": "No constant-pace segments found"}
-    
+
     results = []
     for start_idx, end_idx, avg_pace in segments:
         fig, metrics = trend_at_constant_pace(
@@ -536,10 +536,10 @@ def analyze_drift_pace_hr(
                 "end_idx": end_idx,
                 **metrics.to_dict()
             })
-    
+
     if not results:
         return {"error": "No valid drift segments analyzed"}
-    
+
     # Summary statistics
     df_results = pd.DataFrame(results)
     return {

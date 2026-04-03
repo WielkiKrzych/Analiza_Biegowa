@@ -9,16 +9,12 @@ Per methodology/ramp_test/06_signal_conflicts.md:
 This module DETECTS and DESCRIBES conflicts.
 It does NOT attempt to resolve them.
 """
-import pandas as pd
 from typing import List, Optional
 
-from models.results import (
-    ConflictReport, SignalConflict, ConflictType, ConflictSeverity
-)
-from modules.calculations.threshold_types import (
-    StepVTResult, StepSmO2Result
-)
+import pandas as pd
 
+from models.results import ConflictReport, ConflictSeverity, ConflictType, SignalConflict
+from modules.calculations.threshold_types import StepSmO2Result, StepVTResult
 
 # ============================================================
 # CONFLICT DESCRIPTIONS (per methodology/06_signal_conflicts.md)
@@ -122,7 +118,7 @@ def detect_conflicts(
         ConflictReport with all detected conflicts
     """
     report = ConflictReport(signals_analyzed=[])
-    
+
     # Track which signals we analyzed
     if vt_result and vt_result.vt1_zone:
         report.signals_analyzed.append("VE")
@@ -130,23 +126,23 @@ def detect_conflicts(
         report.signals_analyzed.append("SmO2 (LOCAL)")
     if df is not None and hr_column in df.columns:
         report.signals_analyzed.append("HR")
-    
+
     # Detect SmO₂ vs VT conflicts
     smo2_conflicts = _detect_smo2_vs_vt_conflicts(vt_result, smo2_result)
     report.conflicts.extend(smo2_conflicts)
-    
+
     # Detect HR vs Power conflicts (if data available)
     if df is not None:
         hr_conflicts = _detect_hr_vs_power_conflicts(df, power_column, hr_column, time_column)
         report.conflicts.extend(hr_conflicts)
-    
+
     # Calculate agreement score
     total_penalty = sum(c.confidence_penalty for c in report.conflicts)
     report.agreement_score = max(0.0, 1.0 - total_penalty)
-    
+
     # Generate recommendations
     report.recommendations = _generate_recommendations(report.conflicts)
-    
+
     return report
 
 
@@ -156,14 +152,14 @@ def _detect_smo2_vs_vt_conflicts(
 ) -> List[SignalConflict]:
     """Detect conflicts between SmO₂ and VT."""
     conflicts = []
-    
+
     if not vt_result or not vt_result.vt1_zone:
         return conflicts
     if not smo2_result:
         return conflicts
-    
+
     vt1_mid = vt_result.vt1_zone.midpoint_watts
-    
+
     # Check if SmO₂ shows no drop (FLAT)
     if smo2_result.smo2_1_zone is None:
         info = CONFLICT_DESCRIPTIONS[ConflictType.SMO2_FLAT]
@@ -177,11 +173,11 @@ def _detect_smo2_vs_vt_conflicts(
             confidence_penalty=info["penalty"]
         ))
         return conflicts
-    
+
     # Check SmO₂ timing vs VT
     smo2_mid = smo2_result.smo2_1_zone.midpoint_watts
     deviation = smo2_mid - vt1_mid
-    
+
     if deviation < -20:  # SmO₂ drops >20W BEFORE VT
         info = CONFLICT_DESCRIPTIONS[ConflictType.SMO2_EARLY]
         conflicts.append(SignalConflict(
@@ -206,7 +202,7 @@ def _detect_smo2_vs_vt_conflicts(
             magnitude=deviation,
             confidence_penalty=info["penalty"]
         ))
-    
+
     return conflicts
 
 
@@ -218,10 +214,10 @@ def _detect_hr_vs_power_conflicts(
 ) -> List[SignalConflict]:
     """Detect conflicts between HR and Power."""
     conflicts = []
-    
+
     if power_column not in df.columns or hr_column not in df.columns:
         return conflicts
-    
+
     # Cardiac Drift detection (HR rises at constant power)
     # Look for segments where power is stable but HR increases
     drift = _detect_cardiac_drift(df, power_column, hr_column, time_column)
@@ -237,7 +233,7 @@ def _detect_hr_vs_power_conflicts(
             magnitude=drift,
             confidence_penalty=info["penalty"]
         ))
-    
+
     # HR Plateau detection (HR stops rising)
     plateau = _detect_hr_plateau(df, power_column, hr_column, time_column)
     if plateau is not None:
@@ -252,7 +248,7 @@ def _detect_hr_vs_power_conflicts(
             magnitude=plateau,
             confidence_penalty=info["penalty"]
         ))
-    
+
     return conflicts
 
 
@@ -274,25 +270,25 @@ def _detect_cardiac_drift(
     n = len(df)
     if n < 120:
         return None
-    
+
     mid_start = n // 4
     mid_end = 3 * n // 4
     mid_df = df.iloc[mid_start:mid_end]
-    
+
     # Find stable power segments
     power = mid_df[power_column].values
     hr = mid_df[hr_column].values
-    
+
     # Simple check: look for periods where power std is low but HR trend is positive
     window_size = min(60, len(power) // 4)
     if window_size < 30:
         return None
-    
+
     max_drift = 0.0
     for i in range(0, len(power) - window_size, window_size // 2):
         segment_power = power[i:i+window_size]
         segment_hr = hr[i:i+window_size]
-        
+
         # Check if power is stable
         if segment_power.std() < power_tolerance:
             # Check if HR is drifting up
@@ -301,7 +297,7 @@ def _detect_cardiac_drift(
             drift = hr_end - hr_start
             if drift > max_drift:
                 max_drift = drift
-    
+
     if max_drift >= drift_threshold_bpm:
         return max_drift
     return None
@@ -322,32 +318,32 @@ def _detect_hr_plateau(
     n = len(df)
     if n < 120:
         return None
-    
+
     # Look at the last portion of the test
     end_portion = df.iloc[-n//4:]
-    
+
     power = end_portion[power_column].values
     hr = end_portion[hr_column].values
-    
+
     # Check if power is still rising but HR is flat
     power_diff = power[-10:].mean() - power[:10].mean()
     hr_diff = hr[-10:].mean() - hr[:10].mean()
-    
+
     if power_diff > 20 and abs(hr_diff) < plateau_threshold:
         return power[-1]
-    
+
     return None
 
 
 def _generate_recommendations(conflicts: List[SignalConflict]) -> List[str]:
     """Generate recommendations based on detected conflicts."""
     recommendations = []
-    
+
     for conflict in conflicts:
         if conflict.conflict_type in CONFLICT_DESCRIPTIONS:
             info = CONFLICT_DESCRIPTIONS[conflict.conflict_type]
             recommendations.append(info["recommendation"])
-    
+
     # Remove duplicates while preserving order
     seen = set()
     unique = []
@@ -355,7 +351,7 @@ def _generate_recommendations(conflicts: List[SignalConflict]) -> List[str]:
         if r not in seen:
             seen.add(r)
             unique.append(r)
-    
+
     return unique
 
 
@@ -393,10 +389,10 @@ def get_conflict_summary(conflicts: ConflictReport) -> str:
     """
     if not conflicts.has_conflicts:
         return "✅ Brak konfliktów między sygnałami"
-    
+
     n = len(conflicts.conflicts)
     critical = len(conflicts.critical_conflicts)
-    
+
     if critical > 0:
         return f"⛔ {n} konflikt(ów), w tym {critical} krytyczny(ch)"
     else:

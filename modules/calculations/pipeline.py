@@ -14,29 +14,29 @@ NO OPTIMIZATION - explicit, readable, debuggable.
 """
 
 import logging
-import pandas as pd
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 from models.results import (
-    TestValidity,
-    ValidityLevel,
-    SignalQuality,
-    ThresholdRange,
     ConflictReport,
-    SignalConflict,
-    ConflictType,
     ConflictSeverity,
+    ConflictType,
     RampTestResult,
+    SignalConflict,
+    SignalQuality,
+    TestValidity,
+    ThresholdRange,
+    ValidityLevel,
 )
-from modules.calculations.threshold_types import StepTestRange, StepVTResult, StepSmO2Result
-from modules.calculations.step_detection import detect_step_test_range
-from modules.calculations.ventilatory import detect_vt_from_steps
 from modules.calculations.metabolic import detect_smo2_from_steps
 from modules.calculations.power import calculate_power_duration_curve
-
+from modules.calculations.step_detection import detect_step_test_range
+from modules.calculations.threshold_types import StepSmO2Result, StepTestRange, StepVTResult
+from modules.calculations.ventilatory import detect_vt_from_steps
 
 # ============================================================
 # STEP 1: TEST VALIDATION

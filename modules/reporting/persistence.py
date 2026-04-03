@@ -8,12 +8,13 @@ Per methodology/ramp_test/10_canonical_json_spec.md.
 import json
 import logging
 import os
+import subprocess
 import uuid
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Union
-import subprocess
+
+import numpy as np
 import streamlit as st
 
 from models.results import RampTestResult
@@ -312,6 +313,7 @@ def save_ramp_test_report(
         if (has_torque or (has_power and has_cadence)) and has_smo2:
             try:
                 import numpy as np
+
                 from modules.calculations.biomech_occlusion import (
                     analyze_biomech_occlusion,
                     format_occlusion_for_report,
@@ -448,6 +450,7 @@ def save_ramp_test_report(
     if source_df is not None and len(source_df) > 0:
         try:
             import pandas as pd
+
             from modules.calculations.metrics import calculate_vo2max
 
             df_calc = source_df.copy()
@@ -656,7 +659,7 @@ def save_ramp_test_report(
 
     # 3.1 Add data_policy for provenance tracking
     if manual_overrides:
-        from modules.canonical_values import resolve_all_thresholds, build_data_policy
+        from modules.canonical_values import build_data_policy, resolve_all_thresholds
 
         # Extract auto values from result data
         auto_values = {}
@@ -788,9 +791,10 @@ def _auto_generate_pdf(
         logger.info("[PDF GATING] PDF generation NOT requested (Hard Trigger). Aborting.")
         return None
 
-    from .pdf import generate_ramp_pdf, PDFConfig
-    from .figures import generate_all_ramp_figures
     import tempfile
+
+    from .figures import generate_all_ramp_figures
+    from .pdf import PDFConfig, generate_ramp_pdf
 
     json_path = Path(json_path)
     pdf_path = json_path.with_suffix(".pdf")
@@ -866,7 +870,7 @@ def _update_index(
 
     if not row["session_id"] or not row["json_path"]:
         logger.error(
-            f"Missing critical data for index (session_id or json_path). Record not saved."
+            "Missing critical data for index (session_id or json_path). Record not saved."
         )
         return
 
@@ -951,9 +955,10 @@ def generate_and_save_pdf(
     Returns:
         Path to generated PDF or None on failure
     """
-    from .pdf import generate_ramp_pdf, PDFConfig
-    from .figures import generate_all_ramp_figures
     import tempfile
+
+    from .figures import generate_all_ramp_figures
+    from .pdf import PDFConfig, generate_ramp_pdf
 
     json_path = Path(json_path)
 
