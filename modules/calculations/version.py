@@ -30,7 +30,7 @@ def get_methodology_info() -> Dict[str, Any]:
         if version_file.exists():
             with open(version_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         pass
 
     # Fallback

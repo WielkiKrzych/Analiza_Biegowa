@@ -141,7 +141,7 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
                 val = results_arr[i]
                 results[duration] = None if np.isnan(val) else float(val)
             return results
-        except Exception:
+        except (ValueError, TypeError, RuntimeError):
             pass
 
     results = {}

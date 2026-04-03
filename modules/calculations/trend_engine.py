@@ -79,7 +79,7 @@ def load_ramp_test_history(
 
     try:
         df = pd.read_csv(index_path)
-    except Exception as e:
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError, OSError) as e:
         logger.error(f"Error reading index: {e}")
         return []
 
@@ -99,7 +99,7 @@ def load_ramp_test_history(
                 report = load_ramp_test_report(json_path)
                 report["_test_date"] = row["test_date"]
                 return report
-            except Exception as e:
+            except (ValueError, KeyError, OSError) as e:  # noqa: BLE001
                 logger.warning(f"Error loading report {json_path}: {e}")
         return None
 
@@ -167,7 +167,7 @@ def calculate_rate_per_week(values: List[float], dates: List[datetime]) -> float
     # Linear regression
     try:
         slope, intercept = np.polyfit(days, values, 1)
-    except Exception:
+    except (ValueError, np.linalg.LinAlgError):
         return 0.0
 
     # Convert to % per week

@@ -147,7 +147,7 @@ def analyze_cardiac_drift(
                     if slope < 0 and profile.ef_start > 0:
                         target_ef = profile.ef_start * 0.9
                         profile.temp_at_10pct_drop = float((target_ef - intercept) / slope)
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     logger.debug(f"EF vs temp regression failed: {e}")
 
     # === KEY SIGNALS ===

@@ -713,7 +713,7 @@ def _render_vertical_oscillation_section(df_plot, df_plot_resampled):
                         hoverinfo="skip",
                     )
                 )
-            except Exception:
+            except (ValueError, TypeError):
                 pass
 
     # Convert time to hh:mm:ss format for x-axis

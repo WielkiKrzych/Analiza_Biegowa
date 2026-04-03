@@ -461,7 +461,7 @@ def _create_training_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
         plt.close(fig)
 
         return buf.getvalue()
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         logger.warning(f"Error creating training chart: {e}")
         return None
 
@@ -499,7 +499,7 @@ def _create_ve_br_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
         plt.close(fig)
 
         return buf.getvalue()
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         logger.warning(f"Error creating VE/BR chart: {e}")
         return None
 
@@ -537,7 +537,7 @@ def _create_smo2_thb_chart_matplotlib(df_plot: pd.DataFrame) -> Optional[bytes]:
         plt.close(fig)
 
         return buf.getvalue()
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         logger.warning(f"Error creating SmO2/THb chart: {e}")
         return None
 
@@ -592,6 +592,6 @@ def _create_vo2max_chart_matplotlib(
         plt.close(fig)
 
         return buf.getvalue()
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         logger.warning(f"Error creating VO2max chart: {e}")
         return None

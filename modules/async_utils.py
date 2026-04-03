@@ -123,9 +123,9 @@ class AsyncProgressTracker:
             result = await coro
             self.update(self.total_steps)
             return result
-        except Exception as e:
+        except Exception:  # noqa: BLE001
             self.update(0)
-            raise e
+            raise
 
 
 def shutdown_executor():

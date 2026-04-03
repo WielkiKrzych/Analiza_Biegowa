@@ -67,7 +67,7 @@ def render_genetics_tab():
                 raw_data = uploaded.read().decode("utf-8")
                 profile = analyzer.parse_23andme(raw_data)
                 st.success("✅ Plik przeanalizowany!")
-            except Exception as e:
+            except (UnicodeDecodeError, ValueError) as e:
                 st.error(f"Błąd parsowania: {e}")
 
     # Display results

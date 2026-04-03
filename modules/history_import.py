@@ -131,7 +131,7 @@ def import_single_file(
         store.add_session(record)
         return True, f"✅ {filepath.name}: TSS={tss:.0f}, NP={np_val:.0f}W"
 
-    except Exception as e:
+    except (ValueError, KeyError, TypeError) as e:  # noqa: BLE001
         return False, f"❌ {filepath.name}: {str(e)}"
 
 

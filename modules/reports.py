@@ -345,7 +345,7 @@ def export_all_charts_as_png(
                 if exporter.can_export(ctx):
                     png_bytes = exporter.export(ctx)
                     zipf.writestr(exporter.filename, png_bytes)
-            except Exception as e:
+            except (ValueError, OSError, RuntimeError) as e:  # noqa: BLE001
                 # Loguj błąd ale kontynuuj z innymi wykresami
                 logger.error(f"Error exporting {exporter.filename}: {e}")
 

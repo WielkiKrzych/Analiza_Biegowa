@@ -64,7 +64,7 @@ def calculate_metrics(df_pl, cp_val: float) -> dict:
             excess = np.maximum(w - cp_val, 0.0)
             energy_j = np.sum(excess * dt)
             work_above_cp_kj = energy_j / 1000.0
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             df_above_cp = (
                 df_pl[df_pl["watts"] > cp_val] if "watts" in df_pl.columns else pd.DataFrame()
             )

@@ -72,7 +72,7 @@ def generate_all_ramp_figures(
                 fn(report_data, config, str(fpath))
             paths[name] = str(fpath)
             logger.info(f"Generated: {name}")
-        except Exception as e:
+        except (ValueError, OSError, RuntimeError) as e:  # noqa: BLE001
             logger.error(f"Failed to generate {name}: {e}")
             failed_charts.append(f"{name}: {e}")
 

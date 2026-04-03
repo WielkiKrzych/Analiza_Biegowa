@@ -199,7 +199,7 @@ def find_ve_breakpoint(
             try:
                 s, _, _, _, _ = stats.linregress(segment_power, segment_ve)
                 slopes.append((power[i + 10], s))
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.debug(f"Linregress failed in segment: {e}")
                 pass
 

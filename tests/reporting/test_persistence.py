@@ -10,9 +10,8 @@ Tests cover:
 - PDF index management
 """
 
-import json
 import csv
-from pathlib import Path
+import json
 
 import numpy as np
 import pytest
@@ -29,7 +28,6 @@ from modules.reporting.persistence_helpers import (
     _get_limiter_interpretation,
 )
 from modules.reporting.persistence_load import load_ramp_test_report
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

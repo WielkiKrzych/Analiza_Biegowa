@@ -101,7 +101,7 @@ def generate_radar_chart(
         thresholds = report_data.get("thresholds", {})
         vt2 = thresholds.get("vt2_result", thresholds.get("vt2", {}))
         vt2_ve = vt2.get("ve", 0)
-    except Exception:
+    except (KeyError, TypeError):
         pass
 
     if ve_col:

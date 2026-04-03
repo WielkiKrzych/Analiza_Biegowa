@@ -116,7 +116,7 @@ if MLX_AVAILABLE:
 
                 try:
                     model.update(weights)
-                except Exception:
+                except (ValueError, KeyError, TypeError):  # noqa: BLE001
                     model.parameters()
                     new_params = {}
 
@@ -131,7 +131,7 @@ if MLX_AVAILABLE:
                     model.update(new_params)
 
                 return True
-            except Exception as e:
+            except (OSError, ValueError, TypeError) as e:  # noqa: BLE001
                 if callback:
                     callback.on_error(e)
                 logger.warning(f"Model loading error: {e}")

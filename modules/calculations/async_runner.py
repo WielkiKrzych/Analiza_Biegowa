@@ -184,7 +184,7 @@ class AsyncCalculationManager:
         for name, future in self._futures.items():
             try:
                 results[name] = future.result(timeout=timeout)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Calculation '{name}' failed: {e}")
                 results[name] = None
         return results

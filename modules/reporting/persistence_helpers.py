@@ -75,7 +75,7 @@ def _check_source_file_exists(base_dir: str, source_file: str) -> bool:
                 existing_source = row.get("source_file", "")
                 if existing_source and existing_source == source_file:
                     return True
-    except Exception as e:
+    except (OSError, csv.Error) as e:
         logger.warning(f"Failed to check deduplication: {e}")
         return False
 

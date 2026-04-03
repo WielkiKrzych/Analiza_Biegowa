@@ -80,14 +80,14 @@ def cache_result(ttl: int = 3600, key_func: Optional[Callable] = None):
                 result = cache.get(cache_key, default=_SENTINEL)
                 if result is not _SENTINEL:
                     return result
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
             # Compute and cache
             result = func(*args, **kwargs)
             try:
                 cache.set(cache_key, result, expire=ttl)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
             return result
@@ -153,7 +153,7 @@ def _invalidate_cache(func_name: str, args: tuple, kwargs: dict, key_func: Optio
 
     try:
         cache.delete(cache_key)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 
@@ -172,7 +172,7 @@ def get_cache_stats() -> dict:
 
     try:
         return {"enabled": True, "size": len(cache), "volume": cache.volume()}
-    except Exception:
+    except Exception:  # noqa: BLE001
         return {"enabled": True, "error": "Could not get stats"}
 
 

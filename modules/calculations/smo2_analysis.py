@@ -111,7 +111,7 @@ def calculate_halftime_reoxygenation(
         # Try to parse time strings
         try:
             time = pd.to_timedelta(df["time"]).dt.total_seconds().values
-        except Exception:
+        except (ValueError, TypeError):
             time = np.arange(len(df))
     else:
         time = np.arange(len(df))

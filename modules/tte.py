@@ -215,7 +215,7 @@ def get_tte_history_from_db(days: int = 90, target_pct: float = 100.0) -> List[D
                             "tte_seconds": int(tte_val),
                         }
                     )
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, KeyError) as e:
         logger.warning(f"Error fetching TTE history: {e}")
 
     return history
@@ -260,7 +260,7 @@ def save_tte_to_db(filename: str, session_date: str, target_pct: float, tte_seco
             )
             conn.commit()
             return True
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError, KeyError) as e:
         logger.error(f"Error saving TTE to db: {e}")
         return False
 
@@ -289,7 +289,7 @@ def _compute_single_session_tte(
             results[str(int(pct))] = int(tte_val)
 
         return results
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.warning(f"TTE computation failed: {e}")
         return None
 
@@ -368,7 +368,7 @@ def batch_compute_tte_for_all_sessions(
                         else:
                             fail_count += 1
                             msg = f"❌ {fname}: Data error"
-                    except Exception as e:
+                    except (ValueError, KeyError, json.JSONDecodeError) as e:
                         fail_count += 1
                         msg = f"⚠️ {fname}: {str(e)}"
 
@@ -380,7 +380,7 @@ def batch_compute_tte_for_all_sessions(
                     conn.executemany("UPDATE sessions SET extra_metrics = ? WHERE id = ?", updates)
                     conn.commit()
 
-    except Exception as e:
+    except (sqlite3.Error, json.JSONDecodeError) as e:  # noqa: BLE001
         logger.error(f"Parallel TTE error: {e}")
 
     return success_count, fail_count

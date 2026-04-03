@@ -140,7 +140,7 @@ def process_uploaded_session(
 
         return df_plot, df_plot_resampled, metrics, None
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Cached session processing failed, falling back to uncached: %s", e)
         import io
 

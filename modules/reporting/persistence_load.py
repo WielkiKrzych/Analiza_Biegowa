@@ -59,6 +59,6 @@ def check_git_tracking(directory: str = "reports/ramp_tests"):
                 "```"
             )
 
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         # Git command failed or not available - ignore
         pass

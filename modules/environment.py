@@ -121,7 +121,7 @@ class EnvironmentService:
                 timestamp=datetime.now(),
             )
 
-        except Exception as e:
+        except (requests.RequestException, ValueError, KeyError) as e:
             logger.warning(f"Weather API error: {e}")
             return None
 

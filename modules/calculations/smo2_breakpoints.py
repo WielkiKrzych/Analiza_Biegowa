@@ -109,7 +109,7 @@ def detect_smo2_breakpoints_segmented(
                 best_bp1, best_bp2 = force_bp1, force_bp2
                 best_slopes = slopes
                 result.notes.append(f"Using forced breakpoints: {force_bp1}W, {force_bp2}W")
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 result.notes.append(f"Forced breakpoints failed: {e}")
         else:
             result.notes.append("Forced breakpoints too close, using auto-detection")
@@ -264,7 +264,7 @@ def _two_phase_breakpoint_search(
                     best_rss = rss
                     best_bp1, best_bp2 = bp1, bp2
                     best_slopes = slopes
-            except Exception:
+            except (ValueError, TypeError, np.linalg.LinAlgError):
                 continue
 
     if best_bp1 is None:
@@ -295,7 +295,7 @@ def _two_phase_breakpoint_search(
                     best_rss = rss
                     best_bp1, best_bp2 = bp1, bp2
                     best_slopes = slopes
-            except Exception:
+            except (ValueError, TypeError, np.linalg.LinAlgError):
                 continue
 
     return best_bp1, best_bp2, best_slopes, best_rss

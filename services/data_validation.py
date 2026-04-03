@@ -73,7 +73,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
                 df["watts"] = pd.to_numeric(df["watts"], errors="coerce")
                 if df["watts"].isna().all():
                     return False, "Kolumna 'watts' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except Exception:
+            except (ValueError, TypeError):
                 return False, "Kolumna 'watts' zawiera nieprawidłowe dane (nie-liczbowe)."
         max_w = df["watts"].max()
         if max_w > Config.VALIDATION_MAX_WATTS:
@@ -88,7 +88,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
                 df["heartrate"] = pd.to_numeric(df["heartrate"], errors="coerce")
                 if df["heartrate"].isna().all():
                     return False, "Kolumna 'heartrate' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except Exception:
+            except (ValueError, TypeError):
                 return False, "Kolumna 'heartrate' zawiera nieprawidłowe dane (nie-liczbowe)."
         max_hr = df["heartrate"].max()
         if max_hr > Config.VALIDATION_MAX_HR:
@@ -103,7 +103,7 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
                 df["cadence"] = pd.to_numeric(df["cadence"], errors="coerce")
                 if df["cadence"].isna().all():
                     return False, "Kolumna 'cadence' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except Exception:
+            except (ValueError, TypeError):
                 return False, "Kolumna 'cadence' zawiera nieprawidłowe dane (nie-liczbowe)."
         max_cad = df["cadence"].max()
         if max_cad > Config.VALIDATION_MAX_CADENCE:

@@ -55,5 +55,5 @@ def _estimate_cp_wprime(df_plot) -> Tuple[float, float]:
     try:
         slope, intercept, _, _, _ = stats.linregress(valid_durations, work_values)
         return slope, intercept
-    except Exception:
+    except (ValueError, TypeError):
         return 0, 0

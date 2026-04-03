@@ -50,7 +50,7 @@ def render_hr_tab(df):
                 return parts[0] * 60 + parts[1]
             if len(parts) == 1:
                 return parts[0]
-        except Exception:
+        except (ValueError, TypeError):
             return None
         return None
 

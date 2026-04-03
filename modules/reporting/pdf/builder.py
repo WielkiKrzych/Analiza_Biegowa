@@ -538,7 +538,7 @@ def build_ramp_pdf(
                     preserveAspectRatio=True,
                 )
                 canvas.restoreState()
-            except Exception:
+            except (OSError, IOError):
                 pass  # Silently skip if watermark fails
 
         # === FOOTER TEXT ===

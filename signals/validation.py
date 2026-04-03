@@ -310,7 +310,7 @@ def validate_signal(
                 "artifact_count": len(artifact_indices),
             }
 
-    except Exception as e:
+    except (ValueError, TypeError, KeyError) as e:  # noqa: BLE001
         # Catch any unexpected errors and convert to warning
         warnings.append(
             ValidationWarning(

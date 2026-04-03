@@ -716,14 +716,14 @@ def run_ramp_test_pipeline(
                 try:
                     idx = (df_p[p_col] - smo2_manual_lt1).abs().idxmin()
                     smo2_manual_lt1_hr = float(df_p.loc[idx, h_col])
-                except Exception as e:
+                except (ValueError, KeyError) as e:
                     logger.debug(f"Failed to find LT1 HR: {e}")
 
             if smo2_manual_lt2 is not None:
                 try:
                     idx = (df_p[p_col] - smo2_manual_lt2).abs().idxmin()
                     smo2_manual_lt2_hr = float(df_p.loc[idx, h_col])
-                except Exception as e:
+                except (ValueError, KeyError) as e:
                     logger.debug(f"Failed to find LT2 HR: {e}")
 
     result = build_result(

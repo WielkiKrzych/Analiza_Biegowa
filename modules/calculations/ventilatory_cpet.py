@@ -324,7 +324,7 @@ def _run_ve_only_mode(
         df_steps["ve_smooth"] = savgol_filter(
             df_steps["ve"].values, window_length=window, polyorder=2
         )
-    except Exception:
+    except (ValueError, TypeError):
         df_steps["ve_smooth"] = df_steps["ve"].rolling(3, center=True, min_periods=1).mean()
 
     has_hr = "hr" in df_steps.columns and df_steps["hr"].notna().sum() > 3
@@ -1116,7 +1116,7 @@ def _find_breakpoint_segmented(
                 best_sse = total_sse
                 best_idx = i
 
-        except Exception:
+        except (ValueError, TypeError):
             continue
 
     return best_idx
@@ -1134,5 +1134,5 @@ def _calculate_segment_slope(x: np.ndarray, y: np.ndarray) -> float:
     try:
         slope, _, _, _, _ = stats.linregress(x[mask], y[mask])
         return slope
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0

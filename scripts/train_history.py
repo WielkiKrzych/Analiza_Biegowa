@@ -130,7 +130,7 @@ def load_data(filepath: Path) -> pd.DataFrame:
             # CSV/TXT
             try:
                 df = pd.read_csv(filepath, low_memory=False)
-            except Exception:
+            except (pd.errors.ParserError, UnicodeDecodeError):
                 df = pd.read_csv(filepath, sep=";", low_memory=False)
 
         # Czyszczenie
@@ -142,7 +142,7 @@ def load_data(filepath: Path) -> pd.DataFrame:
             print(f"   -> ⚠️ Pusty plik: {filename}")
             return pd.DataFrame()
 
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, OSError) as e:  # noqa: BLE001
         print(f"   -> ⚠️ Błąd odczytu {filename}: {e}")
         return pd.DataFrame()
 
@@ -219,7 +219,7 @@ def update_history(hr_base, hr_thresh, filename: str):
         try:
             with open(HISTORY_FILE, "r") as f:
                 history = json.load(f)
-        except Exception:
+        except (FileNotFoundError, json.JSONDecodeError):
             pass
 
     entry = {
@@ -277,7 +277,7 @@ def save_to_session_store(filename: str, df: pd.DataFrame, hr_base, hr_thresh):
 
         store.add_session(record)
 
-    except Exception as e:
+    except (sqlite3.Error, ValueError, KeyError) as e:  # noqa: BLE001
         print(f"   -> ⚠️ Błąd zapisu do DB: {e}")
 
 
@@ -387,7 +387,7 @@ def train_loop():
 
             processed += 1
 
-        except Exception as e:
+        except (ValueError, KeyError, TypeError, RuntimeError) as e:  # noqa: BLE001
             print(f"   -> 💥 Błąd: {e}")
 
     # Zapisz model

@@ -45,11 +45,11 @@ def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
     try:
         # Próba użycia czcionki systemowej na macOS
         font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 48)
-    except Exception:
+    except OSError:
         try:
             # Fallback na inne systemowe czcionki
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48)
-        except Exception:
+        except OSError:
             font = ImageFont.load_default()
 
     # Oblicz pozycję (prawy dolny róg z marginesem)

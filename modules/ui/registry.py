@@ -153,13 +153,13 @@ class PluginRegistry:
                                 plugin_instance = attr()
                                 self.register(plugin_instance)
                                 count += 1
-                            except Exception as e:
+                            except (TypeError, ValueError, RuntimeError) as e:
                                 logger.debug(f"Could not instantiate {attr_name}: {e}")
 
-                except Exception as e:
+                except (ImportError, ModuleNotFoundError) as e:
                     logger.debug(f"Could not import {module_name}: {e}")
 
-        except Exception as e:
+        except (OSError, ImportError) as e:
             logger.warning(f"Plugin discovery failed: {e}")
 
         self._initialized = True

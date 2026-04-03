@@ -717,3 +717,34 @@ MIT License - zobacz plik `LICENSE` dla szczegółów.
 <p align="center">
   <sub>🏃 Zbudowane dla biegaczy | ⚡ Powered by Python | 📅 2026</sub>
 </p>
+
+---
+
+## 📋 Project Audit — Changelog
+
+### Phase Summary
+
+| Phase | Commit | Description | Tests |
+|-------|--------|-------------|-------|
+| 1 — Cleanup & Baseline | `e27db33` | Branch cleanup, deprecation warnings, script reorg, ruff/isort fix (52 issues), architecture docs | 66 |
+| 2.1 — layout.py split | `6b956c3` | 3027→2023 lines, re-exports from 6 split modules | 101 |
+| 2.2-2.6 — Module splits | `84f62cc` | Split ventilatory, summary, persistence, smo2_advanced, vent (5 modules, 17 new files) | 289 |
+| 3 — Tests & CI | `6b956c3` + `b912ce1` | 49 session_store, 120 signal, 20 persistence tests; GitHub Actions CI; coverage report | 321 |
+| 4 — Code Quality | `b912ce1` | Ruff: 873 issues auto-fixed (1009→136 remaining), import sorting, formatting | 321 |
+
+### Module Size Reductions (Phase 2)
+
+| Module | Before | After | New Files |
+|--------|--------|-------|-----------|
+| `layout.py` | 3027 lines | 2023 lines | 6 |
+| `ventilatory.py` | 1546 lines | 40 lines | 2 |
+| `summary.py` | 1600 lines | 323 lines | 4 |
+| `persistence.py` | 1111 lines | 37 lines | 5 |
+| `smo2_advanced.py` | 1056 lines | 25 lines | 3 |
+| `vent.py` | 988 lines | 25 lines | 5 |
+
+### Test Growth
+
+```
+66 → 101 → 289 → 321  (5x increase from baseline)
+```

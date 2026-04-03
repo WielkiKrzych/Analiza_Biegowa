@@ -103,7 +103,7 @@ def build_title_page(metadata: Dict[str, Any], styles: Dict) -> List:
 
             elements.append(Spacer(1, 50 * mm))  # Move back down
 
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"Could not load background image: {e}")
             # Fallback to solid color
             elements.append(Spacer(1, 30 * mm))
@@ -214,7 +214,7 @@ def build_title_page(metadata: Dict[str, Any], styles: Dict) -> List:
             elements.append(author_table)
             elements.append(Spacer(1, 5 * mm))  # Move back down
 
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"Could not create author banner: {e}")
             # Fallback to simple larger bold text
             elements.append(

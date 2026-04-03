@@ -113,7 +113,7 @@ class BackgroundTaskManager:
                     task.completed_at = datetime.now()
                     task.progress = 100
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             with self._lock:
                 task = self.tasks.get(task_id)
                 if task:
@@ -191,7 +191,7 @@ class BackgroundTaskManager:
         if future:
             try:
                 future.result(timeout=timeout)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         return self.get_task(task_id)

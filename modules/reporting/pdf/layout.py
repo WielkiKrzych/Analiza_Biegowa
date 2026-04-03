@@ -353,7 +353,7 @@ def build_page_thresholds(
             return val
         try:
             return f"{float(val):.0f}"
-        except Exception:
+        except (ValueError, TypeError):
             return str(val)
 
     data = [
@@ -546,7 +546,7 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
             return "---"
         try:
             return f"{float(val):.0f}"
-        except Exception:
+        except (ValueError, TypeError):
             return str(val)
 
     elements.append(Paragraph("<b>PROGI OKSYGENACJI MIĘŚNIOWEJ</b>", styles["subheading"]))
@@ -1841,7 +1841,7 @@ def _build_chart(chart_path: str, title: str, styles: Dict) -> List:
             logger.warning(f"PDF Layout: Chart file missing for '{title}' at path: {chart_path}")
             if title:
                 elements.append(Paragraph(f"<i>{title} — brak wykresu</i>", styles["small"]))
-    except Exception as e:
+    except (OSError, IOError) as e:
         logger.error(f"PDF Layout: Error embedding chart '{title}' from {chart_path}: {e}")
         elements.append(Paragraph(f"<i>{title} — błąd wczytywania</i>", styles["small"]))
     return elements

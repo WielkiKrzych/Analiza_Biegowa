@@ -157,14 +157,14 @@ def _read_raw_file(file) -> pd.DataFrame:
         # Try comma separator
         try:
             pl_df = pl.read_csv(io.BytesIO(content))
-        except Exception:
+        except (ValueError, TypeError):
             # Try semicolon
             pl_df = pl.read_csv(io.BytesIO(content), separator=";")
 
         df_pd = pl_df.to_pandas()
         logger.debug("Loaded data with Polars (fast mode)")
         return df_pd
-    except Exception as e:
+    except (ImportError, OSError, ValueError) as e:
         logger.debug(f"Polars load failed, using Pandas: {e}")
         # Pandas fallback with pyarrow engine for better performance
         try:

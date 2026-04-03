@@ -19,7 +19,7 @@ class ThemeManager:
         try:
             with open(css_file) as f:
                 st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-        except Exception as e:
+        except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             st.error(f"Failed to load CSS: {e}")
 
     @staticmethod

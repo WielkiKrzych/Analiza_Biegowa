@@ -37,7 +37,7 @@ def render_hrv_tab(df_clean_pl: Any) -> None:
                     st.session_state.df_dfa = result_df
                     st.session_state.dfa_error = error_msg
                     st.rerun()
-                except Exception as e:
+                except (ValueError, TypeError, RuntimeError) as e:
                     st.error(f"Wystąpił błąd krytyczny algorytmu: {e}")
 
         if st.session_state.dfa_error and col_btn2.button("🧹 Wyczyść błędy"):

@@ -170,7 +170,7 @@ def save_ramp_test_report(
                 smo2_metrics = analyze_smo2_advanced(analysis_df)
                 data["smo2_advanced"] = format_smo2_metrics_for_report(smo2_metrics)
 
-            except Exception as e:
+            except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
                 logger.warning(f"[SmO2 Advanced] Analysis failed: {e}")
 
         # 1.3 Run cardiovascular analysis if HR data available
@@ -188,7 +188,7 @@ def save_ramp_test_report(
                 cardio_metrics = analyze_cardiovascular(analysis_df)
                 data["cardio_advanced"] = format_cardio_metrics_for_report(cardio_metrics)
 
-            except Exception as e:
+            except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
                 logger.warning(f"[Cardio Advanced] Analysis failed: {e}")
 
         # 1.4 Run ventilation analysis if VE data available
@@ -203,7 +203,7 @@ def save_ramp_test_report(
                 vent_metrics = analyze_ventilation(analysis_df)
                 data["vent_advanced"] = format_vent_metrics_for_report(vent_metrics)
 
-            except Exception as e:
+            except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
                 logger.info(f"[Vent Advanced] Analysis failed: {e}")
 
         # 1.5 Run biomechanical occlusion analysis if torque and SmO2 available
@@ -267,7 +267,7 @@ def save_ramp_test_report(
                         f"[Biomech] Occlusion Index: {occlusion.occlusion_index:.3f} ({occlusion.classification})"
                     )
 
-            except Exception as e:
+            except (ValueError, KeyError, ImportError, IndexError) as e:  # noqa: BLE001
                 logger.warning(f"[Biomech Occlusion] Analysis failed: {e}")
 
             # 1.4.2 Thermoregulation Analysis
@@ -308,7 +308,7 @@ def save_ramp_test_report(
                     logger.info(
                         f"[Thermal] Max Core: {thermo.max_core_temp:.1f}C, Delta/10min: {thermo.delta_per_10min:.2f}C"
                     )
-            except Exception as e:
+            except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
                 logger.warning(f"[Thermoregulation] Analysis failed: {e}")
 
         # === CARDIAC DRIFT ANALYSIS ===
@@ -346,7 +346,7 @@ def save_ramp_test_report(
                 logger.info(
                     f"[Cardiac Drift] EF: {drift_profile.ef_start:.2f} → {drift_profile.ef_end:.2f} ({drift_profile.delta_ef_pct:+.1f}%), Type: {drift_profile.drift_type}"
                 )
-        except Exception as e:
+        except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
             logger.warning(f"[Cardiac Drift] Analysis failed: {e}")
 
     # 1.5 Calculate VO2max using same method as UI (pandas rolling)
@@ -397,7 +397,7 @@ def save_ramp_test_report(
                         f"[VO2max] Calculated: {vo2max_est:.1f} ml/kg/min from MMP5={mmp_5min:.1f}W (method: rolling_300s_mean_max)"
                     )
 
-        except Exception as e:
+        except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
             logger.warning(f"[VO2max] Calculation failed: {e}")
 
     # 1.6 Build CANONICAL PHYSIOLOGY (Single Source of Truth)
@@ -449,7 +449,7 @@ def save_ramp_test_report(
 
             data["metabolic_strategy"] = formatted
 
-    except Exception as e:
+    except (ValueError, KeyError, ImportError) as e:  # noqa: BLE001
         logger.info(f"[Canonical Physio / Metabolic Engine] Analysis failed: {e}")
         import traceback
 
@@ -527,7 +527,7 @@ def save_ramp_test_report(
                         "limiting_factor": limiting_factor,
                         "interpretation": _get_limiter_interpretation(limiting_factor),
                     }
-    except Exception as e:
+    except (ValueError, KeyError, IndexError) as e:  # noqa: BLE001
         logger.info(f"[Limiter Analysis] Calculation failed: {e}")
 
     # 2. Enrich metadata
@@ -642,7 +642,7 @@ def save_ramp_test_report(
                 source_df=source_df,
                 manual_overrides=manual_overrides,
             )
-        except Exception as e:
+        except (ValueError, OSError, ImportError) as e:  # noqa: BLE001
             # PDF failure does NOT affect JSON or index
             logger.warning(f" PDF generation failed for {session_id}: {e}")
 
@@ -656,7 +656,7 @@ def save_ramp_test_report(
             source_file,
         )
         logger.info(f"Ramp Test indexed: {session_id}")
-    except Exception as e:
+    except (OSError, ValueError) as e:  # noqa: BLE001
         logger.warning(f" Failed to update report index: {e}")
 
     return {

@@ -78,7 +78,7 @@ def _auto_generate_pdf(
         docx_path = pdf_path.with_suffix(".docx")
         build_ramp_docx(report_data, figure_paths, str(docx_path))
         logger.info(f"Ramp Test DOCX generated: {docx_path}")
-    except Exception as e:
+    except (ImportError, OSError, ValueError) as e:
         logger.error(f"DOCX generation failed: {e}")
 
     logger.info(f"Ramp Test PDF generated: {pdf_path}")
@@ -133,7 +133,7 @@ def _update_index(
                 writer.writeheader()
             writer.writerow(row)
         logger.info(f"Ramp Test indexed: {row['session_id']}")
-    except Exception as e:
+    except (OSError, csv.Error) as e:
         logger.error(f" Failed to write to index at {index_path}: {e}")
 
 
@@ -177,7 +177,7 @@ def update_index_pdf_path(base_dir: str, session_id: str, pdf_path: str):
             writer.writeheader()
             writer.writerows(rows)
         logger.info(f"Updated PDF path for session {session_id}")
-    except Exception as e:
+    except (OSError, csv.Error) as e:
         logger.error(f" Failed to update index at {index_path}: {e}")
 
 
@@ -246,7 +246,7 @@ def generate_and_save_pdf(
         docx_path = pdf_path.with_suffix(".docx")
         build_ramp_docx(report_data, figure_paths, str(docx_path))
         logger.info(f"DOCX generated: {docx_path}")
-    except Exception as e:
+    except (ImportError, OSError, ValueError) as e:
         logger.info(f"DOCX failure: {e}")
 
     # Update index with PDF path

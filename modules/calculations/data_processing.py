@@ -89,7 +89,7 @@ def process_data(df: Union[pd.DataFrame, Any]) -> pd.DataFrame:
         df_numeric = df_pd.select_dtypes(include=[np.number])
         df_resampled = df_numeric.resample("1s").mean()
         df_resampled = df_resampled.interpolate(method="linear").ffill().bfill()
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         logger.warning(f"Resampling failed, using raw data: {e}")
         df_resampled = df_pd
 

@@ -431,7 +431,7 @@ def calculate_dynamic_dfa_v2(
 
         return results, None
 
-    except Exception as e:
+    except (ValueError, TypeError, RuntimeError) as e:  # noqa: BLE001
         return None, f"Błąd obliczeń Numba: {e}"
 
 

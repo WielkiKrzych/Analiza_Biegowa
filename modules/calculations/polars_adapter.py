@@ -110,7 +110,7 @@ def ensure_polars(df: Any) -> Optional["pl.DataFrame"]:
 
     try:
         return to_polars(df)
-    except (TypeError, Exception) as e:
+    except (TypeError, ValueError, ImportError) as e:
         logger.debug(f"Could not convert to Polars: {e}")
         return None
 
@@ -123,7 +123,7 @@ def ensure_pandas(df: Any) -> pd.DataFrame:
     """
     try:
         return to_pandas(df)
-    except (TypeError, Exception) as e:
+    except (TypeError, ValueError, ImportError) as e:
         logger.warning(f"Could not convert to Pandas: {e}")
         return pd.DataFrame()
 
@@ -151,7 +151,7 @@ def fast_rolling_mean(df: DataFrame, column: str, window: int, min_periods: int 
                 .flatten()
             )
             return result
-        except Exception:
+        except (ValueError, TypeError, ImportError):
             pass
 
     # Pandas fallback
@@ -187,7 +187,7 @@ def fast_groupby_agg(
 
             result = pl_df.group_by(group_col).agg(agg_expr)
             return result.to_pandas()
-        except Exception:
+        except (ValueError, TypeError, ImportError):
             pass
 
     # Pandas fallback
@@ -214,7 +214,7 @@ def fast_filter(
 
             result = pl_df.filter(expr)
             return result.to_pandas()
-        except Exception:
+        except (ValueError, TypeError, ImportError):
             pass
 
     # Pandas fallback
@@ -236,7 +236,7 @@ def fast_read_csv(path: str, separator: str = ",", **kwargs) -> pd.DataFrame:
         try:
             pl_df = pl.read_csv(path, separator=separator, **kwargs)
             return pl_df.to_pandas()
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.debug(f"Polars CSV read failed, using Pandas: {e}")
 
     return pd.read_csv(path, sep=separator, **kwargs)
@@ -268,7 +268,7 @@ def fast_normalized_power(df: DataFrame, power_column: str = "watts", window: in
 
             # 4th root of mean
             return float(np.power(np.nanmean(pow4), 0.25))
-        except Exception:
+        except (ValueError, TypeError, ImportError):
             pass
 
     # Pandas fallback
@@ -298,7 +298,7 @@ def fast_power_duration_curve(
 
         # Handle NaN values - fill with 0 for rolling mean calculation
         watts = np.nan_to_num(watts, nan=0.0).astype(np.float64)
-    except Exception:
+    except (ValueError, TypeError, KeyError, ImportError):
         # Return empty results if data extraction fails
         return {dur: None for dur in durations}
 

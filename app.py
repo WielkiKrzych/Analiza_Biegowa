@@ -70,7 +70,7 @@ class TabRegistry:
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
             return func(*args, **kwargs)
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.warning(f"Tab {tab_name} failed: {e}")
             with st.expander(f"⚠️ Błąd w zakładce {tab_name}", expanded=True):
                 st.error(f"Nie udało się załadować zakładki: {tab_name}")
@@ -189,10 +189,10 @@ if uploaded_file is not None:
                     auto_pred = predict_only(df_plot_resampled)
                     if auto_pred is not None:
                         df_plot_resampled["ai_hr"] = auto_pred
-                except Exception as e:
+                except (ValueError, TypeError, RuntimeError) as e:
                     logger.warning(f"AI prediction failed: {e}")
 
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, OSError) as e:
             st.error(f"Błąd wczytywania pliku: {e}")
             st.stop()
 
@@ -211,7 +211,7 @@ if uploaded_file is not None:
             uploaded_file.name, df_plot, metrics, np_header, if_header, tss_header
         )
         SessionStore().add_session(SessionRecord(**session_data))
-    except Exception as e:
+    except (sqlite3.Error, ValueError, KeyError) as e:  # noqa: BLE001
         logger.warning(f"Auto-save failed: {e}")
 
     # Sticky Header

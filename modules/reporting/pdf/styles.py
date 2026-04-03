@@ -77,7 +77,7 @@ def register_fonts():
         )
 
         return "DejaVuSans", "DejaVuSans-Bold", "DejaVuSans-Italic", "DejaVuSans-BoldItalic"
-    except Exception:
+    except (OSError, IOError):
         # Fallback to standard fonts if registration fails
         return "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"
 
