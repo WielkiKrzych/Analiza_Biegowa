@@ -26,11 +26,8 @@ from reportlab.platypus import PageBreak, SimpleDocTemplate
 
 from ...calculations.executive_summary import generate_executive_summary
 from .layout import (
-    build_contact_footer,
     build_page_cardiovascular,
     build_page_cover,
-    build_page_executive_summary,
-    build_page_executive_verdict,
     build_page_interpretation,
     build_page_limitations,
     build_page_limiter_radar,
@@ -42,9 +39,11 @@ from .layout import (
     build_page_thermal,
     build_page_thresholds,
     build_page_ventilation,
-    build_table_of_contents,
-    build_title_page,
 )
+from .layout_executive_summary import build_page_executive_summary
+from .layout_executive_verdict import build_page_executive_verdict
+from .layout_tables import build_table_of_contents
+from .layout_title import build_contact_footer, build_title_page
 from .styles import COLORS, FONT_FAMILY, PAGE_SIZE, PDFConfig, create_styles
 
 # Setup logger

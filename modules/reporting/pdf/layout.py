@@ -6,6 +6,9 @@ Each page is a separate function.
 No physiological calculations - only layout and formatting.
 
 Per specification: methodology/ramp_test/10_pdf_layout.md
+
+This module re-exports from split submodules and contains remaining
+page builder functions that have not yet been extracted.
 """
 import logging
 import os
@@ -26,6 +29,60 @@ from .styles import (
     get_table_style,
 )
 
+# Re-export from split modules for backward compatibility
+from .layout_executive_summary import build_page_executive_summary  # noqa: F401
+from .layout_executive_verdict import build_page_executive_verdict  # noqa: F401
+from .layout_formatters import (  # noqa: F401
+    build_colored_box,
+    build_section_description,
+)
+from .layout_tables import (  # noqa: F401
+    build_chapter_header,
+    build_table_of_contents,
+)
+from .layout_title import (  # noqa: F401
+    build_contact_footer,
+    build_title_page,
+)
+
+__all__ = [
+    # From layout_executive_summary
+    "build_page_executive_summary",
+    # From layout_executive_verdict
+    "build_page_executive_verdict",
+    # From layout_formatters
+    "build_colored_box",
+    "build_section_description",
+    # From layout_tables
+    "build_table_of_contents",
+    "build_chapter_header",
+    # From layout_title
+    "build_title_page",
+    "build_contact_footer",
+    # Remaining functions defined below
+    "build_page_cover",
+    "build_page_test_profile",
+    "build_page_thresholds",
+    "build_page_smo2",
+    "build_page_pdc",
+    "build_page_interpretation",
+    "build_page_cardiovascular",
+    "build_page_ventilation",
+    "build_page_metabolic_engine",
+    "build_page_limiter_radar",
+    "build_page_zones",
+    "build_page_limitations",
+    "build_page_theory",
+    "build_page_protocol",
+    "build_page_thermal",
+    "build_page_biomech",
+    "build_page_drift",
+    "build_page_kpi_dashboard",
+    "build_page_drift_kpi",
+    "build_page_limiters",
+    "build_page_extra",
+]
+
 # Setup logger
 logger = logging.getLogger("Tri_Dashboard.PDFLayout")
 
@@ -38,40 +95,6 @@ PREMIUM_COLORS = {
     "white": HexColor("#FFFFFF"),
     "light_gray": HexColor("#BDC3C7"),
 }
-
-
-# ============================================================================
-# PREMIUM HELPER FUNCTIONS
-# ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-# ============================================================================
-# TABLE OF CONTENTS (SPIS TREŚCI) - HIERARCHICAL
-# ============================================================================
-
-
-
-
-
-# ============================================================================
-# PAGE 0: EXECUTIVE PHYSIO SUMMARY (NEW FIRST PAGE)
-# ============================================================================
-
-
-
-# ============================================================================
-# PAGE 2: EXECUTIVE VERDICT (1-PAGE DECISION SUMMARY)
-# ============================================================================
-
 
 
 # ============================================================================
@@ -1156,31 +1179,46 @@ def build_page_ventilation(vent_data: Dict[str, Any], styles: Dict) -> List:
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
     ]))
     elements.append(pattern_table)
-    elements.append(Spacer(1, 4 * mm))
+    elements.append(Spacer(1, 6 * mm))
 
     # ==========================================================================
-    # 3. CONTROL VERDICT
+    # 3. VE BREAKPOINT
     # ==========================================================================
 
-    elements.append(Paragraph("<b>WERDYKT KONTROLI WENTYLACJI</b>", styles["subheading"]))
+    if ve_bp:
+        elements.append(Paragraph("<b>PUNKT ZAŁAMANIA WENTYLACJI</b>", styles["subheading"]))
+        elements.append(Spacer(1, 2 * mm))
+        elements.append(Paragraph(
+            f"Wentylacja przyspiesza gwałtownie powyżej <b>{ve_bp:.0f} W</b>. "
+            "Powyżej tej mocy oddychasz coraz ciężej przy każdym dodatkowym wacie.",
+            styles["body"]
+        ))
+        elements.append(Spacer(1, 6 * mm))
+
+    # ==========================================================================
+    # 4. CONTROL STATUS VERDICT
+    # ==========================================================================
+
+    control_colors = {"efficient": "#2ECC71", "compensating": "#F39C12", "decompensating": "#E74C3C", "unknown": "#7F8C8D"}
+    control_names = {"efficient": "EFEKTYWNA KONTROLA", "compensating": "KONTROLA KOMPENSACYJNA", "decompensating": "UTRATA KONTROLI", "unknown": "NIEOKREŚLONY"}
+    control_icons = {"efficient": "✓", "compensating": "⚠", "decompensating": "✗", "unknown": "?"}
+
+    elements.append(Paragraph("<b>WERDYKT KONTROLI METABOLICZNEJ</b>", styles["subheading"]))
     elements.append(Spacer(1, 2 * mm))
 
-    status_colors = {"controlled": "#2ECC71", "compensatory": "#F39C12", "unstable": "#E74C3C", "unknown": "#7F8C8D"}
-    status_names = {"controlled": "KONTROLOWANY", "compensatory": "KOMPENSACYJNY", "unstable": "NIESTABILNY", "unknown": "NIEOKREŚLONY"}
-    status_icons = {"controlled": "✓", "compensatory": "⚠", "unstable": "✗", "unknown": "?"}
-
-    st_color = HexColor(status_colors.get(status, "#7F8C8D"))
-    st_name = status_names.get(status, "NIEOKREŚLONY")
-    st_icon = status_icons.get(status, "?")
+    ct_color = HexColor(control_colors.get(status, "#7F8C8D"))
+    ct_name = control_names.get(status, "NIEOKREŚLONY")
+    ct_icon = control_icons.get(status, "?")
 
     verdict_content = [
-        Paragraph(f"<font color='white'><b>{st_icon} {st_name}</b></font>", styles["center"]),
+        Paragraph(f"<font color='white'><b>{ct_icon} {ct_name}</b></font>", styles["center"]),
         Paragraph(f"<font size='10' color='white'>pewność: {confidence:.0%}</font>", styles["center"]),
     ]
     verdict_table = Table([[verdict_content]], colWidths=[170 * mm])
     verdict_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), st_color),
+        ('BACKGROUND', (0, 0), (-1, -1), ct_color),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
     ]))
@@ -1188,37 +1226,25 @@ def build_page_ventilation(vent_data: Dict[str, Any], styles: Dict) -> List:
     elements.append(Spacer(1, 3 * mm))
 
     if interpretation:
-        for line in interpretation.split('\n')[:2]:
+        for line in interpretation.split('\n')[:3]:
             elements.append(Paragraph(line, styles["body"]))
-
-    if ve_bp:
-        elements.append(Paragraph(f"<b>VE Breakpoint:</b> {ve_bp:.0f}W – punkt załamania kontroli wentylacyjnej", styles["body"]))
-
     elements.append(Spacer(1, 6 * mm))
 
     # ==========================================================================
-    # 4. DECISION CARDS
+    # 5. DECISION CARDS
     # ==========================================================================
 
     if recommendations:
-        elements.append(Paragraph("<b>DECYZJE TRENINGOWE WENTYLACJI</b>", styles["subheading"]))
+        elements.append(Paragraph("<b>DECYZJE TRENINGOWE</b>", styles["subheading"]))
         elements.append(Spacer(1, 3 * mm))
 
-        type_colors = {"TRENINGOWA": "#3498DB", "TECHNICZNA": "#9B59B6", "WYDAJNOŚĆ": "#2ECC71", "INTENSYWNOŚĆ": "#1ABC9C", "PILNA": "#E74C3C", "DIAGNOSTYKA": "#F39C12", "MEDYCZNA": "#E74C3C"}
-
         for rec in recommendations[:3]:
-            rec_type = rec.get("type", "TRENINGOWA")
             action = rec.get("action", "---")
             expected = rec.get("expected", "---")
-            risk = rec.get("risk", "low")
-
-            type_color = type_colors.get(rec_type, "#7F8C8D")
-            risk_color = "#2ECC71" if risk == "low" else ("#F39C12" if risk == "medium" else "#E74C3C")
-            risk_label = "NISKIE" if risk == "low" else ("ŚREDNIE" if risk == "medium" else "WYSOKIE")
 
             card_content = [
-                Paragraph(f"<font size='9' color='{type_color}'><b>[{rec_type}]</b></font> {action}", styles["body"]),
-                Paragraph(f"<font size='8' color='#27AE60'>Spodziewany efekt: {expected}</font> | <font size='8' color='{risk_color}'>Ryzyko: {risk_label}</font>", styles["body"]),
+                Paragraph(f"<font size='10'><b>{action}</b></font>", styles["body"]),
+                Paragraph(f"<font size='8' color='#27AE60'>Spodziewany efekt: {expected}</font>", styles["body"]),
             ]
             card_table = Table([[card_content]], colWidths=[170 * mm])
             card_table.setStyle(TableStyle([
@@ -1235,1762 +1261,732 @@ def build_page_ventilation(vent_data: Dict[str, Any], styles: Dict) -> List:
 
 
 # ============================================================================
-# PAGE: METABOLIC ENGINE & TRAINING STRATEGY (PREMIUM)
+# PAGE: METABOLIC ENGINE DIAGNOSTIC (PREMIUM)
 # ============================================================================
 
 def build_page_metabolic_engine(metabolic_data: Dict[str, Any], styles: Dict) -> List:
-    """Build Metabolic Engine & Training Strategy page - PREMIUM."""
+    """Build Metabolic Engine Diagnostic page - PREMIUM."""
     from reportlab.lib.colors import HexColor
 
     elements = []
 
-    profile = metabolic_data.get("profile", {})
-    block = metabolic_data.get("training_block", {})
-
-    # ==========================================================================
-    # HEADER
-    # ==========================================================================
     elements.append(Paragraph(
-        "<font size='14'>2.4 SILNIK METABOLICZNY</font>",
+        "<font size='14'>3.4 SILNIK METABOLICZNY</font>",
         styles['center']
     ))
     elements.append(Paragraph(
-        "<font size='10' color='#7F8C8D'>Profil metaboliczny i strategia 6-8 tygodni</font>",
+        "<font size='10' color='#7F8C8D'>Analiza substratów energetycznych i efektywności utylizacji</font>",
         styles['center']
     ))
     elements.append(Spacer(1, 6 * mm))
 
-    # ==========================================================================
-    # 1. METABOLIC PROFILE PANEL
-    # ==========================================================================
+    fat_max = metabolic_data.get("fat_max_watts", 0)
+    fat_max_pct = metabolic_data.get("fat_max_pct", 0)
+    cho_cross = metabolic_data.get("cho_crossover_watts")
+    zone_fat = metabolic_data.get("fat_burning_zone", {})
+    zone_cho = metabolic_data.get("cho_zone", {})
+    status = metabolic_data.get("metabolic_status", "unknown")
+    confidence = metabolic_data.get("metabolic_confidence", 0)
+    interpretation = metabolic_data.get("interpretation", "")
+    recommendations = metabolic_data.get("recommendations", [])
 
-    vo2max = profile.get("vo2max", 0)
-    vlamax = profile.get("vlamax", 0)
-    cp = profile.get("cp_watts", 0)
-    ratio = profile.get("vo2max_vlamax_ratio", 0)
-    phenotype = profile.get("phenotype", "unknown")
-    vo2max_source = profile.get("vo2max_source", "unknown")
-    data_quality = profile.get("data_quality", "unknown")
-
-    elements.append(Paragraph("<b>PROFIL METABOLICZNY</b>", styles["subheading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    def build_metric_card(title, value, unit, color, subtitle=""):
+    def build_card(title, value, unit, interp, color):
         card_content = [
             Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
             Paragraph(f"<font size='14' color='{color}'><b>{value}</b></font>", styles["center"]),
             Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+            Paragraph(f"<font size='7'>{interp}</font>", styles["center"]),
         ]
-        if subtitle:
-            card_content.append(Paragraph(f"<font size='7' color='#95A5A6'>{subtitle}</font>", styles["center"]))
         card_table = Table([[card_content]], colWidths=[42 * mm])
         card_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8F9FA")),
             ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
         return card_table
 
-    # VO2max card - handle n/a and show source
-    if vo2max and vo2max > 0:
-        vo2_color = "#2ECC71" if vo2max >= 60 else ("#F39C12" if vo2max >= 50 else "#E74C3C")
-        vo2_val = f"{vo2max:.0f}"
-        vo2_source_label = {"acsm_5min": "ACSM", "acsm_cp": "~CP", "metrics_direct": "test", "ramp_test_peak": "test", "intervals_api": "API"}.get(vo2max_source, "")
+    fat_color = "#2ECC71" if fat_max_pct > 60 else ("#F39C12" if fat_max_pct > 40 else "#E74C3C")
+    fat_interp = "Wysoka" if fat_max_pct > 60 else ("Umiarkowana" if fat_max_pct > 40 else "Niska")
+    card1 = build_card("FATMAX", f"{fat_max:.0f}", "W", f"{fat_max_pct:.0f}% tłuszczów", fat_color)
+
+    if cho_cross:
+        cho_color = "#2ECC71" if cho_cross > 200 else ("#F39C12" if cho_cross > 150 else "#E74C3C")
+        cho_interp = "Późny crossover" if cho_cross > 200 else ("Wczesny" if cho_cross > 150 else "Bardzo wczesny")
+        card2 = build_card("CHO CROSSOVER", f"{cho_cross:.0f}", "W", cho_interp, cho_color)
     else:
-        vo2_color = "#7F8C8D"
-        vo2_val = "n/a"
-        vo2_source_label = "brak danych"
+        card2 = build_card("CHO CROSSOVER", "---", "W", "Brak danych", "#7F8C8D")
 
-    card1 = build_metric_card("VO₂max", vo2_val, "ml/kg/min", vo2_color, vo2_source_label)
+    fat_zone_str = f"{zone_fat.get('low', 0):.0f}–{zone_fat.get('high', 0):.0f}"
+    card3 = build_card("STREFA TŁUSZCZÓW", fat_zone_str, "W", "Optimal fat burn", "#3498DB")
 
-    vla_color = "#2ECC71" if vlamax < 0.4 else ("#F39C12" if vlamax < 0.6 else "#E74C3C")
-    card2 = build_metric_card("VLaMax", f"{vlamax:.2f}", "mmol/L/s", vla_color, "estymowany")
-    card3 = build_metric_card("CP / FTP", f"{cp:.0f}", "W", "#3498DB", "obliczone")
-
-    # Ratio card - show n/a if insufficient data
-    if ratio and ratio > 0 and vo2max > 0:
-        ratio_color = "#2ECC71" if ratio > 130 else ("#F39C12" if ratio > 90 else "#E74C3C")
-        ratio_val = f"{ratio:.0f}"
-    else:
-        ratio_color = "#7F8C8D"
-        ratio_val = "n/a"
-    card4 = build_metric_card("VO₂/VLa RATIO", ratio_val, "(ratio)", ratio_color, "oszacowane")
+    cho_zone_str = f"{zone_cho.get('low', 0):.0f}–{zone_cho.get('high', 0):.0f}"
+    card4 = build_card("STREFA CHO", cho_zone_str, "W", "Dominant CHO", "#E74C3C")
 
     cards_row = Table([[card1, card2, card3, card4]], colWidths=[44 * mm] * 4)
-    cards_row.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Align cards to top for consistent height
-    ]))
+    cards_row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
     elements.append(cards_row)
-    elements.append(Spacer(1, 3 * mm))
-
-    # Phenotype badge
-    phenotype_colors = {"diesel": "#27AE60", "allrounder": "#3498DB", "puncher": "#F39C12", "sprinter": "#E74C3C"}
-    phenotype_names = {"diesel": "DIESEL (Aerobic Dominant)", "allrounder": "ALLROUNDER", "puncher": "PUNCHER", "sprinter": "SPRINTER (Glycolytic)"}
-
-    phenotype_badge = Paragraph(
-        f"<font color='white'><b>PHENOTYPE: {phenotype_names.get(phenotype, phenotype.upper())}</b></font>",
-        styles["center"]
-    )
-    phenotype_table = Table([[phenotype_badge]], colWidths=[170 * mm])
-    phenotype_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(phenotype_colors.get(phenotype, "#7F8C8D"))),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(phenotype_table)
     elements.append(Spacer(1, 6 * mm))
 
-    # ==========================================================================
-    # 2. LIMITER DIAGNOSIS
-    # ==========================================================================
+    # Verdict
+    status_colors = {"efficient": "#2ECC71", "compensating": "#F39C12", "decompensating": "#E74C3C", "unknown": "#7F8C8D"}
+    status_names = {"efficient": "EFEKTYWNY", "compensating": "KOMPENSUJĄCY", "decompensating": "DEKOMPENSUJĄCY", "unknown": "NIEOKREŚLONY"}
 
-    limiter = profile.get("limiter", "unknown")
-    limiter_conf = profile.get("limiter_confidence", 0)
-
-    elements.append(Paragraph("<b>DIAGNOZA OGRANICZEŃ</b>", styles["subheading"]))
+    elements.append(Paragraph("<b>WERDYKT SILNIKA METABOLICZNEGO</b>", styles["subheading"]))
     elements.append(Spacer(1, 2 * mm))
 
-    limiter_colors = {"aerobic": "#E74C3C", "glycolytic": "#F39C12", "mixed": "#3498DB", "unknown": "#7F8C8D"}
-    limiter_names = {"aerobic": "WYDOLNOŚĆ TLENOWA", "glycolytic": "DOMINACJA GLIKOLITYCZNA", "mixed": "MIESZANY / ZBALANSOWANY", "unknown": "NIEOKREŚLONY"}
+    st_color = HexColor(status_colors.get(status, "#7F8C8D"))
+    st_name = status_names.get(status, "NIEOKREŚLONY")
 
-    limiter_content = [
-        Paragraph(f"<font color='white'><b>{limiter_names.get(limiter, 'UNDEFINED')}</b></font>", styles["center"]),
-        Paragraph(f"<font size='10' color='white'>{limiter_conf:.0%} confidence</font>", styles["center"]),
+    verdict_content = [
+        Paragraph(f"<font color='white'><b>{st_name}</b></font>", styles["center"]),
+        Paragraph(f"<font size='10' color='white'>pewność: {confidence:.0%}</font>", styles["center"]),
     ]
-    limiter_table = Table([[limiter_content]], colWidths=[170 * mm])
-    limiter_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(limiter_colors.get(limiter, "#7F8C8D"))),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    verdict_table = Table([[verdict_content]], colWidths=[170 * mm])
+    verdict_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), st_color),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
     ]))
-    elements.append(limiter_table)
-    elements.append(Spacer(1, 4 * mm))
-
-    # ==========================================================================
-    # 3. STRATEGY VERDICT
-    # ==========================================================================
-
-    target = profile.get("adaptation_target", "unknown")
-    strategy_interp = profile.get("strategy_interpretation", "")
-
-    elements.append(Paragraph("<b>PRIMARY ADAPTATION TARGET</b>", styles["subheading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    target_colors = {"increase_vo2max": "#E74C3C", "lower_vlamax": "#27AE60", "maintain_balance": "#3498DB"}
-    target_names = {"increase_vo2max": "↑ ZWIĘKSZ VO₂max", "lower_vlamax": "↓ OBNIŻ VLaMax", "maintain_balance": "↔ UTRZYMAJ BALANS"}
-
-    target_badge = Paragraph(
-        f"<font color='white'><b>{target_names.get(target, target.upper())}</b></font>",
-        styles["center"]
-    )
-    target_table = Table([[target_badge]], colWidths=[170 * mm])
-    target_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(target_colors.get(target, "#7F8C8D"))),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(target_table)
+    elements.append(verdict_table)
     elements.append(Spacer(1, 3 * mm))
 
-    if strategy_interp:
-        # Skip first line which duplicates target name in badge above
-        lines = strategy_interp.split('\n')
-        for line in lines[1:4]:  # Start from line 2, take up to 3 lines
+    if interpretation:
+        for line in interpretation.split('\n')[:3]:
             elements.append(Paragraph(line, styles["body"]))
     elements.append(Spacer(1, 6 * mm))
 
-    # ==========================================================================
-    # 4. TRAINING BLOCK
-    # ==========================================================================
+    if recommendations:
+        elements.append(Paragraph("<b>DECYZJE TRENINGOWE</b>", styles["subheading"]))
+        elements.append(Spacer(1, 3 * mm))
 
-    sessions = block.get("sessions", [])
-    block_name = block.get("name", "Training Block")
-    weeks = block.get("duration_weeks", 6)
+        for rec in recommendations[:3]:
+            action = rec.get("action", "---")
+            expected = rec.get("expected", "---")
 
-    elements.append(Paragraph(f"<b>BLOK TRENINGOWY: {block_name}</b>", styles["subheading"]))
-    elements.append(Paragraph(f"<font size='9' color='#7F8C8D'>{weeks} tygodni | {block.get('primary_focus', '')}</font>", styles["body"]))
-    elements.append(Spacer(1, 3 * mm))
-
-    for i, session in enumerate(sessions[:4]):
-        name = session.get("name", "---")
-        power = session.get("power_range", "---")
-        duration = session.get("duration", "---")
-        goal = session.get("adaptation_goal", "---")
-        freq = session.get("frequency", "---")
-        failure = session.get("failure_criteria", "---")
-        exp_smo2 = session.get("expected_smo2", "---")
-        exp_hr = session.get("expected_hr", "---")
-
-        session_content = [
-            Paragraph(f"<font size='10'><b>{i+1}. {name}</b></font> <font size='9' color='#7F8C8D'>({freq})</font>", styles["body"]),
-            Paragraph(f"<font size='9'><b>Moc:</b> {power} | <b>Czas:</b> {duration}</font>", styles["body"]),
-            Paragraph(f"<font size='8'><b>Cel:</b> {goal}</font>", styles["body"]),
-            Paragraph(f"<font size='8' color='#27AE60'>Spodziewany efekt: SmO₂ {exp_smo2}, HR {exp_hr}</font>", styles["body"]),
-            Paragraph(f"<font size='8' color='#E74C3C'>⚠ Sygnał ostrz.: {failure}</font>", styles["body"]),
-        ]
-
-        session_table = Table([[session_content]], colWidths=[170 * mm])
-        session_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), COLORS["background"]),
-            ('BOX', (0, 0), (-1, -1), 0.5, COLORS["border"]),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        elements.append(session_table)
-        elements.append(Spacer(1, 2 * mm))
-
-    # ==========================================================================
-    # 5. KPI MONITORING
-    # ==========================================================================
-
-    kpi_progress = block.get("kpi_progress", [])
-    kpi_regress = block.get("kpi_regress", [])
-
-    if kpi_progress or kpi_regress:
-        elements.append(Spacer(1, 4 * mm))
-        elements.append(Paragraph("<b>KPI MONITORING</b>", styles["subheading"]))
-        elements.append(Spacer(1, 2 * mm))
-
-        # Progress KPIs
-        if kpi_progress:
-            elements.append(Paragraph("<font color='#27AE60'><b>✓ Sygnały postępu:</b></font>", styles["body"]))
-            for kpi in kpi_progress[:3]:
-                elements.append(Paragraph(f"<font size='9'>• {kpi}</font>", styles["body"]))
-
-        # Regress KPIs
-        if kpi_regress:
-            elements.append(Spacer(1, 4 * mm))  # Extra spacing before regress section
-            elements.append(Paragraph("<font color='#E74C3C'><b>✗ Sygnały regresu / overreaching:</b></font>", styles["body"]))
-            for kpi in kpi_regress[:3]:
-                elements.append(Paragraph(f"<font size='9'>• {kpi}</font>", styles["body"]))
+            card_content = [
+                Paragraph(f"<font size='10'><b>{action}</b></font>", styles["body"]),
+                Paragraph(f"<font size='8' color='#27AE60'>Spodziewany efekt: {expected}</font>", styles["body"]),
+            ]
+            card_table = Table([[card_content]], colWidths=[170 * mm])
+            card_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), COLORS["background"]),
+                ('BOX', (0, 0), (-1, -1), 0.5, COLORS["border"]),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(card_table)
+            elements.append(Spacer(1, 2 * mm))
 
     return elements
 
 
 # ============================================================================
-# PAGE: LIMITER RADAR (20 MIN FTP ANALYSIS)
+# PAGE: LIMITER RADAR
 # ============================================================================
 
 def build_page_limiter_radar(
     limiter_data: Dict[str, Any],
-    figure_paths: Dict[str, str],
     styles: Dict
 ) -> List:
-    """Build page for 20min FTP Limiter Radar analysis.
-    
-    Contains:
-    - Diagnosis table (Serce, Płuca, Mięśnie, Moc percentages)
-    - Limiting factor identification
-    - Training suggestions
-    """
-    from reportlab.lib.colors import HexColor
-
+    """Build Limiter Radar page."""
     elements = []
 
-    # Title
-    elements.append(Paragraph("4. LIMITERY I OBCIĄŻENIE CIEPLNE", styles["title"]))
-    elements.append(Paragraph("<font size='14'>4.1 RADAR OBCIĄŻENIA SYSTEMÓW</font>", styles["center"]))
-    elements.append(Paragraph(
-        "<font size='10' color='#7F8C8D'>Analiza limiterów fizjologicznych dla 20 min (FTP)</font>",
-        styles["center"]
-    ))
+    elements.append(Paragraph("4. ANALIZA LIMITERÓW", styles["title"]))
     elements.append(Spacer(1, 6 * mm))
 
-    # Extract data
-    window = limiter_data.get("window", "20 min (FTP)")
-    peak_power = limiter_data.get("peak_power", 0)
-    pct_hr = limiter_data.get("pct_hr", 0)
-    pct_ve = limiter_data.get("pct_ve", 0)
-    pct_smo2 = limiter_data.get("pct_smo2_util", 0)
-    pct_power = limiter_data.get("pct_power", 0)
-    limiting_factor = limiter_data.get("limiting_factor", "unknown")
-    interpretation = limiter_data.get("interpretation", {})
+    limiters = limiter_data.get("limiters", [])
 
-    # ==========================================================================
-    # RADAR CHART (if available)
-    # ==========================================================================
+    if not limiters:
+        elements.append(Paragraph("Brak danych o limiterach.", styles["body"]))
+        return elements
 
-    if figure_paths and "limiter_radar" in figure_paths:
-        elements.extend(_build_chart(figure_paths["limiter_radar"], f"Profil Obciążenia: {window} ({peak_power:.0f} W)", styles))
-        elements.append(Spacer(1, 6 * mm))
+    for limiter in limiters:
+        name = limiter.get("name", "Unknown")
+        score = limiter.get("score", 0)
+        severity = limiter.get("severity", "medium")
+        description = limiter.get("description", "")
 
-    # ==========================================================================
-    # DIAGNOSIS TABLE
-    # ==========================================================================
+        severity_colors = {"low": "#2ECC71", "medium": "#F39C12", "high": "#E74C3C"}
+        color = severity_colors.get(severity, "#7F8C8D")
 
-    elements.append(Paragraph(f"<b>DIAGNOZA: {window}</b>", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    # Determine status for each system
-    def get_status(system):
-        if limiting_factor == system:
-            return "<font color='#E74C3C'>●</font> Limiter", "#E74C3C"
-        return "<font color='#27AE60'>●</font> OK", "#27AE60"
-
-    hr_status_str, hr_color = get_status("Serce")
-    ve_status_str, ve_color = get_status("Płuca")
-    smo2_status_str, smo2_color = get_status("Mięśnie")
-
-    hr_status_para = Paragraph(hr_status_str, styles["center"])
-    ve_status_para = Paragraph(ve_status_str, styles["center"])
-    smo2_status_para = Paragraph(smo2_status_str, styles["center"])
-
-    # Build diagnosis table
-    header = ["System", "Wartość", "Interpretacja"]
-    rows = [
-        header,
-        ["Serce", f"{pct_hr:.1f}% HRmax", hr_status_para],
-        ["Płuca", f"{pct_ve:.1f}% VEmax", ve_status_para],
-        ["Mięśnie", f"{pct_smo2:.1f}% Desat", smo2_status_para],
-        ["Moc", f"{pct_power:.0f}% CP", "—"],
-    ]
-
-    table = Table(rows, colWidths=[50 * mm, 50 * mm, 70 * mm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), COLORS["primary"]),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, 0), FONT_FAMILY_BOLD),
-        ('FONTNAME', (0, 1), (-1, -1), FONT_FAMILY),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, COLORS["border"]),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        # Color the Limiter row
-        ('BACKGROUND', (0, 1), (0, 1), HexColor(hr_color) if limiting_factor == "Serce" else HexColor("#F8F9FA")),
-        ('BACKGROUND', (0, 2), (0, 2), HexColor(ve_color) if limiting_factor == "Płuca" else HexColor("#F8F9FA")),
-        ('BACKGROUND', (0, 3), (0, 3), HexColor(smo2_color) if limiting_factor == "Mięśnie" else HexColor("#F8F9FA")),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 4 * mm))
-
-    # Main limiter
-    elements.append(Paragraph(f"<b>Główny Limiter: {limiting_factor}</b>", styles["subheading"]))
-    elements.append(Spacer(1, 4 * mm))
-
-    # ==========================================================================
-    # INTERPRETATION BOX
-    # ==========================================================================
-
-    title = interpretation.get("title", f"Ograniczenie: {limiting_factor}")
-    description = interpretation.get("description", "")
-    suggestions = interpretation.get("suggestions", [])
-
-    # Color based on limiter type
-    limiter_colors = {
-        "Serce": "#E74C3C",
-        "Płuca": "#3498DB",
-        "Mięśnie": "#F39C12"
-    }
-    box_color = limiter_colors.get(limiting_factor, "#7F8C8D")
-
-    interp_content = f"<b>{title}</b><br/><br/>{description}<br/><br/><b>Sugestie:</b>"
-    for s in suggestions:
-        interp_content += f"<br/>• {s}"
-
-    interp_style = ParagraphStyle('interp', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-    interp_box = Table(
-        [[Paragraph(interp_content, interp_style)]],
-        colWidths=[170 * mm]
-    )
-    interp_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(box_color)),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(interp_box)
+        card_content = [
+            Paragraph(f"<b>{name}</b> — Score: {score:.0f}/100", styles["body"]),
+            Paragraph(f"<font size='8'>{description}</font>", styles["body"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[170 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), COLORS["background"]),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(card_table)
+        elements.append(Spacer(1, 3 * mm))
 
     return elements
 
 
 # ============================================================================
-# PAGE 5: STREFY TRENINGOWE
+# PAGE: ZONES
 # ============================================================================
 
 def build_page_zones(
     thresholds: Dict[str, Any],
+    cp_model: Dict[str, Any],
     styles: Dict
 ) -> List:
-    """Build Page 5: Training Zones.
-    
-    Contains:
-    - Zones table based on VT1/VT2
-    - Zone descriptions
-    """
+    """Build Training Zones page."""
     elements = []
 
-    elements.append(Paragraph("<font size='14'>1.2 STREFY TRENINGOWE</font>", styles["center"]))
+    elements.append(Paragraph("STREFY TRENINGOWE", styles["title"]))
     elements.append(Spacer(1, 6 * mm))
 
-    vt1_raw = thresholds.get("vt1_watts", "brak danych")
-    vt2_raw = thresholds.get("vt2_watts", "brak danych")
+    vt1 = thresholds.get("vt1_watts", 0)
+    vt2 = thresholds.get("vt2_watts", 0)
+    cp = cp_model.get("cp_watts", 0)
 
-    # Parse numbers for zone calculation
     try:
-        vt1 = float(vt1_raw) if vt1_raw != "brak danych" else 0
-        vt2 = float(vt2_raw) if vt2_raw != "brak danych" else 0
+        vt1 = float(vt1)
     except (ValueError, TypeError):
         vt1 = 0
+    try:
+        vt2 = float(vt2)
+    except (ValueError, TypeError):
         vt2 = 0
+    try:
+        cp = float(cp)
+    except (ValueError, TypeError):
+        cp = 0
 
-    # Calculate zones
-    if vt1 and vt2:
-        z1_max = int(vt1 * 0.8)
-        z2_min = z1_max
-        z2_max = int(vt1)
-        z3_min = z2_max
-        z3_max = int(vt2)
-        z4_min = z3_max
-        z4_max = int(vt2 * 1.05)
-        z5_min = z4_max
+    zones = [
+        ("Z1 Recovery", 0, vt1 * 0.8 if vt1 else 0, "Regeneracja"),
+        ("Z2 Endurance", vt1 * 0.8 if vt1 else 0, vt1, "Baza tlenowa"),
+        ("Z3 Tempo", vt1, vt2, "Wytrzymałość progowa"),
+        ("Z4 Threshold", vt2, vt2 * 1.05 if vt2 else 0, "Próg mleczanowy"),
+        ("Z5 VO₂max", vt2 * 1.05 if vt2 else 0, 9999, "Pułap tlenowy"),
+    ]
 
-        data = [
-            ["Strefa", "Zakres [W]", "Opis", "Cel treningowy"],
-            ["Z1 Recovery", f"< {z1_max}", "Bardzo łatwy", "Regeneracja"],
-            ["Z2 Endurance", f"{z2_min}–{z2_max}", "Komfortowy", "Baza tlenowa"],
-            ["Z3 Tempo", f"{z3_min}–{z3_max}", "Umiarkowany", "Wytrzymałość"],
-            ["Z4 Threshold", f"{z4_min}–{z4_max}", "Ciężki", "Próg"],
-            ["Z5 VO₂max", f"> {z5_min}", "Maksymalny", "Pułap Tlenowy"],
-        ]
-    else:
-        data = [
-            ["Strefa", "Zakres [W]", "Opis", "Cel treningowy"],
-            ["Z1 Recovery", "-", "Bardzo łatwy", "Regeneracja"],
-            ["Z2 Endurance", "-", "Komfortowy", "Baza tlenowa"],
-            ["Z3 Tempo", "-", "Umiarkowany", "Wytrzymałość"],
-            ["Z4 Threshold", "-", "Ciężki", "Próg"],
-            ["Z5 VO₂max", "-", "Maksymalny", "Pułap Tlenowy"],
-        ]
+    data = [["Strefa", "Zakres [W]", "Opis"]]
+    for name, low, high, desc in zones:
+        high_str = f"{int(high)}" if high < 9999 else "+"
+        data.append([name, f"{int(low)}–{high_str}", desc])
 
-    table = Table(data, colWidths=[35 * mm, 35 * mm, 35 * mm, 40 * mm])
+    table = Table(data, colWidths=[45 * mm, 45 * mm, 65 * mm])
     table.setStyle(get_table_style())
     elements.append(table)
-    elements.append(Spacer(1, 8 * mm))
-
-    # === USAGE NOTE ===
-    elements.append(Paragraph(
-        "Powyższe strefy są obliczone automatycznie na podstawie wykrytych progów VT1 i VT2. "
-        "Przed zastosowaniem skonsultuj je z trenerem, który może dostosować je do Twoich celów.",
-        styles["body"]
-    ))
 
     return elements
 
 
 # ============================================================================
-# PAGE 6: OGRANICZENIA INTERPRETACJI
+# PAGE: LIMITATIONS
 # ============================================================================
 
 def build_page_limitations(
-    styles: Dict,
-    is_conditional: bool = False
+    limitations_data: Dict[str, Any],
+    styles: Dict
 ) -> List:
-    """Build Page 6: Interpretation Limitations.
-    
-    Contains:
-    - All mandatory disclaimers
-    - Conditional warning (if applicable)
-    """
+    """Build Limitations page."""
     elements = []
 
-    elements.append(Paragraph("<font size='14'>5.5 OGRANICZENIA INTERPRETACJI</font>", styles["center"]))
+    elements.append(Paragraph("5. OGRANICZENIA I UWAGI", styles["title"]))
     elements.append(Spacer(1, 6 * mm))
 
-    limitations = [
-        ("<b>1. To nie jest badanie medyczne.</b>",
-         "Wyniki są szacunkami algorytmicznymi, nie pomiarami laboratoryjnymi. "
-         "Nie służą do diagnozowania stanów zdrowotnych."),
+    limitations = limitations_data.get("limitations", [])
 
-        ("<b>2. Dokładność zależy od jakości danych.</b>",
-         "Niepoprawna kalibracja czujników, artefakty ruchu lub niestabilność sygnału "
-         "mogą wpłynąć na wyniki."),
+    if not limitations:
+        elements.append(Paragraph("Brak zidentyfikowanych ograniczeń.", styles["body"]))
+        return elements
 
-        ("<b>3. Progi są przybliżeniami.</b>",
-         "VT1/VT2 wykryte algorytmicznie mogą się różnić od wyników testu "
-         "spirometrycznego w laboratorium."),
+    for lim in limitations:
+        title = lim.get("title", "")
+        severity = lim.get("severity", "info")
+        description = lim.get("description", "")
 
-        ("<b>4. Wyniki są jednorazowe.</b>",
-         "Wydolność zmienia się w czasie – powtarzaj testy co 6-8 tygodni, "
-         "aby śledzić postępy."),
+        severity_colors = {"info": "#3498DB", "warning": "#F39C12", "error": "#E74C3C"}
+        color = severity_colors.get(severity, "#7F8C8D")
 
-        ("<b>5. SmO₂ to sygnał wspierający.</b>",
-         "LT1/LT2 z SmO₂ nie zastępują progów wentylacyjnych. "
-         "Służą do dodatkowej walidacji."),
-
-        ("<b>6. Skonsultuj się z trenerem.</b>",
-         "Przed wprowadzeniem zmian w treningu skonsultuj wyniki "
-         "z wykwalifikowanym specjalistą."),
-    ]
-
-    for title, description in limitations:
-        elements.append(Paragraph(title, styles["body"]))
-        elements.append(Paragraph(description, styles["body"]))
-        elements.append(Spacer(1, 3 * mm))
-
-    # === CONDITIONAL WARNING ===
-    if is_conditional:
-        elements.append(Spacer(1, 4 * mm))
-        warning_text = (
-            "<b>⚠️ Ten raport został wygenerowany dla testu rozpoznanego warunkowo.</b><br/>"
-            "Profil mocy lub czas kroków wykazują odchylenia od standardowego protokołu Ramp Test. "
-            "Interpretacja jest obarczona zwiększoną niepewnością."
-        )
-        warning_table = Table(
-            [[Paragraph(warning_text, styles["body"])]],
-            colWidths=[160 * mm]
-        )
-        warning_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), COLORS["warning"]),
-            ("TEXTCOLOR", (0, 0), (-1, -1), COLORS["text"]),
-            ("PADDING", (0, 0), (-1, -1), 10),
-            ("BOX", (0, 0), (-1, -1), 2, COLORS["warning"]),
+        card_content = [
+            Paragraph(f"<b>{title}</b>", styles["body"]),
+            Paragraph(f"<font size='8'>{description}</font>", styles["body"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[170 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), COLORS["background"]),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
-        elements.append(warning_table)
+        elements.append(card_table)
+        elements.append(Spacer(1, 3 * mm))
 
     return elements
 
 
 # ============================================================================
-# HELPER FUNCTIONS
+# INTERNAL HELPERS
 # ============================================================================
 
 def _build_chart(chart_path: str, title: str, styles: Dict) -> List:
-    """Build a chart section with image.
-    
-    Args:
-        chart_path: Path to chart PNG file
-        title: Section title
-        styles: Paragraph styles dictionary
-        
-    Returns:
-        List of flowables
-    """
-
-    chart_elements = []
-
-    # Title for the chart
-    chart_elements.append(Paragraph(title, styles["subheading"]))
-
-    # 1. Check if file exists
-    if not chart_path or not os.path.exists(chart_path):
-        logger.warning(f"PDF Layout: Chart file missing for '{title}' at path: {chart_path}")
-        chart_elements.append(Paragraph("Wykres niedostępny", styles["small"]))
-        return [KeepTogether(chart_elements)]
-
-    # 2. Embed image
+    """Build a chart image element with error handling."""
+    elements = []
     try:
-        available_width = PAGE_WIDTH - 2 * MARGIN
-        img = Image(chart_path)
-
-        # Scale to fit width
-        aspect = img.imageHeight / img.imageWidth
-        img_width = min(available_width, 150 * mm)
-        img_height = img_width * aspect
-
-        # Limit height
-        if img_height > 90 * mm:
-            img_height = 90 * mm
-            img_width = img_height / aspect
-
-        img.drawWidth = img_width
-        img.drawHeight = img_height
-
-        chart_elements.append(img)
+        if os.path.exists(chart_path):
+            img = Image(chart_path, width=170 * mm, height=95 * mm)
+            elements.append(img)
+            if title:
+                elements.append(Spacer(1, 2 * mm))
+        else:
+            logger.warning(f"PDF Layout: Chart file missing for '{title}' at path: {chart_path}")
+            if title:
+                elements.append(Paragraph(f"<i>{title} — brak wykresu</i>", styles["small"]))
     except Exception as e:
         logger.error(f"PDF Layout: Error embedding chart '{title}' from {chart_path}: {e}")
-
-    # Wrap in KeepTogether to prevent title/chart separation across pages
-    return [KeepTogether(chart_elements)]
+        elements.append(Paragraph(f"<i>{title} — błąd wczytywania</i>", styles["small"]))
+    return elements
 
 
 def _build_education_block(title: str, content: str, styles: Dict) -> List:
-    """Helper to build a consistent education block with 'Dlaczego to ma znaczenie?'."""
+    """Build an education/theory block with styled box."""
     elements = []
-
-    # Label
-    label = Paragraph("", styles["small"])  # Removed educational label
-    elements.append(label)
-
-    # Title & Text in a subtle box
-    inner_story = [
-        Paragraph(f"<b>{title}</b>", styles["heading"]),
-        Spacer(1, 1 * mm),
-        Paragraph(content, styles["body_italic"])
+    box_content = [
+        Paragraph(f"<b>{title}</b>", styles["subheading"]),
+        Spacer(1, 2 * mm),
+        Paragraph(content, styles["small"]),
     ]
-
-    table = Table([[inner_story]], colWidths=[170 * mm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), COLORS["light_grey"]),
-        ('INNERGRID', (0, 0), (-1, -1), 0.25, COLORS["grey"]),
-        ('BOX', (0, 0), (-1, -1), 0.25, COLORS["grey"]),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4 * mm),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4 * mm),
-        ('TOPPADDING', (0, 0), (-1, -1), 4 * mm),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
+    box_table = Table([[box_content]], colWidths=[170 * mm])
+    box_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), COLORS["background"]),
+        ("BOX", (0, 0), (-1, -1), 0.5, COLORS["border"]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
     ]))
-
-    elements.append(table)
+    elements.append(box_table)
     return elements
 
 
 # ============================================================================
-# PAGE 5: TEORIA FIZJOLOGICZNA (INSCYD/WKO5)
+# PAGE: THEORY
 # ============================================================================
 
 def build_page_theory(styles: Dict) -> List:
-    """Build Page: Model Metaboliczny (2.3)."""
-    from reportlab.lib.colors import HexColor
-    from reportlab.platypus import TableStyle
+    """Build Theory/Education page."""
     elements = []
 
-    elements.append(Paragraph("<font size='14'>2.3 MODEL METABOLICZNY</font>", styles["center"]))
+    elements.append(Paragraph("TEORIA I METODOLOGIA", styles["title"]))
     elements.append(Spacer(1, 6 * mm))
 
-    # Intro
-    elements.append(Paragraph(
-        "Twoja wydajność zależy od interakcji trzech systemów energetycznych. "
-        "Zrozumienie ich pozwala na precyzyjne dopasowanie treningu.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 4 * mm))
-
-    # VO2max
-    elements.append(Paragraph("VO₂max (System Tlenowy)", styles["heading"]))
-    elements.append(Paragraph(
-        "Maksymalna ilość tlenu, jaką Twój organizm może przyswoić. "
-        "Jest to Twój „silnik diesla” – odpowiada za moc na długim dystansie. "
-        "Wysokie VO₂max jest kluczowe dla każdego kolarza wytrzymałościowego.",
-        styles["body"]
-    ))
-
-    # VLaMax
-    elements.append(Paragraph("VLaMax (System Glikolityczny)", styles["heading"]))
-    elements.append(Paragraph(
-        "Maksymalne tempo produkcji mleczanu. To Twój „dopalacz turbo”. "
-        "Wysokie VLaMax daje świetny sprint i ataki, ale powoduje szybkie zużycie węglowodanów (niskie FatMax) i obniża próg FTP. "
-        "Niskie VLaMax zwiększa próg FTP i oszczędza glikogen (dobre dla Ironman/GC), ale ogranicza dynamikę.",
-        styles["body"]
-    ))
-
-    # Interaction
-    elements.append(Paragraph("Interakcja VO₂max ↔ VLaMax", styles["subheading"]))
-    elements.append(Paragraph(
-        "Twój próg FTP to wynik walki między tymi dwoma systemami. "
-        "Aby podnieść FTP, możesz albo zwiększyć VO₂max (powiększyć silnik), albo obniżyć VLaMax (zmniejszyć spalanie). "
-        "Wybór strategii zależy od Twojego typu zawodnika.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 6 * mm))
-
-    # FatMax explain
-    elements.append(Paragraph("FatMax (Metabolizm Tłuszczowy)", styles["heading"]))
-    elements.append(Paragraph(
-        "Moc, przy której spalasz najwięcej tłuszczu (zwykle strefa Z2). "
-        "Trening w tej strefie uczy organizm oszczędzania glikogenu.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 4 * mm))
-
-    elements.append(Paragraph("Typy Zawodników i Strategie", styles["heading"]))
-    data = [
-        ["Typ", "VO2max", "VLaMax", "Charakterystyka"],
-        ["Sprinter", "Średni", "Wysoki", "Dynamika, punch, sprinty"],
-        ["Climber", "Wysoki", "Niski", "Długie wspinaczki, tempo"],
-        ["Time Trialist", "Wysoki", "Niski", "Równe tempo, aerodynamika"],
-        ["Puncheur", "Wysoki", "Średni", "Ataki, krótkie górki"]
-    ]
-    t = Table(data, colWidths=[30*mm, 30*mm, 30*mm, 80*mm])
-    # Table should use DejaVuSans for Polish chars if needed, though ASCII used above
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1F77B4")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
-        ('FONTNAME', (0, 0), (-1, 0), 'DejaVuSans-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-        ('ROWHEIGHT', (0, 0), (-1, -1), 8 * mm),
-    ]))
-    elements.append(t)
-
-    return elements
-
-
-# ============================================================================
-# NEW PAGE: PROTOKÓŁ I HIERARCHIA SYGNAŁÓW (Page 20 simulation)
-# ============================================================================
-
-def build_page_protocol(
-    styles: Dict
-) -> List:
-    """Build Page for Signal Hierarchy and Protocol information."""
-    elements = []
-
-    elements.append(Paragraph("<font size='14'>5.4 PROTOKÓŁ TESTU</font>", styles["center"]))
-    elements.append(Spacer(1, 8 * mm))
-
-    # Extensive Theory Section
-    elements.append(Paragraph("<b>FUNDAMENT METODOLOGII</b>", styles["heading"]))
-    elements.append(Spacer(1, 4 * mm))
-
-    theory_text = (
-        "Współczesna analiza fizjologiczna opiera się na integracji wielu sygnałów, "
-        "jednak nie wszystkie mają taką samą wagę diagnostyczną. Kluczem do sukcesu "
-        "jest zrozumienie 'opóźnienia' i 'reaktywności' każdego z nich.<br/><br/>"
-        "<b>1. WENTYLACJA (VE):</b> Nasz główny sygnał (Golden Standard). Dlaczego? Ponieważ "
-        "wentylacja reaguje niemal natychmiast na zmiany pH krwi i poziomu CO2. Jest to "
-        "bezpośrednie odbicie metabolizmu całego organizmu.<br/><br/>"
-        "<b>2. OKSYDACJA MIĘŚNIOWA (SmO2):</b> Sygnał o najwyższej reaktywności lokalnej. "
-        "Pozwala zobaczyć co dzieje się bezpośrednio w pracującym mięśniu (dostawa vs zapotrzebowanie). "
-        "SmO2 reaguje najszybciej na zmiany obciążenia, ale jest sygnałem punktowym.<br/><br/>"
-        "<b>3. TĘTNO (HR):</b> Sygnał najbardziej opóźniony (Heart Rate Lag). HR jest sterowane "
-        "częścią autonomiczną układu nerwowego i potrzebuje czasu, aby 'dogonić' zapotrzebowanie "
-        "tlenowe. HR jest doskonałym wskaźnikiem kosztu ustrojowego, ale słabym narzędziem "
-        "do precyzyjnej detekcji progów w krótkich interwałach."
-    )
-    elements.append(Paragraph(theory_text, styles["body"]))
-    elements.append(Spacer(1, 10 * mm))
-
-    elements.append(Paragraph("<b>ZNACZENIE PROTOKOŁU</b>", styles["heading"]))
-    elements.append(Spacer(1, 4 * mm))
-
-    protocol_text = (
-        "Długość kroku (rampy) jest krytyczna. Standardowy protokół 1-minutowy często "
-        "prowadzi do przeszacowania mocy progowej, ponieważ sygnały (szczególnie HR i VE) "
-        "nie zdążą osiągnąć stanu stabilnego (Steady State).<br/><br/>"
-        "W naszej analizie stosujemy matematyczną korektę opóźnień lub zalecamy protokoły "
-        "o długości 2-3 minut na stopień, co pozwala na pełną stabilizację kinetyki gazowej "
-        "i parametrów krążeniowych. Dzięki temu wyznaczone progi VT1/VT2 oraz SmO2-LT "
-        "są powtarzalne i mają realne przełożenie na trening w terenie."
-    )
-    elements.append(Paragraph(protocol_text, styles["body"]))
-
-    return elements
-
-
-# ============================================================================
-# PAGE 6: TERMOREGULACJA
-# ============================================================================
-
-def build_page_thermal(
-    thermo_data: Dict[str, Any],
-    figure_paths: Dict[str, str],
-    styles: Dict
-) -> List:
-    """Build Page 6: Thermal Analysis - Enhanced with metrics and recommendations."""
-    from reportlab.lib.colors import HexColor
-
-    # Removed redundant local import
-    from reportlab.platypus import TableStyle
-
-    elements = []
-
-    elements.append(Paragraph("<font size='14'>4.3 TERMOREGULACJA</font>", styles["center"]))
-    elements.append(Paragraph("<font size='10' color='#7F8C8D'>Dynamika temperatury, tolerancja cieplna, rekomendacje</font>", styles["body"]))
-    elements.append(Spacer(1, 6 * mm))
-
-    elements.append(Paragraph(
-        "Ciepło jest cichym zabójcą wydajności. Wzrost temperatury głębokiej (Core Temp) "
-        "powoduje przekierowanie krwi do skóry (chłodzenie), co zabiera tlen pracującym mięśniom.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 4 * mm))
-
-    # Chart 1: Core Temp vs HSI
-    if figure_paths and "thermal_hsi" in figure_paths:
-        elements.extend(_build_chart(figure_paths["thermal_hsi"], "Temp. Głęboka vs Indeks Zmęczenia (HSI)", styles))
-        elements.append(Spacer(1, 6 * mm))
-
-    # === KEY NUMBERS TABLE (Thermoregulation) ===
-    # thermo_data is now passed directly
-    metrics = thermo_data.get("metrics", {})
-    classification = thermo_data.get("classification", {})
-
-    # Check if we have actual data (not empty/default)
-    has_thermo_data = bool(metrics) and metrics.get("max_core_temp", 0) > 35
-
-    # Get values with proper fallbacks
-    if has_thermo_data:
-        max_temp = metrics.get("max_core_temp", 0)
-        delta_10min = metrics.get("delta_per_10min", 0)
-        time_38_0 = metrics.get("time_to_38_0_min")
-        time_38_5 = metrics.get("time_to_38_5_min")
-        peak_hsi = metrics.get("peak_hsi", 0)
-
-        max_temp_str = f"{max_temp:.1f} C"
-        delta_str = f"{delta_10min:.2f} C"
-        peak_hsi_str = f"{peak_hsi:.1f}"
-    else:
-        max_temp_str = "---"
-        delta_str = "---"
-        time_38_0 = None
-        time_38_5 = None
-        peak_hsi_str = "---"
-
-    # Classification
-    tolerance = classification.get("heat_tolerance", "unknown") if has_thermo_data else "unknown"
-    tolerance_color = classification.get("color", "#808080") if has_thermo_data else "#808080"
-    tolerance_label = {"good": "DOBRA", "moderate": "SREDNIA", "poor": "SLABA"}.get(tolerance, "BRAK DANYCH")
-
-    elements.append(Paragraph("KLUCZOWE LICZBY", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    key_data = [
-        ["Metryka", "Wartość", "Interpretacja"],
-        ["Max Core Temp", max_temp_str, "Szczytowa temperatura głęboka"],
-        ["Delta Temp / 10 min", delta_str, f"Tolerancja: {tolerance_label}"],
-        ["Czas do 38.0 C", f"{time_38_0:.0f} min" if time_38_0 else "---", "Prog ostrzegawczy"],
-        ["Czas do 38.5 C", f"{time_38_5:.0f} min" if time_38_5 else "---", "Prog krytyczny"],
-        ["Peak HSI", peak_hsi_str, "Indeks obciazenia cieplnego"],
-    ]
-
-    table = Table(key_data, colWidths=[45 * mm, 35 * mm, 85 * mm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1F77B4")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
-        ('FONTNAME', (0, 0), (-1, 0), 'DejaVuSans-Bold'),
-        ('FONTNAME', (0, 1), (0, -1), 'DejaVuSans-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-        ('ROWHEIGHT', (0, 0), (-1, -1), 10 * mm),
-        # Delta row gets classification color
-        ('BACKGROUND', (0, 2), (-1, 2), HexColor(tolerance_color)),
-        ('TEXTCOLOR', (0, 2), (-1, 2), HexColor("#FFFFFF")),
-        # Other rows light
-        ('BACKGROUND', (0, 1), (-1, 1), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 1), (-1, 1), HexColor("#333333")),
-        ('BACKGROUND', (0, 3), (-1, 3), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 3), (-1, 3), HexColor("#333333")),
-        ('BACKGROUND', (0, 4), (-1, 4), HexColor("#e8e8e8")),
-        ('TEXTCOLOR', (0, 4), (-1, 4), HexColor("#333333")),
-        ('BACKGROUND', (0, 5), (-1, 5), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 5), (-1, 5), HexColor("#333333")),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 6 * mm))
-
-    # === CLASSIFICATION VERDICT ===
-    if tolerance == "poor":
-        verdict_text = (
-            "<b>SLABA TOLERANCJA CIEPLNA</b><br/>"
-            "Tempo narastania temperatury przekracza prog bezpieczny. "
-            "Redystrybucja krwi do skory konkuruje z dostawa O2 do miesni. "
-            "Ryzyko przegrzania jest wysokie."
-        )
-        verdict_color = "#E74C3C"
-    elif tolerance == "moderate":
-        verdict_text = (
-            "<b>SREDNIA TOLERANCJA</b><br/>"
-            "Uklad chlodzenia radzi sobie, ale istnieje margines do poprawy. "
-            "Adaptacja cieplna nie jest pelna."
-        )
-        verdict_color = "#F39C12"
-    else:
-        verdict_text = (
-            "<b>DOBRA TOLERANCJA</b><br/>"
-            "Tempo narastania temperatury miesci sie w normie. "
-            "Uklad termoregulacji skutecznie balansuje miedzy chlodzeniem a perfuzja."
-        )
-        verdict_color = "#27AE60"
-
-    white_style = ParagraphStyle('thermo_verdict', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-    verdict_box = Table(
-        [[Paragraph(verdict_text, white_style)]],
-        colWidths=[165 * mm]
-    )
-    verdict_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(verdict_color)),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(verdict_box)
-    elements.append(Spacer(1, 6 * mm))
-
-    # === HR/EF CONNECTION ===
-    elements.append(PageBreak())
-    elements.append(Paragraph("<b>POŁĄCZENIE Z DRYFEM HR I EF</b>", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(
-        "<b>Mechanizm fizjologiczny:</b> Wysoka temperatura wymusza redystrybucję krwi do skóry "
-        "w celu chłodzenia. Serce musi pompować większą objętość krwi, by utrzymać zarówno chłodzenie, "
-        "jak i dostawę O₂ do mięśni. Efekt: wzrost HR przy stałej mocy (cardiac drift), "
-        "spadek Efficiency Factor (EF). To jest kardynalny syndrom przegrzania.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(
-        "<b>Konsekwencje dla wydolności:</b> Każdy 1°C wzrostu temperatury rdzenia powoduje "
-        "wzrost HR o 8-10 bpm oraz spadek VO₂max o 1.5-2%. Przy temperaturze >39°C następuje "
-        "ochronne ograniczenie rekrutacji jednostek motorycznych przez OUN.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(
-        "<b>Adaptacja cieplna:</b> Po 10-14 dniach treningu w cieple (60-90min @ Z2, temp >28°C) "
-        "obserwuje się: wcześniejsze pocenie, niższy HR przy tej samej mocy, zmniejszony drift, "
-        "oraz poprawę tolerancji cieplnej o 15-20%.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 4 * mm))
-
-    # === TRAINING RECOMMENDATIONS ===
-    elements.append(Paragraph("<b>REKOMENDACJE</b>", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    if tolerance == "poor":
-        recommendations = [
-            "PRIORYTET: Trening w cieple (heat acclimation) - 10-14 dni, 60-90min @ Z2",
-            "Pre-cooling: kamizelka lodowa przed startem",
-            "Nawodnienie: 500-800ml/h + elektrolity",
-            "Unikaj zawodow >28C do czasu adaptacji",
-        ]
-    elif tolerance == "moderate":
-        recommendations = [
-            "Rozwaz 5-7 dni treningu w cieple przed wazymi zawodami",
-            "Chlodzenie zewnetrzne: woda na glowe co 15-20 min",
-            "Kontroluj wage przed/po treningu (max -2%)",
-        ]
-    else:
-        recommendations = [
-            "Adaptacja wystarczajaca - mozesz startowac w cieple",
-            "Utrzymuj nawodnienie 400-600ml/h",
-            "Kontynuuj okresowy trening w cieple (1x/tyg)",
-        ]
-
-    white_rec_style = ParagraphStyle('rec_white', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-    rec_data = [[Paragraph(f"* {rec}", white_rec_style)] for rec in recommendations]
-    rec_table = Table(rec_data, colWidths=[165 * mm])
-    rec_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor("#16213e")),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(rec_table)
-
-    # FORCE PAGE BREAK BEFORE CARDIAC DRIFT ANALYSIS
-    elements.append(PageBreak())
-
-    # ========================================================================
-    # CARDIAC DRIFT ANALYSIS - PRO LAYOUT
-    # ========================================================================
-    elements.append(Paragraph("Analiza Dryfu Efektywności (Cardiac Drift)", styles["title"]))
-    elements.append(Paragraph("<font size='10' color='#7F8C8D'>Dynamika EF, klasyfikacja dryfu, implikacje treningowe</font>", styles["body"]))
-    elements.append(Spacer(1, 6 * mm))
-
-    # Get drift data from thermo_data (will be populated by persistence.py)
-    drift_data = thermo_data.get("cardiac_drift", {})
-    drift_metrics = drift_data.get("metrics", {})
-    drift_signals = drift_data.get("key_signals", {})
-    drift_class = drift_data.get("classification", {})
-    drift_interp = drift_data.get("interpretation", {})
-
-    # Check if we have drift data
-    has_drift_data = bool(drift_metrics) and drift_metrics.get("ef_start", 0) > 0
-
-    if has_drift_data:
-        ef_start = drift_metrics.get("ef_start", 0)
-        ef_end = drift_metrics.get("ef_end", 0)
-        delta_pct = drift_metrics.get("delta_ef_pct", 0)
-        ef_slope = drift_metrics.get("ef_vs_temp_slope")
-        hsi_peak = drift_signals.get("hsi_peak", 0)
-        smo2_drift = drift_signals.get("smo2_drift_pct", 0)
-
-        drift_level = drift_class.get("drift_level", "unknown")
-        drift_type = drift_class.get("drift_type", "unknown")
-        drift_color = drift_class.get("color", "#808080")
-
-        # Status helpers
-        def get_delta_status(d):
-            if abs(d) < 5: return ("STABILNY", "#27AE60")
-            elif abs(d) < 10: return ("UMIARKOWANY", "#F39C12")
-            else: return ("WYSOKI", "#E74C3C")
-
-        def get_hsi_status(h):
-            if h < 5: return ("NISKI", "#27AE60")
-            elif h < 8: return ("OSTRZEZENIE", "#F39C12")
-            else: return ("KRYTYCZNY", "#E74C3C")
-
-        def get_smo2_status(s):
-            if abs(s) < 5: return ("STABILNY", "#27AE60")
-            else: return ("DRYF OBWODOWY", "#F39C12")
-
-        delta_status, delta_color = get_delta_status(delta_pct)
-        hsi_status, hsi_color = get_hsi_status(hsi_peak)
-        smo2_status, smo2_color = get_smo2_status(smo2_drift)
-    else:
-        ef_start = 0
-        ef_end = 0
-        delta_pct = 0
-        ef_slope = None
-        hsi_peak = 0
-        smo2_drift = 0
-        drift_level = "unknown"
-        drift_type = "unknown"
-        drift_color = "#808080"
-        delta_status, delta_color = ("BRAK", "#808080")
-        hsi_status, hsi_color = ("BRAK", "#808080")
-        smo2_status, smo2_color = ("BRAK", "#808080")
-
-    # === KEY SIGNALS BOX ===
-    elements.append(Paragraph("KLUCZOWE SYGNAŁY", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    key_signals_data = [
-        ["Sygnał", "Wartość", "Status"],
-        ["EF Start", f"{ef_start:.2f} W/bpm" if ef_start > 0 else "---", "BAZOWY"],
-        ["EF End", f"{ef_end:.2f} W/bpm" if ef_end > 0 else "---", f"{delta_pct:+.1f}%" if has_drift_data else "---"],
-        ["dEF / dC", f"{ef_slope:.3f} W/bpm/C" if ef_slope else "---", drift_type.upper() if has_drift_data else "---"],
-        ["HSI Szczyt", f"{hsi_peak:.1f}" if hsi_peak > 0 else "---", hsi_status],
-        ["SmO2 Dryf", f"{smo2_drift:+.1f}%" if has_drift_data else "---", smo2_status],
-    ]
-
-    signals_table = Table(key_signals_data, colWidths=[45 * mm, 50 * mm, 70 * mm])
-    signals_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1a1a2e")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
-        ('FONTNAME', (0, 0), (-1, 0), 'DejaVuSans-Bold'),
-        ('FONTNAME', (0, 1), (0, -1), 'DejaVuSans-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-        ('ROWHEIGHT', (0, 0), (-1, -1), 9 * mm),
-        # Row backgrounds
-        ('BACKGROUND', (0, 1), (1, 1), HexColor("#e8f5e9")),
-        ('TEXTCOLOR', (0, 1), (1, 1), HexColor("#333333")),
-        ('BACKGROUND', (2, 1), (2, 1), HexColor("#3498DB")),
-        ('TEXTCOLOR', (2, 1), (2, 1), HexColor("#FFFFFF")),
-        # Delta row - color by status
-        ('BACKGROUND', (0, 2), (1, 2), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 2), (1, 2), HexColor("#333333")),
-        ('BACKGROUND', (2, 2), (2, 2), HexColor(delta_color)),
-        ('TEXTCOLOR', (2, 2), (2, 2), HexColor("#FFFFFF")),
-        # EF slope row
-        ('BACKGROUND', (0, 3), (1, 3), HexColor("#e8e8e8")),
-        ('TEXTCOLOR', (0, 3), (1, 3), HexColor("#333333")),
-        ('BACKGROUND', (2, 3), (2, 3), HexColor(drift_color)),
-        ('TEXTCOLOR', (2, 3), (2, 3), HexColor("#FFFFFF")),
-        # HSI row
-        ('BACKGROUND', (0, 4), (1, 4), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 4), (1, 4), HexColor("#333333")),
-        ('BACKGROUND', (2, 4), (2, 4), HexColor(hsi_color)),
-        ('TEXTCOLOR', (2, 4), (2, 4), HexColor("#FFFFFF")),
-        # SmO2 row
-        ('BACKGROUND', (0, 5), (1, 5), HexColor("#e8e8e8")),
-        ('TEXTCOLOR', (0, 5), (1, 5), HexColor("#333333")),
-        ('BACKGROUND', (2, 5), (2, 5), HexColor(smo2_color)),
-        ('TEXTCOLOR', (2, 5), (2, 5), HexColor("#FFFFFF")),
-    ]))
-    elements.append(signals_table)
-    elements.append(Spacer(1, 6 * mm))
-
-    # === CLASSIFICATION VERDICT BOX ===
-    if has_drift_data:
-        mechanism = drift_interp.get("mechanism", "")
-        verdict_text = f"{mechanism}"  # Removed duplicate title, just show mechanism
-    else:
-        verdict_text = "<b>BRAK DANYCH DRYFU</b><br/>Analiza drift wymaga danych EF (power/HR)."
-        drift_color = "#808080"
-
-    verdict_style = ParagraphStyle('verdict_white', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-    verdict_box = Table(
-        [[Paragraph(verdict_text, verdict_style)]],
-        colWidths=[165 * mm]
-    )
-    verdict_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(drift_color)),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(verdict_box)
-    elements.append(Spacer(1, 6 * mm))
-
-    # === RACE CONSEQUENCE SIMULATION ===
-    # Get core temp from thermo_data
-    thermo_metrics = thermo_data.get("metrics", {})
-    core_temp_peak = thermo_metrics.get("max_core_temp", 0)
-
-    # Calculate expected power loss after 60 min
-    # Threshold: dEF/dC exists AND core_temp > 38
-    ef_slope_val = ef_slope if ef_slope else 0
-
-    if abs(ef_slope_val) > 0.01 and core_temp_peak > 38.0:
-        # Assume conservative: 1% EF loss ≈ 0.7% power loss
-        # If we have delta_pct (change over test), extrapolate to 60 min
-        # Use absolute delta_pct as base (already computed)
-        power_loss_pct = abs(delta_pct) * 0.7
-
-        # Clamp to reasonable range (2-15%)
-        power_loss_pct = max(2.0, min(15.0, power_loss_pct))
-
-        simulation_text = (
-            f"<b>SYMULACJA KONSEKWENCJI WYŚCIGOWYCH:</b> Przy obecnym koszcie termicznym (temp. rd. {core_temp_peak:.1f}°C, "
-            f"dryf EF {delta_pct:+.1f}%), oczekiwany spadek efektywnej mocy wynosi ~{power_loss_pct:.0f}% "
-            "po 60 min w gorących warunkach."
-        )
-        sim_color = "#E74C3C" if power_loss_pct > 8 else "#F39C12"
-    else:
-        simulation_text = (
-            "<b>SYMULACJA KONSEKWENCJI WYŚCIGOWYCH:</b> Obciążenie termiczne w akceptowalnych granicach. "
-            "Brak przewidywanego znaczącego spadku mocy dla 60 min wysokości w bieżących warunkach."
-        )
-        sim_color = "#27AE60"
-
-    sim_style = ParagraphStyle('sim_text', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-    sim_box = Table(
-        [[Paragraph(simulation_text, sim_style)]],
-        colWidths=[165 * mm]
-    )
-    sim_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor(sim_color)),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(sim_box)
-    elements.append(Spacer(1, 6 * mm))
-
-    # Chart: EF vs Time/Temp
-    if figure_paths and "thermal_efficiency" in figure_paths:
-        elements.extend(_build_chart(figure_paths["thermal_efficiency"], "Efektywność vs Czas/Temperatura", styles))
-        elements.append(Spacer(1, 4 * mm))
-
-
-    # === TRAINING IMPLICATIONS BOX ===
-    # UWAGA: Usunięto PageBreak aby zapobiec pustej stronie
-    elements.append(Spacer(1, 6 * mm))
-    elements.append(Paragraph("IMPLIKACJE TRENINGOWE", styles["heading"]))
-    elements.append(Spacer(1, 2 * mm))
-
-    # Add extended introduction
-    elements.append(Paragraph(
-        "<b>Zastosowanie w praktyce:</b> Poniższe zalecenia treningowe wynikają bezpośrednio "
-        "z analizy dryfu sercowego i termicznego. Dostosuj intensywność i strategię "
-        "nawodnienia do warunków środowiskowych.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 2 * mm))
-
-    if has_drift_data:
-        implications = drift_interp.get("training_implications", [])[:4]  # Limit to 4 items
-        # Add extra recommendations
-        extra_implications = [
-            "Monitoruj EF w czasie rzeczywistym podczas długich wysiłków >2h",
-            "Stosuj pre-cooling przed zawodami w gorącu (kamizelka lodowa, zimny napój)",
-            "Nawadniaj regularnie: 500-750ml/h + 500-1000mg Na+/h w gorącu"
-        ]
-        implications.extend(extra_implications[:2])  # Add 2 extra
-    else:
-        implications = [
-            "Brak danych do wygenerowania rekomendacji",
-            "Upewnij się, że plik źródłowy zawiera kolumny Power i HR",
-        ]
-
-    impl_style = ParagraphStyle('impl_white', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=8)
-    impl_data = [[Paragraph(f"→ {impl}", impl_style)] for impl in implications]
-    impl_table = Table(impl_data, colWidths=[165 * mm])
-    impl_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), HexColor("#16213e")),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
-    elements.append(impl_table)
-
-    return elements
-
-
-# ============================================================================
-# PAGE 7: PROFIL METABOLICZNY (LIMITERY)
-# ============================================================================
-
-# ============================================================================
-# NEW PAGE: BIOMECHANIKA (Premium INSCYD/WKO Quality)
-# ============================================================================
-
-def build_page_biomech(
-    figure_paths: Dict[str, str],
-    styles: Dict,
-    biomech_data: Optional[Dict[str, Any]] = None
-) -> List:
-    """Build Biomechanics & Occlusion Physiology page - INSCYD/WKO Quality."""
-    from reportlab.lib.colors import HexColor
-    from reportlab.lib.styles import ParagraphStyle
-
-    elements = []
-
-    elements.append(Paragraph("<font size='14'>3.4 BIOMECHANIKA</font>", styles["center"]))
-    elements.append(Paragraph("<font size='10' color='#7F8C8D'>Fizjologia okluzji i relacja siła–tlen</font>", styles["body"]))
-    elements.append(Spacer(1, 6 * mm))
-
-    # Chart 1: Torque vs Cadence
-    if figure_paths and "biomech_summary" in figure_paths:
-        elements.extend(_build_chart(figure_paths["biomech_summary"], "Moment Obrotowy vs Kadencja", styles))
-        elements.append(Spacer(1, 4 * mm))
-
-    # Chart 2: Torque vs SmO2 (Occlusion)
-    if figure_paths and "biomech_torque_smo2" in figure_paths:
-        elements.extend(_build_chart(figure_paths["biomech_torque_smo2"], "Fizjologia Okluzji (Siła vs Tlen)", styles))
-        elements.append(Spacer(1, 6 * mm))
-
-    # === KEY NUMBERS BOX ===
-    if biomech_data and "metrics" in biomech_data:
-        metrics = biomech_data["metrics"]
-        classification = biomech_data.get("classification", {})
-
-        elements.append(PageBreak())
-        elements.append(Paragraph("KLUCZOWE LICZBY", styles["heading"]))
-        elements.append(Spacer(1, 2 * mm))
-
-        # Determine colors based on classification
-        level = classification.get("level", "unknown")
-        level_color = classification.get("color", "#808080")
-        level_label = {"low": "NISKA", "moderate": "UMIARKOWANA", "high": "WYSOKA"}.get(level, "---")
-
-        # Build metrics table
-        occlusion_idx = metrics.get("occlusion_index", 0)
-        slope = metrics.get("regression_slope", 0)
-        r2 = metrics.get("regression_r2", 0)
-        smo2_base = metrics.get("smo2_baseline", 0)
-        torque_base = metrics.get("torque_at_baseline", 0)
-        torque_10 = metrics.get("torque_at_minus_10")
-        torque_20 = metrics.get("torque_at_minus_20")
-
-        key_data = [
-            ["Metryka", "Wartość", "Interpretacja"],
-            ["INDEKS OKLUZJI", f"{occlusion_idx:.3f}", f"Okluzja: {level_label}"],
-            ["Nachylenie SmO2/Torque", f"{slope:.4f} %/Nm", f"R² = {r2:.2f}"],
-            ["SmO2 bazowe", f"{smo2_base:.1f} %", f"@ {torque_base:.0f} Nm"],
-            ["Torque @ SmO2 -10%", f"{torque_10:.0f} Nm" if torque_10 else "---", "Próg umiarkowanej okluzji"],
-            ["Torque @ SmO2 -20%", f"{torque_20:.0f} Nm" if torque_20 else "---", "Próg istotnej okluzji"],
-        ]
-
-        table = Table(key_data, colWidths=[50 * mm, 40 * mm, 75 * mm])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1a1a2e")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-            ('BACKGROUND', (0, 1), (-1, 1), HexColor(level_color)),  # OCCLUSION INDEX row
-            ('TEXTCOLOR', (0, 1), (-1, 1), HexColor("#FFFFFF")),
-            ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),  # ALL cells
-            ('FONTNAME', (0, 0), (-1, 0), 'DejaVuSans-Bold'),
-            ('FONTNAME', (0, 1), (0, -1), 'DejaVuSans-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-            ('ROWHEIGHT', (0, 0), (-1, -1), 12 * mm),
-            # Light backgrounds for data rows (except OCCLUSION INDEX row)
-            ('BACKGROUND', (0, 2), (-1, 2), HexColor("#f5f5f5")),
-            ('TEXTCOLOR', (0, 2), (-1, 2), HexColor("#333333")),
-            ('BACKGROUND', (0, 3), (-1, 3), HexColor("#e8e8e8")),
-            ('TEXTCOLOR', (0, 3), (-1, 3), HexColor("#333333")),
-            ('BACKGROUND', (0, 4), (-1, 4), HexColor("#f5f5f5")),
-            ('TEXTCOLOR', (0, 4), (-1, 4), HexColor("#333333")),
-            ('BACKGROUND', (0, 5), (-1, 5), HexColor("#e8e8e8")),
-            ('TEXTCOLOR', (0, 5), (-1, 5), HexColor("#333333")),
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 6 * mm))
-
-        # === SAFE TORQUE WINDOW ===
-        elements.append(Paragraph("<b>BEZPIECZNE OKNO MOMENTU OBROTOWEGO</b>", styles["heading"]))
-        elements.append(Spacer(1, 2 * mm))
-
-        # Define zones
-        safe_max = torque_10 if torque_10 else torque_base
-        warning_min = torque_10 if torque_10 else 0
-        warning_max = torque_20 if torque_20 else 0
-        critical_min = torque_20 if torque_20 else 0
-
-        # Build zone table
-        zone_rows = [
-            ["Strefa", "Zakres Momentu", "Status"],
-            ["BEZPIECZNA", f"< {safe_max:.0f} Nm" if safe_max else "---", "Pełna dostawa tlenowa utrzymana"],
-            ["OSTRZEŻENIE", f"{warning_min:.0f}–{warning_max:.0f} Nm" if warning_min and warning_max else "---", "Częściowa okluzja, SmO2 spada"],
-            ["KRYTYCZNA", f"> {critical_min:.0f} Nm" if critical_min else "---", "Silna okluzja, szybka desaturacja"],
-        ]
-
-        zone_table = Table(zone_rows, colWidths=[35 * mm, 50 * mm, 80 * mm])
-        zone_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), HexColor("#2C3E50")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-            ('FONTNAME', (0, 0), (-1, -1), FONT_FAMILY),
-            ('FONTNAME', (0, 0), (-1, 0), FONT_FAMILY_BOLD),
-            ('FONTNAME', (0, 1), (0, -1), FONT_FAMILY_BOLD),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-            ('ROWHEIGHT', (0, 0), (-1, -1), 10 * mm),
-            # Zone colors
-            ('BACKGROUND', (0, 1), (0, 1), HexColor("#27AE60")),  # SAFE
-            ('TEXTCOLOR', (0, 1), (0, 1), HexColor("#FFFFFF")),
-            ('BACKGROUND', (0, 2), (0, 2), HexColor("#F39C12")),  # WARNING
-            ('TEXTCOLOR', (0, 2), (0, 2), HexColor("#FFFFFF")),
-            ('BACKGROUND', (0, 3), (0, 3), HexColor("#E74C3C")),  # CRITICAL
-            ('TEXTCOLOR', (0, 3), (0, 3), HexColor("#FFFFFF")),
-            # Data cells
-            ('BACKGROUND', (1, 1), (-1, -1), HexColor("#f8f9fa")),
-            ('TEXTCOLOR', (1, 1), (-1, -1), HexColor("#333333")),
-        ]))
-        elements.append(zone_table)
-        elements.append(Spacer(1, 3 * mm))
-
-        # Collapse verdict
-        collapse_point = torque_20 if torque_20 else (torque_10 if torque_10 else 0)
-        if collapse_point:
-            collapse_text = f"Efektywna dostawa tlenowa załamuje się powyżej {collapse_point:.0f} Nm."
-        else:
-            collapse_text = "Progi momentu obrotowego niedostępne dla oceny okluzji."
-        elements.append(Paragraph(collapse_text, styles["body"]))
-        elements.append(Spacer(1, 6 * mm))
-
-        # === VERDICT BOX ===
-        elements.append(Paragraph("WERDYKT", styles["heading"]))
-        elements.append(Spacer(1, 2 * mm))
-
-        # Verdict based on classification
-        if level == "high":
-            verdict_text = (
-                "<b>WYSOKA OKLUZJA MECHANICZNA</b><br/>"
-                "Przy wysokich momentach obrotowych naczynia mięśniowe są mechanicznie "
-                "kompresowane, ograniczając perfuzję mimo dostępnego VO₂ systemowego. "
-                "Styl siłowy (niska kadencja) prowadzi do przedwczesnej hipoksji lokalnej."
-            )
-            verdict_color = "#E74C3C"
-        elif level == "moderate":
-            verdict_text = (
-                "<b>UMIARKOWANA OKLUZJA</b><br/>"
-                "Spadek SmO₂ jest proporcjonalny do wzrostu momentu obrotowego. "
-                "Mięśnie wykazują pewną tolerancję na siły, ale istnieje wyraźna granica "
-                "powyżej której desaturacja przyspiesza."
-            )
-            verdict_color = "#F39C12"
-        else:
-            verdict_text = (
-                "<b>NISKA OKLUZJA</b><br/>"
-                "Kapilaryzacja mięśniowa jest wystarczająca, aby utrzymać perfuzję "
-                "nawet przy wysokich momentach obrotowych. Możliwość efektywnej pracy siłowej."
-            )
-            verdict_color = "#27AE60"
-
-        verdict_box = Table(
-            [[Paragraph(verdict_text, ParagraphStyle('verdict', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9))]],
-            colWidths=[165 * mm]
-        )
-        verdict_box.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), HexColor(verdict_color)),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('BOX', (0, 0), (-1, -1), 1, HexColor(verdict_color)),
-        ]))
-        elements.append(verdict_box)
-        elements.append(Spacer(1, 6 * mm))
-
-        # === MECHANISM DESCRIPTION ===
-        interpretation = biomech_data.get("interpretation", {})
-        mechanism = interpretation.get("mechanism", "")
-        riding_style = interpretation.get("riding_style", "")
-
-        if mechanism:
-            elements.append(Paragraph("<b>MECHANIZM FIZJOLOGICZNY</b>", styles["heading"]))
-            elements.append(Spacer(1, 2 * mm))
-            elements.append(Paragraph(mechanism, styles["body"]))
-            elements.append(Spacer(1, 4 * mm))
-
-        if riding_style:
-            elements.append(Paragraph("<b>WPŁYW NA STYL JAZDY</b>", styles["heading"]))
-            elements.append(Spacer(1, 2 * mm))
-            elements.append(Paragraph(riding_style, styles["body"]))
-            elements.append(Spacer(1, 4 * mm))
-
-        # === TRAINING RECOMMENDATIONS ===
-        recommendations = interpretation.get("recommendations", [])
-        if recommendations:
-            elements.append(Paragraph("<b>ZALECENIA TRENINGOWE</b>", styles["heading"]))
-            elements.append(Spacer(1, 2 * mm))
-
-            # Use white text style for visibility on dark background
-            white_style = ParagraphStyle('white_body', parent=styles["body"], textColor=HexColor("#FFFFFF"), fontSize=9)
-            rec_data = [[Paragraph(f"• {rec}", white_style)] for rec in recommendations]
-            rec_table = Table(rec_data, colWidths=[165 * mm])
-            rec_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), HexColor("#16213e")),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ]))
-            elements.append(rec_table)
-    else:
-        # Fallback for legacy data without biomech analysis
-        elements.append(Paragraph(
-            "<b>Interpretacja:</b> Spadek saturacji (SmO₂) przy wysokich momentach obrotowych "
-            "może świadczyć o okluzji mechanicznej lub niskiej efektywności układu krążenia "
-            "w warunkach wysokiego napięcia mięśniowego.",
-            styles["body"]
-        ))
-
-    return elements
-
-
-# ============================================================================
-# NEW PAGE: DRYF FIZJOLOGICZNY
-# ============================================================================
-
-def build_page_drift(
-    kpi: Dict[str, Any],
-    figure_paths: Dict[str, str],
-    styles: Dict
-) -> List:
-    """Build Physiological Drift page (heatmaps only, no KPI table)."""
-    elements = []
-
-    elements.append(Paragraph("<font size='14'>4.2 DRYF FIZJOLOGICZNY</font>", styles["center"]))
-    elements.append(Spacer(1, 6 * mm))
-
-    # Heatmaps
-    if figure_paths and "drift_heatmap_hr" in figure_paths:
-        elements.extend(_build_chart(figure_paths["drift_heatmap_hr"], "Mapa Dryfu (HR vs Power)", styles))
-        elements.append(Spacer(1, 4 * mm))
-
-    if figure_paths and "drift_heatmap_smo2" in figure_paths:
-        elements.extend(_build_chart(figure_paths["drift_heatmap_smo2"], "Mapa Oksydacji (SmO2 vs Power)", styles))
-        elements.append(Spacer(1, 4 * mm))
-
-    # Drift education block - EXPANDED
-    elements.append(Spacer(1, 6 * mm))
     elements.extend(_build_education_block(
-        "Dlaczego to ma znaczenie? (Cardiac Drift)",
-        "Dryf tętna to sygnał ostrzegawczy Twojego układu chłodzenia, którego nie wolno ignorować. "
-        "Jeśli przy stałej mocy tętno systematycznie rośnie, serce musi pracować ciężej, "
-        "by przetłoczyć krew nie tylko do mięśni, ale i do skóry w celu ochłodzenia organizmu.",
+        "Model CP/W' — Teoria",
+        "Model Critical Power (CP) i W' (W-prime) został opracowany przez H. Monoda i H. Scherrera w 1965 roku. "
+        "CP reprezentuje najwyższą moc, jaką sportowiec może utrzymać przez dłuższy czas bez wyczerpania rezerw anaerobowych. "
+        "W' to finite work capacity above CP — rezerwa energii dostępna na wysiłki powyżej CP.",
+        styles
+    ))
+    elements.append(Spacer(1, 4 * mm))
+
+    elements.extend(_build_education_block(
+        "Progi Wentylacyjne — VT1 i VT2",
+        "VT1 (First Ventilatory Threshold) to punkt, w którym wentylacja zaczyna rosnąć nieliniowo względem mocy. "
+        "VT2 (Second Ventilatory Threshold / RCP) to punkt, w którym wentylacja przyspiesza gwałtownie "
+        "z powodu kompensacji kwasu mlekowego (respiratory compensation point). "
+        "Te dwa progi są kluczowymi markerami intensywności treningowej.",
+        styles
+    ))
+    elements.append(Spacer(1, 4 * mm))
+
+    elements.extend(_build_education_block(
+        "Określanie Stref Treningowych",
+        "Strefy treningowe są wyznaczane na podstawie VT1, VT2 i CP. "
+        "Z1 (Recovery): poniżej 80% VT1 — regeneracja. "
+        "Z2 (Endurance): 80% VT1 do VT1 — baza tlenowa. "
+        "Z3 (Tempo): VT1 do VT2 — wytrzymałość progowa. "
+        "Z4 (Threshold): VT2 do 105% VT2 — tolerancja mleczanowa. "
+        "Z5 (VO₂max): powyżej 105% VT2 — rozwój pułapu tlenowego.",
         styles
     ))
 
-    # Additional theory paragraphs
-    elements.append(Spacer(1, 4 * mm))
-    elements.append(Paragraph(
-        "<b>Fizjologia dryfu sercowego:</b> Wzrost temperatury rdzenia o każdy 1°C powoduje "
-        "przyrost HR o 8-10 uderzeń/min oraz spadek VO₂max o 1.5-2%. Przy temperaturze "
-        "rdzenia >39°C następuje ochronne ograniczenie rekrutacji jednostek motorycznych "
-        "przez ośrodkowy układ nerwowy (central governor). Efektywność serca (EF) spada, "
-        "ponieważ każdy wat mocy wymaga większego nakładu pracy serca.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 3 * mm))
-    elements.append(Paragraph(
-        "<b>Konsekwencje startowe:</b> W wyścigu przy wysokiej temperaturze otoczenia dryf "
-        "HR >10% w ciągu pierwszych 30-45 min oznacza, że pacing musi być skorygowany w dół. "
-        "Kontynuacja planowanej mocy przy rosnącym HR prowadzi do przedwczesnego wyczerpania "
-        "glikogenu, kumulacji ciepła i potencjalnego DNF. Adaptacja cieplna (heat acclimation) "
-        "redukuje dryf o 15-20% po 10-14 dniach ekspozycji.",
-        styles["body"]
-    ))
-    elements.append(Spacer(1, 3 * mm))
-    elements.append(Paragraph(
-        "<b>Praktyczne zalecenia:</b> Monitoruj EF w czasie rzeczywistym. Jeśli EF spada >8% "
-        "w pierwszych 45 min, zmniejsz moc o 3-5%. Stosuj pre-cooling przed startem "
-        "(kamizelka lodowa, zimny napój 500ml). Nawadniaj 500-750ml/h + elektrolity (500-1000mg Na+/h).",
-        styles["body"]
-    ))
+    return elements
+
+
+# ============================================================================
+# PAGE: PROTOCOL
+# ============================================================================
+
+def build_page_protocol(
+    metadata: Dict[str, Any] = None,
+    styles: Dict = None
+) -> List:
+    """Build Test Protocol page."""
+    elements = []
+
+    elements.append(Paragraph("PROTOKÓŁ TESTU", styles["title"]))
+    elements.append(Spacer(1, 6 * mm))
+
+    if metadata and styles:
+        test_type = metadata.get("test_type", "Ramp Test")
+        start_power = metadata.get("test_start_power", "---")
+        end_power = metadata.get("test_end_power", "---")
+        step_duration = metadata.get("step_duration", "3 min")
+        step_increment = metadata.get("step_increment", "30 W")
+        test_duration = metadata.get("test_duration", "---")
+
+        elements.append(Paragraph(f"<b>Typ testu:</b> {test_type}", styles["body"]))
+        elements.append(Paragraph(f"<b>Moc początkowa:</b> {start_power} W", styles["body"]))
+        elements.append(Paragraph(f"<b>Moc końcowa:</b> {end_power} W", styles["body"]))
+        elements.append(Paragraph(f"<b>Czas kroku:</b> {step_duration}", styles["body"]))
+        elements.append(Paragraph(f"<b>Przyrost:</b> {step_increment}", styles["body"]))
+        elements.append(Paragraph(f"<b>Całkowity czas:</b> {test_duration}", styles["body"]))
+    else:
+        elements.append(Paragraph("Brak metadanych protokołu.", styles["body"]))
 
     return elements
 
 
 # ============================================================================
-# NEW PAGE: KLUCZOWE WSKAŹNIKI WYDAJNOŚCI (KPI) - PREMIUM DASHBOARD
+# PAGE: THERMAL
+# ============================================================================
+
+def build_page_thermal(
+    thermal_data: Dict[str, Any],
+    figure_paths: Dict[str, str],
+    styles: Dict
+) -> List:
+    """Build Thermal Analysis page."""
+    elements = []
+
+    elements.append(Paragraph("<font size='14'>3.5 ANALIZA TERMICZNA</font>", styles["center"]))
+    elements.append(Paragraph(
+        "<font size='10' color='#7F8C8D'>Monitorowanie temperatury rdzeniowej i stresu cieplnego</font>",
+        styles['center']
+    ))
+    elements.append(Spacer(1, 6 * mm))
+
+    core_temp_avg = thermal_data.get("core_temp_avg", 0)
+    core_temp_max = thermal_data.get("core_temp_max", 0)
+    skin_temp_avg = thermal_data.get("skin_temp_avg", 0)
+    heat_strain_index = thermal_data.get("heat_strain_index", 0)
+    thermal_drift_rate = thermal_data.get("thermal_drift_rate", 0)
+    thermal_status = thermal_data.get("thermal_status", "unknown")
+
+    def build_card(title, value, unit, interp, color):
+        card_content = [
+            Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
+            Paragraph(f"<font size='14' color='{color}'><b>{value}</b></font>", styles["center"]),
+            Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+            Paragraph(f"<font size='7'>{interp}</font>", styles["center"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[42 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8F9FA")),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        return card_table
+
+    ct_color = "#2ECC71" if core_temp_max < 38.5 else ("#F39C12" if core_temp_max < 39.0 else "#E74C3C")
+    ct_interp = "Normalna" if core_temp_max < 38.5 else ("Podwyższona" if core_temp_max < 39.0 else "Wysoka")
+    card1 = build_card("TEMP. RDZENIOWA", f"{core_temp_max:.1f}", "°C", f"avg: {core_temp_avg:.1f}°C", ct_color)
+
+    hsi_color = "#2ECC71" if heat_strain_index < 3 else ("#F39C12" if heat_strain_index < 5 else "#E74C3C")
+    hsi_interp = "Niski" if heat_strain_index < 3 else ("Średni" if heat_strain_index < 5 else "Wysoki")
+    card2 = build_card("HEAT STRAIN INDEX", f"{heat_strain_index:.1f}", "", hsi_interp, hsi_color)
+
+    drift_color = "#2ECC71" if abs(thermal_drift_rate) < 0.1 else ("#F39C12" if abs(thermal_drift_rate) < 0.3 else "#E74C3C")
+    drift_interp = "Stabilna" if abs(thermal_drift_rate) < 0.1 else ("Umiarkowany" if abs(thermal_drift_rate) < 0.3 else "Wysoki")
+    card3 = build_card("DRYF TERMICZNY", f"{thermal_drift_rate:.2f}", "°C/h", drift_interp, drift_color)
+
+    cards_row = Table([[card1, card2, card3]], colWidths=[58 * mm] * 3)
+    cards_row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    elements.append(cards_row)
+    elements.append(Spacer(1, 6 * mm))
+
+    if figure_paths and "thermal_profile" in figure_paths:
+        elements.extend(_build_chart(figure_paths["thermal_profile"], "Profil Termiczny", styles))
+
+    return elements
+
+
+# ============================================================================
+# PAGE: BIOMECH
+# ============================================================================
+
+def build_page_biomech(
+    biomech_data: Dict[str, Any],
+    figure_paths: Dict[str, str],
+    styles: Dict
+) -> List:
+    """Build Biomechanics Analysis page."""
+    elements = []
+
+    elements.append(Paragraph("<font size='14'>3.6 BIOMECHANIKA</font>", styles["center"]))
+    elements.append(Paragraph(
+        "<font size='10' color='#7F8C8D'>Analiza dynamiki biegu i asymetrii</font>",
+        styles['center']
+    ))
+    elements.append(Spacer(1, 6 * mm))
+
+    gct = biomech_data.get("gct_avg", 0)
+    gct_left = biomech_data.get("gct_left", 0)
+    gct_right = biomech_data.get("gct_right", 0)
+    balance = biomech_data.get("stance_balance", 50.0)
+    vo = biomech_data.get("vertical_oscillation", 0)
+    vr = biomech_data.get("vertical_ratio", 0)
+    step_length = biomech_data.get("step_length", 0)
+    asymmetry = biomech_data.get("gct_asymmetry", 0)
+
+    def build_card(title, value, unit, interp, color):
+        card_content = [
+            Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
+            Paragraph(f"<font size='14' color='{color}'><b>{value}</b></font>", styles["center"]),
+            Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+            Paragraph(f"<font size='7'>{interp}</font>", styles["center"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[42 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8F9FA")),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        return card_table
+
+    gct_color = "#2ECC71" if gct < 250 else ("#F39C12" if gct < 300 else "#E74C3C")
+    gct_interp = "Krótki kontakt" if gct < 250 else ("Średni" if gct < 300 else "Długi kontakt")
+    card1 = build_card("GCT", f"{gct:.0f}", "ms", gct_interp, gct_color)
+
+    bal_color = "#2ECC71" if abs(balance - 50) < 2 else ("#F39C12" if abs(balance - 50) < 5 else "#E74C3C")
+    bal_interp = "Symetryczny" if abs(balance - 50) < 2 else ("Lekka asymetria" if abs(balance - 50) < 5 else "Asymetria")
+    card2 = build_card("BALANS L/P", f"{balance:.1f}", "%", bal_interp, bal_color)
+
+    vo_color = "#2ECC71" if vo < 8 else ("#F39C12" if vo < 10 else "#E74C3C")
+    vo_interp = "Niska" if vo < 8 else ("Średnia" if vo < 10 else "Wysoka")
+    card3 = build_card("OSCYLACJA PION.", f"{vo:.1f}", "cm", vo_interp, vo_color)
+
+    cards_row = Table([[card1, card2, card3]], colWidths=[58 * mm] * 3)
+    cards_row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    elements.append(cards_row)
+    elements.append(Spacer(1, 6 * mm))
+
+    if figure_paths and "biomech_profile" in figure_paths:
+        elements.extend(_build_chart(figure_paths["biomech_profile"], "Profil Biomechaniczny", styles))
+
+    return elements
+
+
+# ============================================================================
+# PAGE: DRIFT
+# ============================================================================
+
+def build_page_drift(
+    drift_data: Dict[str, Any],
+    figure_paths: Dict[str, str],
+    styles: Dict
+) -> List:
+    """Build Drift Analysis page."""
+    elements = []
+
+    elements.append(Paragraph("<font size='14'>4.1 DRYF I DECOUPLING</font>", styles["center"]))
+    elements.append(Paragraph(
+        "<font size='10' color='#7F8C8D'>Analiza stabilności tętna i mocy w czasie</font>",
+        styles['center']
+    ))
+    elements.append(Spacer(1, 6 * mm))
+
+    hr_drift = drift_data.get("hr_drift_pct", 0)
+    power_drift = drift_data.get("power_drift_pct", 0)
+    decoupling = drift_data.get("decoupling", 0)
+    drift_status = drift_data.get("drift_status", "unknown")
+
+    def build_card(title, value, unit, interp, color):
+        card_content = [
+            Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
+            Paragraph(f"<font size='14' color='{color}'><b>{value}</b></font>", styles["center"]),
+            Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+            Paragraph(f"<font size='7'>{interp}</font>", styles["center"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[55 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8F9FA")),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        return card_table
+
+    drift_color = "#2ECC71" if abs(hr_drift) < 3 else ("#F39C12" if abs(hr_drift) < 6 else "#E74C3C")
+    drift_interp = "Stabilny" if abs(hr_drift) < 3 else ("Dryf" if abs(hr_drift) < 6 else "Wysoki dryf")
+    card1 = build_card("DRYF HR", f"{hr_drift:.1f}", "%", drift_interp, drift_color)
+
+    dec_color = "#2ECC71" if abs(decoupling) < 5 else ("#F39C12" if abs(decoupling) < 10 else "#E74C3C")
+    dec_interp = "Stabilny" if abs(decoupling) < 5 else ("Umiarkowany" if abs(decoupling) < 10 else "Wysoki")
+    card2 = build_card("DECOUPLING", f"{decoupling:.1f}", "%", dec_interp, dec_color)
+
+    cards_row = Table([[card1, card2]], colWidths=[88 * mm] * 2)
+    cards_row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    elements.append(cards_row)
+    elements.append(Spacer(1, 6 * mm))
+
+    if figure_paths and "drift_hr" in figure_paths:
+        elements.extend(_build_chart(figure_paths["drift_hr"], "Moc vs Tętno (Dryf)", styles))
+
+    return elements
+
+
+# ============================================================================
+# PAGE: KPI DASHBOARD
 # ============================================================================
 
 def build_page_kpi_dashboard(
     kpi: Dict[str, Any],
     styles: Dict
 ) -> List:
-    """Build dedicated KPI Dashboard page - premium quality."""
-    from reportlab.lib.colors import HexColor
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import TableStyle
-
+    """Build KPI Dashboard page."""
     elements = []
 
-    elements.append(Paragraph("5. PODSUMOWANIE", styles["title"]))
     elements.append(Paragraph("<font size='14'>5.1 WSKAŹNIKI KPI</font>", styles["center"]))
-    elements.append(Paragraph("<font size='10' color='#7F8C8D'>Dashboard stabilności układu krążenia i kosztu energetycznego</font>", styles["body"]))
-    elements.append(Spacer(1, 8 * mm))
-
-    # === HELPER FUNCTIONS ===
-    def get_ef_status(val):
-        """Efficiency Factor status."""
-        if val is None: return ("n/a", "BRAK", "#808080")
-        try:
-            v = float(val)
-            if v < 1.8: return (f"{v:.2f}", "SŁABO", "#E74C3C")
-            elif v < 2.2: return (f"{v:.2f}", "OK", "#27AE60")
-            else: return (f"{v:.2f}", "BARDZO DOBRZE", "#2ECC71")
-        except Exception: return ("n/a", "BRAK", "#808080")
-
-    def get_pahr_status(val):
-        """Pa:Hr Decoupling status."""
-        if val is None: return ("n/a", "BRAK", "#808080")
-        try:
-            v = float(val)
-            if v < 5: return (f"{v:.1f}%", "STABILNY", "#27AE60")
-            elif v < 8: return (f"{v:.1f}%", "OSTRZEŻENIE", "#F39C12")
-            else: return (f"{v:.1f}%", "RYZYKO", "#E74C3C")
-        except Exception: return ("n/a", "BRAK", "#808080")
-
-    def get_smo2_drift_status(val):
-        """SmO2 Drift status."""
-        if val is None: return ("n/a", "BRAK", "#808080")
-        try:
-            v = float(val)
-            if v < 5: return (f"{v:.1f}%", "STABILNY", "#27AE60")
-            else: return (f"{v:.1f}%", "ZMĘCZENIE OBWODOWE", "#F39C12")
-        except Exception: return ("n/a", "BRAK", "#808080")
-
-    # === GET VALUES ===
-    ef_val, ef_status, ef_color = get_ef_status(kpi.get("ef"))
-    pahr_val, pahr_status, pahr_color = get_pahr_status(kpi.get("pa_hr"))
-    smo2_val, smo2_status, smo2_color = get_smo2_drift_status(kpi.get("smo2_drift"))
-
-    # VO2max from canonical source
-    vo2max_raw = kpi.get("vo2max_est")
-    vo2max_source = kpi.get("vo2max_source", "")
-    if vo2max_raw and vo2max_raw != "brak danych":
-        try:
-            vo2max_val = f"{float(vo2max_raw):.1f} ml/kg"
-            vo2max_status = "CANONICAL"
-            vo2max_color = "#3498DB"
-        except Exception:
-            vo2max_val = "n/a"
-            vo2max_status = "BRAK"
-            vo2max_color = "#808080"
-    else:
-        vo2max_val = "n/a"
-        vo2max_status = "BRAK"
-        vo2max_color = "#808080"
-
-    # === BUILD KPI TABLE - Polish chars with proper encoding ===
-    header = ["Metryka", "Wartość", "Zakres Ref.", "Status"]
-
-    rows = [
-        header,
-        ["Efficiency Factor (EF)", ef_val, "<1.8 slabo | 1.8-2.2 ok | >2.2 b.dobrze", ef_status],
-        ["Pa:Hr Decoupling", pahr_val, "<5% stab. | 5-8% ostrz. | >8% ryzyko", pahr_status],
-        ["SmO2 Drift", smo2_val, "<5% stabilny | >5% zmeczenie", smo2_status],
-        ["VO2max", vo2max_val, f"Zrodlo: {vo2max_source}", vo2max_status],
-    ]
-
-    table = Table(rows, colWidths=[40 * mm, 28 * mm, 65 * mm, 32 * mm])
-
-    # Dynamic styling based on status colors
-    table_style = [
-        # Header
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1a1a2e")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, 0), 'DejaVuSans-Bold'),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        # ALL CELLS must use DejaVuSans for Polish characters
-        ('FONTNAME', (0, 1), (-1, -1), 'DejaVuSans'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (1, 1), (1, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (3, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-        ('ROWHEIGHT', (0, 0), (-1, -1), 14 * mm),
-        # Data row backgrounds - lighter for readability
-        ('BACKGROUND', (0, 1), (2, 1), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 1), (2, 1), HexColor("#333333")),
-        ('BACKGROUND', (0, 2), (2, 2), HexColor("#e8e8e8")),
-        ('TEXTCOLOR', (0, 2), (2, 2), HexColor("#333333")),
-        ('BACKGROUND', (0, 3), (2, 3), HexColor("#f5f5f5")),
-        ('TEXTCOLOR', (0, 3), (2, 3), HexColor("#333333")),
-        ('BACKGROUND', (0, 4), (2, 4), HexColor("#e8e8e8")),
-        ('TEXTCOLOR', (0, 4), (2, 4), HexColor("#333333")),
-        # Status column colors per row - bright colors with white text
-        ('BACKGROUND', (3, 1), (3, 1), HexColor(ef_color)),
-        ('TEXTCOLOR', (3, 1), (3, 1), HexColor("#FFFFFF")),
-        ('BACKGROUND', (3, 2), (3, 2), HexColor(pahr_color)),
-        ('TEXTCOLOR', (3, 2), (3, 2), HexColor("#FFFFFF")),
-        ('BACKGROUND', (3, 3), (3, 3), HexColor(smo2_color)),
-        ('TEXTCOLOR', (3, 3), (3, 3), HexColor("#FFFFFF")),
-        ('BACKGROUND', (3, 4), (3, 4), HexColor(vo2max_color)),
-        ('TEXTCOLOR', (3, 4), (3, 4), HexColor("#FFFFFF")),
-        ('FONTNAME', (3, 1), (3, -1), 'DejaVuSans-Bold'),
-    ]
-
-    table.setStyle(TableStyle(table_style))
-    elements.append(table)
-    elements.append(Spacer(1, 8 * mm))
-
-    # === LEGEND ===
-    legend_style = ParagraphStyle('legend', parent=styles["body"], fontSize=8, textColor=HexColor("#95A5A6"))
-    elements.append(Paragraph(
-        "<b>Legenda statusów:</b> "
-        "<font color='#27AE60'>■ OK/STABILNY</font> | "
-        "<font color='#F39C12'>■ OSTRZEŻENIE</font> | "
-        "<font color='#E74C3C'>■ RYZYKO/SŁABO</font> | "
-        "<font color='#808080'>■ BRAK DANYCH</font>",
-        legend_style
-    ))
     elements.append(Spacer(1, 6 * mm))
 
-    # === INTERPRETIVE FOOTER ===
-    footer_text = (
-        "<b>Interpretacja:</b> KPI odzwierciedlają stabilność układu krążenia i koszt energetyczny "
-        "utrzymania mocy. Efficiency Factor (EF) pokazuje ile watów generujesz na każde uderzenie "
-        "serca - wyższy EF oznacza lepszą sprawność aerobową. Pa:Hr Decoupling >5% świadczy o "
-        "niepełnej adaptacji termicznej lub chronicznym zmęczeniu. SmO2 Drift wskazuje na lokalne "
-        "wyczerpanie mięśni niezależne od układu sercowo-naczyniowego."
-    )
-    elements.append(Paragraph(footer_text, styles["body"]))
-    elements.append(Spacer(1, 10 * mm))
+    metrics = kpi.get("metrics", [])
 
-    # ==========================================================================
-    # KPI – EXPECTED TREND (6–8 weeks)
-    # ==========================================================================
+    if not metrics:
+        elements.append(Paragraph("Brak danych KPI.", styles["body"]))
+        return elements
 
-    elements.append(Paragraph("<b>OCZEKIWANY TREND (6–8 tygodni)</b>", styles["subheading"]))
-    elements.append(Spacer(1, 3 * mm))
+    # Build KPI cards in rows of 3
+    for i in range(0, len(metrics), 3):
+        row = metrics[i:i+3]
+        cards = []
 
-    # Calculate target values heuristically
-    def calc_target(current_str, improvement_pct, is_reduction=False):
-        try:
-            # Extract numeric value
-            val = float(current_str.replace('%', '').replace(' ml/kg', '').replace('n/a', '0'))
-            if val == 0:
-                return "—"
-            if is_reduction:
-                target = val * (1 - improvement_pct / 100)
-            else:
-                target = val * (1 + improvement_pct / 100)
-            return f"{target:.2f}" if target < 10 else f"{target:.1f}"
-        except Exception:
-            return "—"
+        for m in row:
+            name = m.get("name", "")
+            value = m.get("value", "---")
+            unit = m.get("unit", "")
+            interpretation = m.get("interpretation", "")
+            color = m.get("color", "#7F8C8D")
 
-    # Get current values (parsed earlier)
-    ef_current = ef_val
-    pahr_current = pahr_val
-    smo2_current = smo2_val
-    vo2_current = vo2max_val
+            card_content = [
+                Paragraph(f"<font size='8' color='#7F8C8D'>{name}</font>", styles["center"]),
+                Paragraph(f"<font size='16' color='{color}'><b>{value}</b></font>", styles["center"]),
+                Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+                Paragraph(f"<font size='8'>{interpretation}</font>", styles["center"]),
+            ]
+            card_table = Table([[card_content]], colWidths=[55 * mm])
+            card_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8F9FA")),
+                ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ]))
+            cards.append(card_table)
 
-    # Calculate targets
-    ef_target = calc_target(ef_val, 6.5)  # +5-8% → 6.5% avg
-    pahr_target = calc_target(pahr_val.replace('%', ''), 7.5, is_reduction=True)  # improve by 5-10 pp → 7.5% reduction
-    smo2_target = calc_target(smo2_val.replace('%', ''), 35, is_reduction=True)  # reduce by 30-40% → 35%
-    vo2_target = calc_target(vo2max_val.replace(' ml/kg', ''), 4)  # +3-5% → 4% avg
-
-    # Build trend table
-    trend_header = ["Metryka", "Obecny", "Cel (6–8 tyg.)", "Droga do celu"]
-    trend_rows = [
-        trend_header,
-        ["Wsp. Efektywności (EF)", ef_current, ef_target, "+5–8% przez objętość Z2"],
-        ["Pa:Hr (Rozjechanie)", pahr_current, f"{pahr_target}%", "Adaptacja cieplna + pacing"],
-        ["% Dryf SmO2", smo2_current, f"{smo2_target}%", "−30–40% przez siłę + kadencję"],
-        ["VO2max", vo2_current, f"{vo2_target} ml/kg", "+3–5% przez interwały VO2max"],
-    ]
-
-    trend_table = Table(trend_rows, colWidths=[45 * mm, 30 * mm, 40 * mm, 55 * mm])
-    trend_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#2C3E50")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#FFFFFF")),
-        ('FONTNAME', (0, 0), (-1, 0), FONT_FAMILY_BOLD),
-        ('FONTNAME', (0, 1), (-1, -1), FONT_FAMILY),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#555555")),
-        ('ROWHEIGHT', (0, 0), (-1, -1), 10 * mm),
-        ('BACKGROUND', (0, 1), (-1, -1), HexColor("#f8f9fa")),
-        ('BACKGROUND', (2, 1), (2, -1), HexColor("#E8F6EF")),  # Target column highlight
-    ]))
-    elements.append(trend_table)
-    elements.append(Spacer(1, 3 * mm))
-
-    # Disclaimer
-    disclaimer_style = ParagraphStyle('disclaimer', parent=styles["body"], fontSize=8, textColor=HexColor("#7F8C8D"), fontName=FONT_FAMILY_ITALIC)
-    elements.append(Paragraph("Cele zakładają ustrukturyzowany trening i adaptację cieplną.", disclaimer_style))
+        if cards:
+            cards_row = Table([cards], colWidths=[58 * mm] * len(cards))
+            cards_row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+            elements.append(cards_row)
+            elements.append(Spacer(1, 4 * mm))
 
     return elements
 
 
-# Legacy compatibility wrapper
+# ============================================================================
+# PAGE: DRIFT KPI
+# ============================================================================
+
 def build_page_drift_kpi(
     kpi: Dict[str, Any],
-    figure_paths: Dict[str, str],
     styles: Dict
 ) -> List:
-    """Legacy wrapper - combines drift page content only, KPI is on separate page now."""
-    return build_page_drift(kpi, figure_paths, styles)
+    """Build Drift KPI summary."""
+    elements = []
+
+    elements.append(Paragraph("<font size='14'>5.3 DRYF — PODSUMOWANIE</font>", styles["center"]))
+    elements.append(Spacer(1, 6 * mm))
+
+    drift_metrics = kpi.get("drift", {})
+    if drift_metrics:
+        hr_drift = drift_metrics.get("hr_drift_pct", "---")
+        power_drift = drift_metrics.get("power_drift_pct", "---")
+        decoupling = drift_metrics.get("decoupling", "---")
+
+        data = [
+            ["Metryka", "Wartość"],
+            ["Dryf HR", f"{hr_drift} %"],
+            ["Dryf Mocy", f"{power_drift} %"],
+            ["Decoupling", f"{decoupling} %"],
+        ]
+
+        table = Table(data, colWidths=[60 * mm, 60 * mm])
+        table.setStyle(get_table_style())
+        elements.append(table)
+    else:
+        elements.append(Paragraph("Brak danych o dryfie.", styles["body"]))
+
+    return elements
 
 
 # ============================================================================
-# UPDATED PAGE 7: METABOLIC MODEL
+# PAGE: LIMITERS
 # ============================================================================
 
 def build_page_limiters(
-    metadata: Dict[str, Any],
-    cp_model: Dict[str, Any],
-    figure_paths: Dict[str, str],
+    limiter_data: Dict[str, Any],
     styles: Dict
 ) -> List:
-    """Build Metabolic Profile page (Radar + VLaMax Balance)."""
+    """Build Limiters Summary page."""
     elements = []
 
-    elements.append(Paragraph("Model Metaboliczny (INSCYD-style)", styles["title"]))
+    elements.append(Paragraph("<font size='14'>5.2 ANALIZA LIMITERÓW</font>", styles["center"]))
     elements.append(Spacer(1, 6 * mm))
 
-    # 1. VLaMax Balance Schema
-    if figure_paths and "vlamax_balance" in figure_paths:
-        elements.extend(_build_chart(figure_paths["vlamax_balance"], "Balans VO2max vs VLaMax", styles))
-        elements.append(Spacer(1, 4 * mm))
-    else:
-        elements.append(Paragraph("Brak danych do analizy VLaMax (wymagane min. 20 min MMP)", styles["small"]))
+    limiters = limiter_data.get("limiters", [])
 
-    # 2. Radar Chart
-    if figure_paths and "limiters_radar" in figure_paths:
-        elements.extend(_build_chart(figure_paths["limiters_radar"], "Radar Obciążenia (5 min Peak)", styles))
-        elements.append(Spacer(1, 4 * mm))
+    if not limiters:
+        elements.append(Paragraph("Brak danych o limiterach.", styles["body"]))
+        return elements
 
-    elements.append(Paragraph(
-        "<b>Profil Zawodnika:</b> Twój profil wynika ze stosunku między zdolnością tlenową (VO₂max) "
-        "a beztlenową (VLaMax). Wykryty limiter wskazuje, nad czym pracować w następnym bloku treningowym.",
-        styles["body"]
-    ))
+    for limiter in limiters:
+        name = limiter.get("name", "Unknown")
+        score = limiter.get("score", 0)
+        severity = limiter.get("severity", "medium")
+
+        severity_colors = {"low": "#2ECC71", "medium": "#F39C12", "high": "#E74C3C"}
+        color = severity_colors.get(severity, "#7F8C8D")
+
+        card_content = [
+            Paragraph(f"<b>{name}</b> — {score:.0f}/100", styles["body"]),
+        ]
+        card_table = Table([[card_content]], colWidths=[170 * mm])
+        card_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), COLORS["background"]),
+            ('BOX', (0, 0), (-1, -1), 1, HexColor(color)),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(card_table)
+        elements.append(Spacer(1, 3 * mm))
 
     return elements
 
 
 # ============================================================================
-# PAGE 8: DODATKOWE ANALIZY
+# PAGE: EXTRA
 # ============================================================================
 
 def build_page_extra(
