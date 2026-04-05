@@ -1,5 +1,50 @@
 ## 📋 Changelog
 
+### 2026-04-05 - Comprehensive Code Quality Refactor
+
+**Critical bug fixes:**
+- 🔴 Fixed 9 undefined name errors (F821): `sqlite3`, `Optional`, `_executor`, `logger`, `numpy as np`, `sys` — all would cause runtime crashes
+- 🔴 Fixed exception chaining (B904): proper `raise ... from err` in persistence layer
+
+**Import organization:**
+- 📦 Consolidated all scattered imports in `app.py` to top of file (16 E402 → 0)
+- 📦 Updated `pyproject.toml` to modern ruff config format (`[tool.ruff.lint]` section)
+- 📦 Removed unused imports (`numba.prange`)
+
+**Complexity reduction (C901: 74 → 0 functions):**
+- 🧩 Extracted 200+ private helper functions across 40+ files
+- 🧩 Top reductions:
+  - `save_ramp_test_report`: **66 → <15** (15 helpers)
+  - `detect_smo2_thresholds_moxy`: **53 → <15** (17 helpers)
+  - `_run_ve_only_mode`: **51 → 2** (13 helpers)
+  - `map_ramp_json_to_pdf_data`: **46 → ~4** (12 helpers)
+  - `render_smo2_tab`: **45 → 7** (18 helpers)
+  - `render_biomech_tab`: **38 → ~3** (10 helpers)
+  - `render_running_tab`: **26 → <15** (10 helpers)
+  - `render_limiters_tab`: **25 → <10** (12 helpers)
+  - `render_threshold_analysis_tab`: **24 → <10** (11 helpers)
+  - `identify_main_limiter`: **25 → 1** (8 helpers)
+  - `generate_training_cards`: **13 → ~2** (10 helpers)
+  - `build_canonical_physiology`: **25 → 1** (8 helpers)
+  - `analyze_thermoregulation`: **21 → ~3** (6 helpers)
+  - `load_data`: **18 → 3** (6 helpers)
+  - + 60 more functions refactored
+
+**Code quality improvements:**
+- ♻️ Eliminated DRY violations (duplicate code blocks consolidated into shared helpers)
+- ♻️ Replaced nested conditionals with guard clauses and early returns
+- ♻️ Converted inner closures to module-level private functions
+- 🛡️ All changes are behavior-preserving — zero breaking changes
+
+**Validation:**
+- ✅ **321/321 tests pass** (0 regressions)
+- ✅ **Ruff C901: 0 violations** (was 74)
+- ✅ **Ruff F821/B007/F401/B904/E402: 0 violations** (was 47)
+- ✅ All public function signatures unchanged
+
+---
+
+
 ### 2026-04-03 - Phase 1 Cleanup
 
 **Branch cleanup:**
@@ -237,7 +282,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python">
   <img src="https://img.shields.io/badge/Streamlit-1.30+-red?style=for-the-badge&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/Tests-73%2F73-green?style=for-the-badge" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-321%2F321-green?style=for-the-badge" alt="Tests">
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
 </p>
 

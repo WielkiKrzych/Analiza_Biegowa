@@ -36,6 +36,102 @@ class SmO2PhaseResult:
     notes: List[str] = field(default_factory=list)
 
 
+def _smooth_smo2_signal(smo2: np.ndarray) -> np.ndarray:
+    """Apply rolling median smoothing to SmO2 signal."""
+    window = min(61, len(smo2) // 4)
+    if window % 2 == 0:
+        window += 1
+    return pd.Series(smo2).rolling(window, center=True, min_periods=1).median().values
+
+
+def _find_phase_boundaries(
+    smo2_smooth: np.ndarray,
+    dsmo2_smooth: np.ndarray,
+    min_phase_duration_sec: int,
+) -> List[int]:
+    """Detect the 4-phase boundaries from smoothed SmO2 derivative."""
+    n = len(smo2_smooth)
+    min_idx = int(np.argmin(smo2_smooth[n // 4 :]) + n // 4)
+
+    phase1_end = _find_sustained_negative_start(dsmo2_smooth, min_phase_duration_sec, min_idx, n)
+    phase2_end = _find_flattening_near_min(
+        dsmo2_smooth, min_phase_duration_sec, phase1_end, min_idx
+    )
+    phase3_end = _find_recovery_onset(dsmo2_smooth, min_phase_duration_sec, min_idx, n)
+
+    return sorted(set([0, phase1_end, phase2_end, phase3_end, n - 1]))
+
+
+def _find_sustained_negative_start(
+    dsmo2_smooth: np.ndarray, min_dur: int, min_idx: int, n: int
+) -> int:
+    """Find Phase 1→2 boundary: first sustained negative slope after start."""
+    for i in range(min_dur, min(min_idx, n)):
+        segment = dsmo2_smooth[i : i + min_dur]
+        if len(segment) >= min_dur and np.mean(segment) < -0.01:
+            return i
+    return min_dur
+
+
+def _find_flattening_near_min(
+    dsmo2_smooth: np.ndarray, min_dur: int, phase1_end: int, min_idx: int
+) -> int:
+    """Find Phase 2→3 boundary: where slope flattens near minimum."""
+    search_start = max(phase1_end + min_dur, min_idx - 300)
+    for i in range(search_start, min_idx + 1):
+        segment = dsmo2_smooth[i : i + min_dur]
+        if len(segment) >= min_dur and abs(np.mean(segment)) < 0.005:
+            return i
+    return min_idx
+
+
+def _find_recovery_onset(dsmo2_smooth: np.ndarray, min_dur: int, min_idx: int, n: int) -> int:
+    """Find Phase 3→4 boundary: sustained positive slope after minimum."""
+    phase3_end = min(min_idx + min_dur, n - 1)
+    for i in range(min_idx, n - min_dur):
+        segment = dsmo2_smooth[i : i + min_dur]
+        if len(segment) >= min_dur and np.mean(segment) > 0.02:
+            return i
+    return phase3_end
+
+
+def _build_phase_records(
+    smo2_smooth: np.ndarray,
+    time: np.ndarray,
+    boundaries: List[int],
+) -> List[Dict]:
+    """Build phase record dicts from smoothed signal and boundaries."""
+    phase_names = [
+        "Phase 1: Rise",
+        "Phase 2: Desaturation",
+        "Phase 3: Plateau",
+        "Phase 4: Recovery",
+    ]
+    phases: List[Dict] = []
+    for idx in range(min(len(boundaries) - 1, 4)):
+        start, end = boundaries[idx], boundaries[idx + 1]
+        if end <= start:
+            continue
+        seg = smo2_smooth[start:end]
+        slope, _, r, _, _ = (
+            stats.linregress(np.arange(len(seg)), seg) if len(seg) > 2 else (0, 0, 0, 0, 0)
+        )
+        phases.append(
+            {
+                "name": phase_names[idx] if idx < len(phase_names) else f"Phase {idx + 1}",
+                "start_sec": int(time[start]) if start < len(time) else start,
+                "end_sec": int(time[min(end, len(time) - 1)]),
+                "duration_sec": int(time[min(end, len(time) - 1)] - time[start])
+                if start < len(time)
+                else end - start,
+                "mean_smo2": float(np.mean(seg)),
+                "slope_pct_per_sec": float(slope),
+                "r_squared": float(r**2),
+            }
+        )
+    return phases
+
+
 def detect_smo2_phases(
     smo2_series: pd.Series,
     time_series: Optional[pd.Series] = None,
@@ -59,91 +155,21 @@ def detect_smo2_phases(
         return result
 
     time = time_series.values[: len(smo2)] if time_series is not None else np.arange(len(smo2))
-
-    # Smooth for phase detection (60s rolling median — robust to spikes)
-    window = min(61, len(smo2) // 4)
-    if window % 2 == 0:
-        window += 1
-    smo2_smooth = pd.Series(smo2).rolling(window, center=True, min_periods=1).median().values
-
-    # Compute rate of change (first derivative, smoothed)
-    dsmo2 = np.gradient(smo2_smooth)
-    dsmo2_smooth = pd.Series(dsmo2).rolling(31, center=True, min_periods=1).mean().values
+    smo2_smooth = _smooth_smo2_signal(smo2)
+    dsmo2_smooth = (
+        pd.Series(np.gradient(smo2_smooth)).rolling(31, center=True, min_periods=1).mean().values
+    )
 
     result.min_smo2 = float(np.nanmin(smo2))
     result.max_smo2 = float(np.nanmax(smo2))
     result.desaturation_magnitude = float(result.max_smo2 - result.min_smo2)
 
-    # Phase detection using sign changes in derivative
-    # Phase 1: dsmo2 > 0 (initial rise or stable)
-    # Phase 2: dsmo2 < 0 (desaturation)
-    # Phase 3: dsmo2 ≈ 0 at low SmO2 (plateau)
-    # Phase 4: dsmo2 > 0 after minimum (recovery)
-
-    n = len(smo2_smooth)
-    min_idx = int(np.argmin(smo2_smooth[n // 4 :]) + n // 4)  # skip first quarter for min search
-
-    # Find Phase 1→2 boundary: first sustained negative slope after start
-    phase1_end = min_phase_duration_sec
-    for i in range(min_phase_duration_sec, min(min_idx, n)):
-        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
-        if len(segment) >= min_phase_duration_sec and np.mean(segment) < -0.01:
-            phase1_end = i
-            break
-
-    # Find Phase 2→3 boundary: where slope flattens near minimum
-    threshold_flat = 0.005  # near-zero derivative
-    phase2_end = min_idx
-    for i in range(max(phase1_end + min_phase_duration_sec, min_idx - 300), min_idx + 1):
-        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
-        if len(segment) >= min_phase_duration_sec and abs(np.mean(segment)) < threshold_flat:
-            phase2_end = i
-            break
-
-    # Find Phase 3→4 boundary: sustained positive slope after minimum
-    phase3_end = min(min_idx + min_phase_duration_sec, n - 1)
-    for i in range(min_idx, n - min_phase_duration_sec):
-        segment = dsmo2_smooth[i : i + min_phase_duration_sec]
-        if len(segment) >= min_phase_duration_sec and np.mean(segment) > 0.02:
-            phase3_end = i
-            break
-
-    boundaries = sorted(set([0, phase1_end, phase2_end, phase3_end, n - 1]))
+    boundaries = _find_phase_boundaries(smo2_smooth, dsmo2_smooth, min_phase_duration_sec)
     result.phase_boundaries = boundaries
+    result.phases = _build_phase_records(smo2_smooth, time, boundaries)
 
-    phase_names = [
-        "Phase 1: Rise",
-        "Phase 2: Desaturation",
-        "Phase 3: Plateau",
-        "Phase 4: Recovery",
-    ]
-    for idx in range(min(len(boundaries) - 1, 4)):
-        start, end = boundaries[idx], boundaries[idx + 1]
-        if end <= start:
-            continue
-        seg = smo2_smooth[start:end]
-        slope, _, r, _, _ = (
-            stats.linregress(np.arange(len(seg)), seg) if len(seg) > 2 else (0, 0, 0, 0, 0)
-        )
-        result.phases.append(
-            {
-                "name": phase_names[idx] if idx < len(phase_names) else f"Phase {idx + 1}",
-                "start_sec": int(time[start]) if start < len(time) else start,
-                "end_sec": int(time[min(end, len(time) - 1)]),
-                "duration_sec": int(time[min(end, len(time) - 1)] - time[start])
-                if start < len(time)
-                else end - start,
-                "mean_smo2": float(np.mean(seg)),
-                "slope_pct_per_sec": float(slope),
-                "r_squared": float(r**2),
-            }
-        )
-
-    # Recovery rate: SmO2 rise in Phase 4
-    if len(result.phases) >= 4:
-        p4 = result.phases[3]
-        if p4["duration_sec"] > 0:
-            result.recovery_rate_pct_per_min = p4["slope_pct_per_sec"] * 60.0
+    if len(result.phases) >= 4 and result.phases[3]["duration_sec"] > 0:
+        result.recovery_rate_pct_per_min = result.phases[3]["slope_pct_per_sec"] * 60.0
 
     result.is_valid = len(result.phases) >= 3
     return result

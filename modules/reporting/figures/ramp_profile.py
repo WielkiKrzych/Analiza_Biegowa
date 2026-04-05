@@ -12,7 +12,7 @@ Chart shows:
 - Footer with test_id and method version
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,20 +20,142 @@ import numpy as np
 from .common import apply_common_style, create_empty_figure, get_color, save_figure
 
 
+def _normalize_config(config: Optional[Any]) -> Dict[str, Any]:
+    """Extract config dict from object, dict, or None."""
+    if hasattr(config, "__dict__"):
+        return config.__dict__
+    if isinstance(config, dict):
+        return config
+    return {}
+
+
+def _extract_first_matching_col(
+    df: Any,
+    candidates: List[str],
+) -> Optional[str]:
+    """Return the first column name from candidates that exists in df."""
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _extract_timeseries_from_df(
+    source_df: Any,
+) -> Tuple[List[float], List[float], List[float]]:
+    """Extract time, power, and HR data from a source DataFrame."""
+    df = source_df.copy()
+    df.columns = df.columns.str.lower().str.strip()
+
+    time_col = _extract_first_matching_col(df, ["time", "seconds"])
+    if time_col:
+        time_data = df[time_col].tolist()
+    else:
+        time_data = list(range(len(df)))
+
+    power_col = _extract_first_matching_col(
+        df, ["watts", "power", "watts_smooth", "watts_smooth_5s"]
+    )
+    power_data = df[power_col].fillna(0).tolist() if power_col else []
+
+    hr_col = _extract_first_matching_col(
+        df, ["hr", "heart_rate", "heartrate", "bpm", "heart_rate_bpm"]
+    )
+    hr_data = df[hr_col].fillna(0).tolist() if hr_col else []
+
+    return time_data, power_data, hr_data
+
+
+def _extract_timeseries_from_json(
+    report_data: Dict[str, Any],
+) -> Tuple[List[float], List[float], List[float]]:
+    """Extract time, power, and HR data from JSON report_data."""
+    time_series = report_data.get("time_series", {})
+    return (
+        time_series.get("time_sec", []),
+        time_series.get("power_watts", []),
+        time_series.get("hr_bpm", []),
+    )
+
+
+def _get_threshold_watts(
+    report_data: Dict[str, Any],
+    cfg: Dict[str, Any],
+) -> Tuple[float, float]:
+    """Get VT1/VT2 watt values with manual overrides applied."""
+    thresholds = report_data.get("thresholds", {})
+    vt1_data = thresholds.get("vt1", {})
+    vt2_data = thresholds.get("vt2", {})
+
+    vt1_watts = vt1_data.get("midpoint_watts", 0) if isinstance(vt1_data, dict) else 0
+    vt2_watts = vt2_data.get("midpoint_watts", 0) if isinstance(vt2_data, dict) else 0
+
+    manual_overrides = cfg.get("manual_overrides", {})
+    if manual_overrides.get("manual_vt1_watts") and manual_overrides["manual_vt1_watts"] > 0:
+        vt1_watts = float(manual_overrides["manual_vt1_watts"])
+    if manual_overrides.get("manual_vt2_watts") and manual_overrides["manual_vt2_watts"] > 0:
+        vt2_watts = float(manual_overrides["manual_vt2_watts"])
+
+    return vt1_watts, vt2_watts
+
+
+def _plot_hr_trace(
+    ax: plt.Axes,
+    time_min: List[float],
+    hr_data: List[float],
+    font_size: int,
+) -> Optional[plt.Axes]:
+    """Plot HR trace on secondary axis if data is available."""
+    if not hr_data:
+        return None
+    ax2 = ax.twinx()
+    (l2,) = ax2.plot(
+        time_min,
+        hr_data,
+        color=get_color("hr"),
+        linestyle="-",
+        label="HR",
+        alpha=0.9,
+        linewidth=2.5,
+        zorder=10,
+    )
+    ax2.set_ylabel("HR [bpm]", color=get_color("hr"), fontsize=font_size)
+    ax2.tick_params(axis="y", labelcolor=get_color("hr"))
+    ax2.spines["right"].set_color(get_color("hr"))
+    return ax2
+
+
+def _plot_vt_band(
+    ax: plt.Axes,
+    vt_watts: float,
+    label_prefix: str,
+) -> None:
+    """Plot a VT horizontal band with center line if watts > 0."""
+    if not vt_watts:
+        return
+    color_key = label_prefix.lower()
+    vt_range = (vt_watts * 0.95, vt_watts * 1.05)
+    ax.axhspan(
+        vt_range[0],
+        vt_range[1],
+        alpha=0.25,
+        color=get_color(color_key),
+        zorder=1,
+        label=f"{label_prefix}: {int(vt_watts)} W",
+    )
+    ax.axhline(
+        y=vt_watts, color=get_color(color_key), linewidth=1, linestyle=":", alpha=0.7, zorder=2
+    )
+
+
 def generate_ramp_profile_chart(
     report_data: Dict[str, Any],
     config: Optional[Any] = None,
     output_path: Optional[str] = None,
-    source_df: Optional["pd.DataFrame"] = None,
+    source_df: Optional[Any] = None,
 ) -> bytes:
     """Generate ramp profile chart with VT1/VT2 as horizontal range bands."""
-    # Handle config as dict if passed, or use defaults
-    if hasattr(config, "__dict__"):
-        cfg = config.__dict__
-    elif isinstance(config, dict):
-        cfg = config
-    else:
-        cfg = {}
+    cfg = _normalize_config(config)
 
     figsize = cfg.get("figsize", (10, 6))
     dpi = cfg.get("dpi", 150)
@@ -41,148 +163,37 @@ def generate_ramp_profile_chart(
     title_size = cfg.get("title_size", 14)
     method_version = cfg.get("method_version", "1.0.0")
 
-    # Extract data from source_df if available, otherwise from report
-    time_series = report_data.get("time_series", {})
-    thresholds = report_data.get("thresholds", {})
-    metadata = report_data.get("metadata", {})
-
-    # Try to get data from source_df first
     if source_df is not None and len(source_df) > 0:
-        # Normalize column names
-        df = source_df.copy()
-        df.columns = df.columns.str.lower().str.strip()
-
-        # Get time data
-        if "time" in df.columns:
-            time_data = df["time"].tolist()
-        elif "seconds" in df.columns:
-            time_data = df["seconds"].tolist()
-        else:
-            time_data = list(range(len(df)))
-
-        # Get power data
-        power_col = None
-        for col in ["watts", "power", "watts_smooth", "watts_smooth_5s"]:
-            if col in df.columns:
-                power_col = col
-                break
-
-        if power_col:
-            power_data = df[power_col].fillna(0).tolist()
-        else:
-            power_data = []
-
-        # Get HR data
-        hr_col = None
-        for col in ["hr", "heart_rate", "heartrate", "bpm", "heart_rate_bpm"]:
-            if col in df.columns:
-                hr_col = col
-                break
-
-        if hr_col:
-            hr_data = df[hr_col].fillna(0).tolist()
-        else:
-            hr_data = []
-
+        time_data, power_data, hr_data = _extract_timeseries_from_df(source_df)
     else:
-        # Fallback to time_series from JSON
-        time_data = time_series.get("time_sec", [])
-        power_data = time_series.get("power_watts", [])
-        hr_data = time_series.get("hr_bpm", [])
+        time_data, power_data, hr_data = _extract_timeseries_from_json(report_data)
 
-    # Handle missing data
     if not time_data or not power_data:
         return create_empty_figure("Brak danych mocy", "Profil Ramp Test", output_path, **cfg)
 
-    # Get threshold values from thresholds dict (nested structure)
-    vt1_data = thresholds.get("vt1", {})
-    vt2_data = thresholds.get("vt2", {})
-    vt1_watts = vt1_data.get("midpoint_watts", 0) if isinstance(vt1_data, dict) else 0
-    vt2_watts = vt2_data.get("midpoint_watts", 0) if isinstance(vt2_data, dict) else 0
+    vt1_watts, vt2_watts = _get_threshold_watts(report_data, cfg)
 
-    # MANUAL OVERRIDE: Check config for manual values (priority over saved)
-    manual_overrides = cfg.get("manual_overrides", {})
-    if manual_overrides.get("manual_vt1_watts") and manual_overrides["manual_vt1_watts"] > 0:
-        vt1_watts = float(manual_overrides["manual_vt1_watts"])
-    if manual_overrides.get("manual_vt2_watts") and manual_overrides["manual_vt2_watts"] > 0:
-        vt2_watts = float(manual_overrides["manual_vt2_watts"])
-
-    # Define VT ranges (±5% for visual band width)
-    vt1_range = (vt1_watts * 0.95, vt1_watts * 1.05) if vt1_watts else None
-    vt2_range = (vt2_watts * 0.95, vt2_watts * 1.05) if vt2_watts else None
-
-    # Convert time to minutes
     time_min = [t / 60 for t in time_data]
-
-    # Create figure
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
-    # Power trace (Axis 1)
-    (l1,) = ax.plot(
-        time_min, power_data, color=get_color("power"), linewidth=1.5, label="Moc", zorder=3
-    )
+    ax.plot(time_min, power_data, color=get_color("power"), linewidth=1.5, label="Moc", zorder=3)
     ax.fill_between(time_min, power_data, alpha=0.15, color=get_color("power"), zorder=2)
 
-    # HR trace (Axis 2) - THICKER AND ON TOP for visibility over power fill
-    if hr_data:
-        ax2 = ax.twinx()
-        (l2,) = ax2.plot(
-            time_min,
-            hr_data,
-            color=get_color("hr"),
-            linestyle="-",
-            label="HR",
-            alpha=0.9,
-            linewidth=2.5,
-            zorder=10,
-        )  # Thicker, solid, on top
-        ax2.set_ylabel("HR [bpm]", color=get_color("hr"), fontsize=font_size)
-        ax2.tick_params(axis="y", labelcolor=get_color("hr"))
-        ax2.spines["right"].set_color(get_color("hr"))
+    _plot_hr_trace(ax, time_min, hr_data, font_size)
+    _plot_vt_band(ax, vt1_watts, "VT1")
+    _plot_vt_band(ax, vt2_watts, "VT2")
 
-    # VT1 horizontal band (semi-transparent)
-    if vt1_range:
-        ax.axhspan(
-            vt1_range[0],
-            vt1_range[1],
-            alpha=0.25,
-            color=get_color("vt1"),
-            zorder=1,
-            label=f"VT1: {int(vt1_watts)} W",
-        )
-        # Add center line for clarity
-        ax.axhline(
-            y=vt1_watts, color=get_color("vt1"), linewidth=1, linestyle=":", alpha=0.7, zorder=2
-        )
-
-    # VT2 horizontal band (semi-transparent)
-    if vt2_range:
-        ax.axhspan(
-            vt2_range[0],
-            vt2_range[1],
-            alpha=0.25,
-            color=get_color("vt2"),
-            zorder=1,
-            label=f"VT2: {int(vt2_watts)} W",
-        )
-        # Add center line for clarity
-        ax.axhline(
-            y=vt2_watts, color=get_color("vt2"), linewidth=1, linestyle=":", alpha=0.7, zorder=2
-        )
-
-    # Set x-axis ticks to hh:mm:ss format
     time_max = max(time_min)
-    tick_step = 5  # 5 minute intervals
+    tick_step = 5
     tick_vals = np.arange(0, time_max + tick_step, tick_step)
     tick_labels = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals]
     ax.set_xticks(tick_vals)
     ax.set_xticklabels(tick_labels)
 
-    # Axis labels
     ax.set_xlabel("Czas [hh:mm:ss]", fontsize=font_size, fontweight="medium")
     ax.set_ylabel("Moc [W]", fontsize=font_size, fontweight="medium")
 
-    # Title
+    metadata = report_data.get("metadata", {})
     test_date = metadata.get("test_date", "")
     ax.set_title(f"Profil Ramp Test – {test_date}", fontsize=title_size, fontweight="bold", pad=15)
 
@@ -191,10 +202,8 @@ def generate_ramp_profile_chart(
         handles, labels, loc="upper left", fontsize=font_size - 1, framealpha=0.9, edgecolor="none"
     )
 
-    # Apply common styling
     apply_common_style(fig, ax, **cfg)
 
-    # Footer with test_id and method version
     session_id = metadata.get("session_id", "unknown")[:8]
     fig.text(
         0.01,
@@ -218,5 +227,4 @@ def generate_ramp_profile_chart(
     )
 
     plt.tight_layout()
-
     return save_figure(fig, output_path, **cfg)

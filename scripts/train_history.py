@@ -18,6 +18,7 @@ Integracja:
 import argparse
 import json
 import os
+import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
@@ -79,68 +80,81 @@ if MLX_AVAILABLE:
 # --- FUNKCJE POMOCNICZE ---
 
 
+def _find_list_in_dict(data: dict) -> list | None:
+    """Find the longest list-of-dicts inside a JSON object using known key names."""
+    candidates = [
+        "samples",
+        "data",
+        "records",
+        "trackPoints",
+        "points",
+        "streams",
+        "rows",
+    ]
+
+    for key in candidates:
+        if key in data and isinstance(data[key], list):
+            return data[key]
+
+    best: list | None = None
+    best_len = 0
+    for v in data.values():
+        if isinstance(v, list) and len(v) > best_len and v and isinstance(v[0], dict):
+            best = v
+            best_len = len(v)
+    return best
+
+
+def _parse_json(filepath: Path) -> pd.DataFrame:
+    """Load a JSON file and return a DataFrame (or empty on failure)."""
+    with open(filepath, "r") as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        return pd.DataFrame(data)
+
+    if isinstance(data, dict):
+        target_list = _find_list_in_dict(data)
+        if target_list is not None:
+            return pd.json_normalize(target_list)
+        try:
+            return pd.DataFrame.from_dict(data, orient="columns")
+        except ValueError:
+            return pd.json_normalize(data)
+
+    return pd.DataFrame()
+
+
+def _parse_csv(filepath: Path) -> pd.DataFrame:
+    """Load a CSV/TXT file, trying comma then semicolon separator."""
+    try:
+        return pd.read_csv(filepath, low_memory=False)
+    except (pd.errors.ParserError, UnicodeDecodeError):
+        return pd.read_csv(filepath, sep=";", low_memory=False)
+
+
+def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Lowercase, strip whitespace, and remove dot-prefixes from column names."""
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    df.columns = [c.split(".")[-1] for c in df.columns]
+    return df
+
+
 def load_data(filepath: Path) -> pd.DataFrame:
     """Smart Loader: Radzi sobie z zagnieżdżonymi JSONami i CSV."""
-    file_ext = filepath.suffix.lower()
     filename = filepath.name
 
     try:
-        if file_ext == ".json":
-            with open(filepath, "r") as f:
-                data = json.load(f)
-
-            if isinstance(data, list):
-                df = pd.DataFrame(data)
-            elif isinstance(data, dict):
-                # Szukamy klucza z danymi
-                candidates = [
-                    "samples",
-                    "data",
-                    "records",
-                    "trackPoints",
-                    "points",
-                    "streams",
-                    "rows",
-                ]
-                target_list = None
-
-                for key in candidates:
-                    if key in data and isinstance(data[key], list):
-                        target_list = data[key]
-                        break
-
-                if target_list is None:
-                    max_len = 0
-                    for _k, v in data.items():
-                        if isinstance(v, list) and len(v) > max_len:
-                            if len(v) > 0 and isinstance(v[0], dict):
-                                target_list = v
-                                max_len = len(v)
-
-                if target_list is None:
-                    try:
-                        df = pd.DataFrame.from_dict(data, orient="columns")
-                    except ValueError:
-                        df = pd.json_normalize(data)
-                else:
-                    df = pd.json_normalize(target_list)
-            else:
-                return pd.DataFrame()
+        if filepath.suffix.lower() == ".json":
+            df = _parse_json(filepath)
         else:
-            # CSV/TXT
-            try:
-                df = pd.read_csv(filepath, low_memory=False)
-            except (pd.errors.ParserError, UnicodeDecodeError):
-                df = pd.read_csv(filepath, sep=";", low_memory=False)
+            df = _parse_csv(filepath)
 
-        # Czyszczenie
-        if "df" in locals() and not df.empty:
-            df.columns = [str(c).lower().strip() for c in df.columns]
-            df.columns = [c.split(".")[-1] for c in df.columns]
-            return df
-        else:
+        if df.empty:
             print(f"   -> ⚠️ Pusty plik: {filename}")
             return pd.DataFrame()
+
+        return _clean_columns(df)
 
     except (ValueError, KeyError, TypeError, OSError) as e:  # noqa: BLE001
         print(f"   -> ⚠️ Błąd odczytu {filename}: {e}")
@@ -304,6 +318,82 @@ def get_folder_stats():
     return files
 
 
+def _train_and_predict_target(
+    model: "PhysioNet",
+    df: pd.DataFrame,
+    watts: int,
+    loss_and_grad_fn,
+    optimizer,
+) -> Optional[float]:
+    """Fine-tune model on filtered data for a target power zone, return predicted HR."""
+    X_chunk, y_chunk = filter_and_prepare(df, watts, tolerance=15, min_samples=60)
+    if X_chunk is None:
+        return None
+
+    for _ in range(100):
+        loss, grads = loss_and_grad_fn(model, X_chunk, y_chunk)
+        optimizer.update(model, grads)
+        mx.eval(model.parameters(), optimizer.state)
+
+    cadence_norm = 90.0 / 120.0
+    in_tensor = mx.array([[watts / 500.0, cadence_norm, 0.5]])
+    return float(model(in_tensor)[0][0]) * 200.0
+
+
+def _process_training_file(
+    file_path: Path,
+    idx: int,
+    total: int,
+    model: "PhysioNet",
+    targets: dict,
+    loss_and_grad_fn,
+    optimizer,
+) -> bool:
+    """Load, process and train on a single file. Returns True if processed successfully."""
+    filename = file_path.name
+    print(f"[{idx + 1}/{total}] {filename}")
+
+    try:
+        df_raw = load_data(file_path)
+        if df_raw.empty:
+            return False
+
+        df = process_data(df_raw)
+        if len(df) < 100:
+            print(f"   -> ⚠️ Za mało danych ({len(df)} rekordów)")
+            return False
+
+        results: dict[str, Optional[float]] = {}
+        for name, watts in targets.items():
+            pred_hr = _train_and_predict_target(model, df, watts, loss_and_grad_fn, optimizer)
+            results[name] = pred_hr
+            if pred_hr is not None:
+                print(f"   -> {name} ({watts}W): {pred_hr:.1f} bpm ✓")
+            else:
+                print(f"   -> {name} ({watts}W): Brak danych w tym zakresie")
+
+        update_history(results.get("BASE"), results.get("THRESH"), filename)
+        save_to_session_store(filename, df, results.get("BASE"), results.get("THRESH"))
+        return True
+
+    except (ValueError, KeyError, TypeError, RuntimeError) as e:  # noqa: BLE001
+        print(f"   -> 💥 Błąd: {e}")
+        return False
+
+
+def _save_model_params(model: "PhysioNet") -> None:
+    """Flatten and save model parameters to disk."""
+    params = model.parameters()
+    flat_params: dict[str, object] = {}
+    for layer_name, layer_params in params.items():
+        if isinstance(layer_params, dict):
+            for param_name, param_value in layer_params.items():
+                flat_params[f"{layer_name}.{param_name}"] = param_value
+        else:
+            flat_params[layer_name] = layer_params
+    mx.savez(MODEL_FILE, **flat_params)
+
+
 def train_loop():
     """Główna pętla treningowa."""
     if not MLX_AVAILABLE:
@@ -318,7 +408,6 @@ def train_loop():
     print(f"\n🚀 Rozpoczynam przetwarzanie {len(files)} plików...\n")
     files.sort()
 
-    # Model
     model = PhysioNet()
     mx.eval(model.parameters())
 
@@ -334,7 +423,6 @@ def train_loop():
 
     loss_and_grad_fn = nn.value_and_grad(model, train_step)
 
-    # Cele treningowe
     targets = {
         "BASE": 280,  # Baza tlenowa
         "THRESH": 360,  # Próg
@@ -344,64 +432,13 @@ def train_loop():
     processed = 0
 
     for idx, file_path in enumerate(files):
-        filename = file_path.name
-        print(f"[{idx + 1}/{len(files)}] {filename}")
-
-        try:
-            df_raw = load_data(file_path)
-            if df_raw.empty:
-                continue
-
-            df = process_data(df_raw)
-            if len(df) < 100:
-                print(f"   -> ⚠️ Za mało danych ({len(df)} rekordów)")
-                continue
-
-            results = {}
-
-            for name, watts in targets.items():
-                X_chunk, y_chunk = filter_and_prepare(df, watts, tolerance=15, min_samples=60)
-
-                if X_chunk is not None:
-                    # Fine-tuning
-                    for _ in range(100):
-                        loss, grads = loss_and_grad_fn(model, X_chunk, y_chunk)
-                        optimizer.update(model, grads)
-                        mx.eval(model.parameters(), optimizer.state)
-
-                    # Predykcja
-                    cadence_norm = 90.0 / 120.0
-                    in_tensor = mx.array([[watts / 500.0, cadence_norm, 0.5]])
-                    pred_hr = float(model(in_tensor)[0][0]) * 200.0
-                    results[name] = pred_hr
-                    print(f"   -> {name} ({watts}W): {pred_hr:.1f} bpm ✓")
-                else:
-                    results[name] = None
-                    print(f"   -> {name} ({watts}W): Brak danych w tym zakresie")
-
-            # Zapisz historię
-            update_history(results.get("BASE"), results.get("THRESH"), filename)
-
-            # Zapisz do bazy danych sesji
-            save_to_session_store(filename, df, results.get("BASE"), results.get("THRESH"))
-
+        if _process_training_file(
+            file_path, idx, len(files), model, targets, loss_and_grad_fn, optimizer
+        ):
             processed += 1
 
-        except (ValueError, KeyError, TypeError, RuntimeError) as e:  # noqa: BLE001
-            print(f"   -> 💥 Błąd: {e}")
-
-    # Zapisz model
     print("\n" + "-" * 50)
-    params = model.parameters()
-    flat_params = {}
-    for layer_name, layer_params in params.items():
-        if isinstance(layer_params, dict):
-            for param_name, param_value in layer_params.items():
-                flat_params[f"{layer_name}.{param_name}"] = param_value
-        else:
-            flat_params[layer_name] = layer_params
-
-    mx.savez(MODEL_FILE, **flat_params)
+    _save_model_params(model)
 
     total_time = time.time() - total_start
     print("✅ GOTOWE!")

@@ -4,11 +4,76 @@ Data Validation Service
 Handles DataFrame validation logic for uploaded training files.
 """
 
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
 from modules.config import Config
+
+
+def _ensure_numeric(df: pd.DataFrame, col: str) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
+    """Ensure column is numeric; coerce if needed.
+
+    Returns (df_or_None, error_message_or_None).
+    On success returns (df, None); on failure returns (None, error_msg).
+    """
+    if col not in df.columns:
+        return df, None
+    if pd.api.types.is_numeric_dtype(df[col]):
+        return df, None
+    try:
+        df = df.copy()
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        if df[col].isna().all():
+            return None, f"Kolumna '{col}' zawiera nieprawidłowe dane (nie-liczbowe)."
+        return df, None
+    except (ValueError, TypeError):
+        return None, f"Kolumna '{col}' zawiera nieprawidłowe dane (nie-liczbowe)."
+
+
+def _validate_column_range(
+    df: pd.DataFrame, col: str, max_val: float, label: str, unit: str
+) -> Optional[str]:
+    """Check if column max exceeds limit; returns failure message or None."""
+    if col not in df.columns:
+        return None
+    col_max = df[col].max()
+    if col_max > max_val:
+        return f"{label} ({col_max:.0f} {unit}) przekracza limit ({max_val} {unit}). Sprawdź jednostki."
+    return None
+
+
+def _validate_numeric_columns(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], List[str]]:
+    """Validate and coerce numeric columns; returns (df, failure_messages)."""
+    failures: List[str] = []
+
+    for col in ("watts", "heartrate", "cadence"):
+        df, err = _ensure_numeric(df, col)
+        if err is not None:
+            return None, [err]
+
+    failures.append(
+        _validate_column_range(df, "watts", Config.VALIDATION_MAX_WATTS, "Moc maksymalna", "W")
+    )
+    failures.append(
+        _validate_column_range(df, "heartrate", Config.VALIDATION_MAX_HR, "Tętno maksymalne", "bpm")
+    )
+    failures.append(
+        _validate_column_range(df, "cadence", Config.VALIDATION_MAX_CADENCE, "Kadencja", "rpm")
+    )
+
+    return df, [f for f in failures if f is not None]
+
+
+def _validate_time_column(df: pd.DataFrame) -> Optional[str]:
+    """Validate time column type and content. Returns error message or None."""
+    if "time" not in df.columns:
+        return None
+    if not pd.api.types.is_numeric_dtype(df["time"]):
+        return "Kolumna 'time' musi być liczbowa."
+    if df["time"].isnull().all():
+        return "Kolumna 'time' zawiera same wartości puste (NaN)."
+    return None
 
 
 def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
@@ -49,67 +114,15 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     if len(df) < Config.MIN_DF_LENGTH:
         return False, f"Za mało danych ({len(df)} rekordów). Minimum: {Config.MIN_DF_LENGTH}."
 
-    # 5. Type & Integrity Checks
+    # 5. Time column validation
+    time_err = _validate_time_column(df)
+    if time_err:
+        return False, time_err
 
-    # Time monotonicity
-    if "time" in cols:
-        if not pd.api.types.is_numeric_dtype(df["time"]):
-            return False, "Kolumna 'time' musi być liczbowa."
-        if df["time"].isnull().all():
-            return False, "Kolumna 'time' zawiera same wartości puste (NaN)."
-
-        # Check for monotonicity (allowing for small resets/gaps if needed, but strictly it should be increasing usually)
-        # Note: Some trainers reset time. But usually we want monotonic.
-        # Let's just check if it's completely scrambled or garbage
-        pass
-
-    # Type Validation - Convert or reject non-numeric data
-    validation_failures = []
-
-    if "watts" in cols:
-        if not pd.api.types.is_numeric_dtype(df["watts"]):
-            try:
-                df = df.copy()  # Avoid SettingWithCopyWarning
-                df["watts"] = pd.to_numeric(df["watts"], errors="coerce")
-                if df["watts"].isna().all():
-                    return False, "Kolumna 'watts' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except (ValueError, TypeError):
-                return False, "Kolumna 'watts' zawiera nieprawidłowe dane (nie-liczbowe)."
-        max_w = df["watts"].max()
-        if max_w > Config.VALIDATION_MAX_WATTS:
-            validation_failures.append(
-                f"Moc maksymalna ({max_w:.0f} W) przekracza limit ({Config.VALIDATION_MAX_WATTS} W). Sprawdź jednostki."
-            )
-
-    if "heartrate" in cols:
-        if not pd.api.types.is_numeric_dtype(df["heartrate"]):
-            try:
-                df = df.copy()  # Avoid SettingWithCopyWarning
-                df["heartrate"] = pd.to_numeric(df["heartrate"], errors="coerce")
-                if df["heartrate"].isna().all():
-                    return False, "Kolumna 'heartrate' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except (ValueError, TypeError):
-                return False, "Kolumna 'heartrate' zawiera nieprawidłowe dane (nie-liczbowe)."
-        max_hr = df["heartrate"].max()
-        if max_hr > Config.VALIDATION_MAX_HR:
-            validation_failures.append(
-                f"Tętno maksymalne ({max_hr:.0f} bpm) przekracza limit ({Config.VALIDATION_MAX_HR} bpm)."
-            )
-
-    if "cadence" in cols:
-        if not pd.api.types.is_numeric_dtype(df["cadence"]):
-            try:
-                df = df.copy()  # Avoid SettingWithCopyWarning
-                df["cadence"] = pd.to_numeric(df["cadence"], errors="coerce")
-                if df["cadence"].isna().all():
-                    return False, "Kolumna 'cadence' zawiera nieprawidłowe dane (nie-liczbowe)."
-            except (ValueError, TypeError):
-                return False, "Kolumna 'cadence' zawiera nieprawidłowe dane (nie-liczbowe)."
-        max_cad = df["cadence"].max()
-        if max_cad > Config.VALIDATION_MAX_CADENCE:
-            validation_failures.append(
-                f"Kadencja ({max_cad:.0f} rpm) przekracza limit ({Config.VALIDATION_MAX_CADENCE} rpm)."
-            )
+    # 6. Numeric column validation + range checks
+    df, validation_failures = _validate_numeric_columns(df)
+    if df is None:
+        return False, validation_failures[0]
 
     if validation_failures:
         return False, "Błędy walidacji danych:\n" + "\n".join(validation_failures)

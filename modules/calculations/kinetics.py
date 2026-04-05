@@ -88,6 +88,52 @@ def detect_smo2_trend(time_series: pd.Series, smo2_series: pd.Series) -> Dict[st
     return {"slope": slope, "std_err": std_err, "category": category, "description": description}
 
 
+def _classify_deoxygenation(slope_watts: float, avg_cadence: float) -> Dict[str, str]:
+    if avg_cadence < 65 and avg_cadence > 10:
+        return {
+            "cause": "Okluzja mechaniczna",
+            "explanation": f"Niska kadencja ({avg_cadence:.0f} rpm) tworzy wysokie napięcie mięśniowe, fizycznie ograniczając przepływ krwi.",
+            "type": "mechanical",
+        }
+    if slope_watts > 0.5:
+        return {
+            "cause": "Napędzany popytem",
+            "explanation": "Normalna odpowiedź na rosnącą moc wyjściową.",
+            "type": "normal",
+        }
+    if slope_watts < -0.5:
+        return {
+            "cause": "Utrata efektywności",
+            "explanation": "Desaturacja kontynuuje się mimo spadającej mocy. Wskazuje na poważne zmęczenie metaboliczne lub rozjechanie.",
+            "type": "warning",
+        }
+    if abs(slope_watts) <= 0.5:
+        return {
+            "cause": "Ograniczenie dostawy",
+            "explanation": "Desaturacja przy stałej mocy. Podaż tlenu nie może zaspokoić stałego popytu.",
+            "type": "limit",
+        }
+    return {
+        "cause": "Stres metaboliczny",
+        "explanation": "Ogólne zużycie przewyższa podaż.",
+        "type": "normal",
+    }
+
+
+def _classify_reoxygenation(slope_watts: float) -> Dict[str, str]:
+    if slope_watts < -0.5:
+        return {
+            "cause": "Regeneracja",
+            "explanation": "Normalna regeneracja z powodu zmniejszonego obciążenia.",
+            "type": "success",
+        }
+    return {
+        "cause": "Przesterowanie / Rozgrzewka",
+        "explanation": "Podaż przewyższa popyt mimo stałego/rosnącego obciążenia (efekt rozgrzewki).",
+        "type": "success",
+    }
+
+
 def classify_smo2_context(
     df_window: pd.DataFrame, smo2_trend_result: Dict[str, any]
 ) -> Dict[str, str]:
@@ -107,93 +153,25 @@ def classify_smo2_context(
     if "Niewystarczaj" in category:
         return {"cause": "Nieznana", "explanation": "Niewystarczające dane"}
 
-    # Calculate trends for other metrics
     time = df_window["time"]
 
-    # Power Trend
+    slope_watts = 0.0
     if "watts" in df_window.columns:
         slope_watts, _, _, _, _ = stats.linregress(time, df_window["watts"])
-    else:
-        slope_watts = 0
 
-    # HR Trend
-    if "hr" in df_window.columns:
-        slope_hr, _, _, _, _ = stats.linregress(time, df_window["hr"])
-    else:
-        pass
-
-    # Cadence Stats
     avg_cadence = df_window["cadence"].mean() if "cadence" in df_window.columns else 90
 
-    # === HEURISTICS ===
-
-    # 1. DEOXYGENATION CASES (Slope < -0.01)
     if slope_smo2 < -0.01:
-        # A. Mechanical Occlusion (Grinding)
-        # Low cadence + Stable/Rising Torque implies high muscle tension restricting flow
-        if avg_cadence < 65 and avg_cadence > 10:  # >10 to ignore coasting
-            return {
-                "cause": "Okluzja mechaniczna",
-                "explanation": f"Niska kadencja ({avg_cadence:.0f} rpm) tworzy wysokie napięcie mięśniowe, fizycznie ograniczając przepływ krwi.",
-                "type": "mechanical",
-            }
+        return _classify_deoxygenation(slope_watts, avg_cadence)
 
-        # B. Demand Driven
-        # Power is rising significantly
-        if slope_watts > 0.5:  # Rising by >0.5 W/s
-            return {
-                "cause": "Napędzany popytem",
-                "explanation": "Normalna odpowiedź na rosnącą moc wyjściową.",
-                "type": "normal",
-            }
-
-        # C. Efficiency Loss (Fading)
-        # Power is dropping but we are STILL desaturating? Very bad sign.
-        if slope_watts < -0.5:
-            return {
-                "cause": "Utrata efektywności",
-                "explanation": "Desaturacja kontynuuje się mimo spadającej mocy. Wskazuje na poważne zmęczenie metaboliczne lub rozjechanie.",
-                "type": "warning",
-            }
-
-        # D. Delivery Limitation (Supply constrained)
-        # Power is steady, but we are desaturating.
-        # Check HR. If HR is flat/maxed, it might be cardiac limit.
-        if abs(slope_watts) <= 0.5:
-            return {
-                "cause": "Ograniczenie dostawy",
-                "explanation": "Desaturacja przy stałej mocy. Podaż tlenu nie może zaspokoić stałego popytu.",
-                "type": "limit",
-            }
-
-        return {
-            "cause": "Stres metaboliczny",
-            "explanation": "Ogólne zużycie przewyższa podaż.",
-            "type": "normal",
-        }
-
-    # 2. EQUILIBRIUM / STABLE
-    elif abs(slope_smo2) <= 0.01:
+    if abs(slope_smo2) <= 0.01:
         return {
             "cause": "Stan stały",
             "explanation": "Podaż tlenu równa się popytowi.",
             "type": "success",
         }
 
-    # 3. REOXYGENATION
-    else:  # > 0.01
-        if slope_watts < -0.5:
-            return {
-                "cause": "Regeneracja",
-                "explanation": "Normalna regeneracja z powodu zmniejszonego obciążenia.",
-                "type": "success",
-            }
-        else:
-            return {
-                "cause": "Przesterowanie / Rozgrzewka",
-                "explanation": "Podaż przewyższa popyt mimo stałego/rosnącego obciążenia (efekt rozgrzewki).",
-                "type": "success",
-            }
+    return _classify_reoxygenation(slope_watts)
 
 
 def calculate_resaturation_metrics(

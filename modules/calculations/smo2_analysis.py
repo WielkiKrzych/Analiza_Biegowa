@@ -80,6 +80,28 @@ def calculate_smo2_slope(
     return slope_per_100w, r_squared
 
 
+def _resolve_time_array(df: pd.DataFrame, time_col: str) -> np.ndarray:
+    """Resolve time column to a numpy array of seconds."""
+    if time_col in df.columns:
+        return df[time_col].values
+    if "time" in df.columns:
+        try:
+            return pd.to_timedelta(df["time"]).dt.total_seconds().values
+        except (ValueError, TypeError):
+            return np.arange(len(df))
+    return np.arange(len(df))
+
+
+def _find_recovery_halftime(
+    recovery_smo2: np.ndarray, recovery_time: np.ndarray, half_recovery_target: float
+) -> Optional[float]:
+    """Find the first time SmO2 reaches the 50% recovery target."""
+    for i, val in enumerate(recovery_smo2):
+        if val >= half_recovery_target:
+            return float(recovery_time[i] - recovery_time[0])
+    return None
+
+
 def calculate_halftime_reoxygenation(
     df: pd.DataFrame,
     smo2_col: str = "SmO2",
@@ -96,64 +118,36 @@ def calculate_halftime_reoxygenation(
     Returns:
         Half-time in seconds, or None if not detectable.
     """
-    # Find end of ramp (power drops significantly)
     if power_col not in df.columns or smo2_col not in df.columns:
         return None
 
-    # Get power and SmO2
     power = df[power_col].values
     smo2 = df[smo2_col].values
+    time = _resolve_time_array(df, time_col)
 
-    # Check for time column
-    if time_col in df.columns:
-        time = df[time_col].values
-    elif "time" in df.columns:
-        # Try to parse time strings
-        try:
-            time = pd.to_timedelta(df["time"]).dt.total_seconds().values
-        except (ValueError, TypeError):
-            time = np.arange(len(df))
-    else:
-        time = np.arange(len(df))
-
-    # Find peak power index
-    peak_idx = np.argmax(power)
-    if peak_idx >= len(power) - 30:  # Not enough recovery data
+    peak_idx = int(np.argmax(power))
+    if peak_idx >= len(power) - 30:
         return None
 
-    # Get SmO2 at peak and minimum before peak
-    smo2[peak_idx]
     smo2_min_during_ramp = np.min(smo2[:peak_idx])
-
-    # Look for recovery after peak
     recovery_smo2 = smo2[peak_idx:]
     recovery_time = time[peak_idx:]
 
     if len(recovery_smo2) < 30:
         return None
 
-    # Calculate baseline from first 30s of low-intensity data (not just smo2[0])
     low_power_mask = power < power_threshold
     if low_power_mask.any():
         baseline_smo2 = float(np.mean(smo2[low_power_mask][:30]))
     else:
-        # Fallback: mean of first 30 samples
         baseline_smo2 = float(np.mean(smo2[: min(30, len(smo2))]))
 
-    # Calculate 50% recovery target
-    drop = baseline_smo2 - smo2_min_during_ramp  # Baseline - minimum
+    drop = baseline_smo2 - smo2_min_during_ramp
     if drop <= 0:
         return None
 
     half_recovery_target = smo2_min_during_ramp + (drop * 0.5)
-
-    # Find when SmO2 reaches 50% recovery
-    for i, val in enumerate(recovery_smo2):
-        if val >= half_recovery_target:
-            halftime = recovery_time[i] - recovery_time[0]
-            return float(halftime)
-
-    return None  # Did not reach 50% recovery in data
+    return _find_recovery_halftime(recovery_smo2, recovery_time, half_recovery_target)
 
 
 def calculate_hr_coupling_index(

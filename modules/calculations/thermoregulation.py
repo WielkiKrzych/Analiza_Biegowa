@@ -51,6 +51,123 @@ class ThermoProfile:
     confidence: float = 0.0
 
 
+def _compute_core_metrics(
+    core_temp: np.ndarray,
+    time_seconds: np.ndarray,
+) -> Optional[tuple]:
+    """Filter valid data and compute core temperature metrics.
+
+    Returns (temp_valid, time_valid, max_temp, min_temp, delta, delta_per_10min,
+             time_to_38_0, time_to_38_5) or None if insufficient data.
+    """
+    mask = (~np.isnan(core_temp)) & (core_temp > 35) & (core_temp < 42)
+    temp_valid = core_temp[mask]
+    time_valid = time_seconds[mask]
+
+    if len(temp_valid) < 30:
+        return None
+
+    max_temp = float(np.max(temp_valid))
+    min_temp = float(np.min(temp_valid[: min(60, len(temp_valid))]))
+    delta = max_temp - min_temp
+
+    duration_min = (time_valid[-1] - time_valid[0]) / 60
+    delta_per_10min = (delta / duration_min) * 10 if duration_min > 0 else 0.0
+
+    time_min = (time_valid - time_valid[0]) / 60
+
+    idx_38_0 = np.where(temp_valid >= 38.0)[0]
+    time_to_38_0: Optional[float] = float(time_min[idx_38_0[0]]) if len(idx_38_0) > 0 else None
+
+    idx_38_5 = np.where(temp_valid >= 38.5)[0]
+    time_to_38_5: Optional[float] = float(time_min[idx_38_5[0]]) if len(idx_38_5) > 0 else None
+
+    return (
+        temp_valid,
+        time_valid,
+        max_temp,
+        min_temp,
+        delta,
+        delta_per_10min,
+        time_to_38_0,
+        time_to_38_5,
+    )
+
+
+def _process_hsi(
+    hsi: Optional[np.ndarray],
+    mask: np.ndarray,
+    core_temp: np.ndarray,
+) -> tuple:
+    """Extract valid HSI statistics from HSI array.
+
+    Returns (peak_hsi, mean_hsi).
+    """
+    if hsi is None:
+        return 0.0, 0.0
+    hsi_valid = hsi[mask] if len(hsi) == len(core_temp) else hsi
+    hsi_valid = hsi_valid[~np.isnan(hsi_valid)]
+    if len(hsi_valid) == 0:
+        return 0.0, 0.0
+    return float(np.max(hsi_valid)), float(np.mean(hsi_valid))
+
+
+def _score_threshold(value: float, high: float, low: float) -> int:
+    """Score a metric against high/low thresholds: >=high → 2, >=low → 1, else 0."""
+    if value >= high:
+        return 2
+    if value >= low:
+        return 1
+    return 0
+
+
+def _score_drift_factor(
+    value: Optional[float],
+    thresholds: tuple,
+    label: str,
+) -> int:
+    """Score an optional physiological drift factor with logging at top tier."""
+    if value is None:
+        return 0
+    abs_val = abs(value)
+    t_high, t_mid, t_low = thresholds
+    if abs_val >= t_high:
+        logger.info(f"Thermal: {label} {abs_val:.1f}% → +3 to poor tolerance")
+        return 3
+    if abs_val >= t_mid:
+        return 2
+    if abs_val >= t_low:
+        return 1
+    return 0
+
+
+def _compute_tolerance_score(
+    delta_per_10min: float,
+    peak_hsi: float,
+    cardiac_drift_pct: Optional[float],
+    ef_drop_pct: Optional[float],
+) -> int:
+    """Compute multi-factor heat tolerance score (0=good, higher=worse)."""
+    return (
+        _score_threshold(delta_per_10min, 0.5, 0.3)
+        + _score_threshold(peak_hsi, 8.0, 6.0)
+        + _score_drift_factor(cardiac_drift_pct, (15, 10, 6), "Cardiac drift")
+        + _score_drift_factor(ef_drop_pct, (20, 12, 6), "EF drop")
+    )
+
+
+def _classify_tolerance(score: int) -> tuple:
+    """Map tolerance score to (label, color).
+
+    Score >= 4: POOR, 2-3: MODERATE, 0-1: GOOD.
+    """
+    if score >= 4:
+        return "poor", "#E74C3C"
+    if score >= 2:
+        return "moderate", "#F39C12"
+    return "good", "#27AE60"
+
+
 def analyze_thermoregulation(
     core_temp: np.ndarray,
     time_seconds: np.ndarray,
@@ -80,105 +197,34 @@ def analyze_thermoregulation(
     """
     profile = ThermoProfile()
 
-    # Filter valid data
-    mask = (~np.isnan(core_temp)) & (core_temp > 35) & (core_temp < 42)
-    temp_valid = core_temp[mask]
-    time_valid = time_seconds[mask]
-
-    if len(temp_valid) < 30:
+    # === CORE METRICS ===
+    result = _compute_core_metrics(core_temp, time_seconds)
+    if result is None:
         logger.warning("Insufficient temperature data for analysis")
         profile.mechanism_description = "Niewystarczajace dane temperatury do analizy."
         return profile
 
+    (
+        temp_valid,
+        _time_valid,
+        profile.max_core_temp,
+        profile.min_core_temp,
+        profile.delta_core_temp,
+        profile.delta_per_10min,
+        profile.time_to_38_0,
+        profile.time_to_38_5,
+    ) = result
     profile.data_points = len(temp_valid)
 
-    # === CORE METRICS ===
-    profile.max_core_temp = float(np.max(temp_valid))
-    profile.min_core_temp = float(
-        np.min(temp_valid[: min(60, len(temp_valid))])
-    )  # First minute baseline
-    profile.delta_core_temp = profile.max_core_temp - profile.min_core_temp
-
-    # Temperature rise rate (°C per 10 minutes)
-    duration_min = (time_valid[-1] - time_valid[0]) / 60
-    if duration_min > 0:
-        profile.delta_per_10min = (profile.delta_core_temp / duration_min) * 10
-
-    # === CRITICAL THRESHOLD TIMES ===
-    time_min = (time_valid - time_valid[0]) / 60
-
-    idx_38_0 = np.where(temp_valid >= 38.0)[0]
-    if len(idx_38_0) > 0:
-        profile.time_to_38_0 = float(time_min[idx_38_0[0]])
-
-    idx_38_5 = np.where(temp_valid >= 38.5)[0]
-    if len(idx_38_5) > 0:
-        profile.time_to_38_5 = float(time_min[idx_38_5[0]])
-
     # === HSI ===
-    if hsi is not None:
-        hsi_valid = hsi[mask] if len(hsi) == len(core_temp) else hsi
-        hsi_valid = hsi_valid[~np.isnan(hsi_valid)]
-        if len(hsi_valid) > 0:
-            profile.peak_hsi = float(np.max(hsi_valid))
-            profile.mean_hsi = float(np.mean(hsi_valid))
+    mask = (~np.isnan(core_temp)) & (core_temp > 35) & (core_temp < 42)
+    profile.peak_hsi, profile.mean_hsi = _process_hsi(hsi, mask, core_temp)
 
-    # ==========================================================================
-    # ENHANCED CLASSIFICATION (Multi-Factor)
-    # Considers: temp rise rate, HSI, cardiac drift, EF drop
-    # ==========================================================================
-
-    # Initialize scores (0 = good, higher = worse)
-    tolerance_score = 0
-
-    # Factor 1: Temperature rise rate (legacy)
-    if profile.delta_per_10min >= 0.5:
-        tolerance_score += 2
-    elif profile.delta_per_10min >= 0.3:
-        tolerance_score += 1
-
-    # Factor 2: Peak HSI
-    if profile.peak_hsi >= 8:
-        tolerance_score += 2  # Critical HSI
-    elif profile.peak_hsi >= 6:
-        tolerance_score += 1  # Elevated HSI
-
-    # Factor 3: Cardiac Drift (CRITICAL - reflects actual physiological cost)
-    if cardiac_drift_pct is not None:
-        abs_drift = abs(cardiac_drift_pct)
-        if abs_drift >= 15:
-            tolerance_score += 3  # Extreme drift - major physiological strain
-            logger.info(f"Thermal: Cardiac drift {abs_drift:.1f}% → +3 to poor tolerance")
-        elif abs_drift >= 10:
-            tolerance_score += 2
-        elif abs_drift >= 6:
-            tolerance_score += 1
-
-    # Factor 4: EF Drop (CRITICAL - efficiency cost due to heat)
-    if ef_drop_pct is not None:
-        abs_ef_drop = abs(ef_drop_pct)
-        if abs_ef_drop >= 20:
-            tolerance_score += 3  # Brutal EF drop - efficiency destroyed by heat
-            logger.info(f"Thermal: EF drop {abs_ef_drop:.1f}% → +3 to poor tolerance")
-        elif abs_ef_drop >= 12:
-            tolerance_score += 2
-        elif abs_ef_drop >= 6:
-            tolerance_score += 1
-
-    # === FINAL CLASSIFICATION ===
-    # Score >= 4: POOR (even if temp rise is slow, physiological cost is high)
-    # Score 2-3: MODERATE
-    # Score 0-1: GOOD
-
-    if tolerance_score >= 4:
-        profile.heat_tolerance = "poor"
-        profile.classification_color = "#E74C3C"  # Red
-    elif tolerance_score >= 2:
-        profile.heat_tolerance = "moderate"
-        profile.classification_color = "#F39C12"  # Orange
-    else:
-        profile.heat_tolerance = "good"
-        profile.classification_color = "#27AE60"  # Green
+    # === ENHANCED CLASSIFICATION (Multi-Factor) ===
+    tolerance_score = _compute_tolerance_score(
+        profile.delta_per_10min, profile.peak_hsi, cardiac_drift_pct, ef_drop_pct
+    )
+    profile.heat_tolerance, profile.classification_color = _classify_tolerance(tolerance_score)
 
     logger.info(
         f"Thermal tolerance: {profile.heat_tolerance} (score={tolerance_score}, "

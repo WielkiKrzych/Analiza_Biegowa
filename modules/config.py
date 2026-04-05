@@ -74,39 +74,22 @@ class Config:
     UPPER_STEP_WEIGHT = float(os.getenv("UPPER_STEP_WEIGHT", "0.7"))
 
     @classmethod
-    def validate(cls) -> None:
-        """Validate configuration values.
+    def _validate_non_negative(cls, name: str, value: int | float) -> None:
+        if value < 0:
+            raise ValueError(f"{name} must be >= 0, got {value}")
 
-        Raises:
-            ValueError: If any configuration value is invalid
-        """
-        # Validate positive values
-        if cls.MIN_WATTS_ACTIVE < 0:
-            raise ValueError(f"MIN_WATTS_ACTIVE must be >= 0, got {cls.MIN_WATTS_ACTIVE}")
+    @classmethod
+    def _validate_positive_int(cls, name: str, value: int) -> None:
+        if value < 1:
+            raise ValueError(f"{name} must be >= 1, got {value}")
 
-        if cls.MIN_HR_ACTIVE < 0:
-            raise ValueError(f"MIN_HR_ACTIVE must be >= 0, got {cls.MIN_HR_ACTIVE}")
+    @classmethod
+    def _validate_open_unit_range(cls, name: str, value: float) -> None:
+        if not (0.0 < value < 1.0):
+            raise ValueError(f"{name} must be in (0, 1), got {value}")
 
-        if cls.MIN_RECORDS_FOR_ROLLING < 1:
-            raise ValueError(
-                f"MIN_RECORDS_FOR_ROLLING must be >= 1, got {cls.MIN_RECORDS_FOR_ROLLING}"
-            )
-
-        # Validate ranges
-        if not (0.0 < cls.ML_LEARNING_RATE < 1.0):
-            raise ValueError(f"ML_LEARNING_RATE must be in (0, 1), got {cls.ML_LEARNING_RATE}")
-
-        if not (0.0 < cls.VT1_SLOPE_THRESHOLD < 1.0):
-            raise ValueError(
-                f"VT1_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT1_SLOPE_THRESHOLD}"
-            )
-
-        if not (0.0 < cls.VT2_SLOPE_THRESHOLD < 1.0):
-            raise ValueError(
-                f"VT2_SLOPE_THRESHOLD must be in (0, 1), got {cls.VT2_SLOPE_THRESHOLD}"
-            )
-
-        # Validate confidence values
+    @classmethod
+    def _validate_confidence_values(cls) -> None:
         for name, value in [
             ("SLOPE_CONFIDENCE_MAX", cls.SLOPE_CONFIDENCE_MAX),
             ("STABILITY_CONFIDENCE_MAX", cls.STABILITY_CONFIDENCE_MAX),
@@ -122,12 +105,28 @@ class Config:
                 f"MAX_CONFIDENCE ({cls.MAX_CONFIDENCE})"
             )
 
-        # Validate file paths
         if not isinstance(cls.DB_PATH, Path):
             raise ValueError(f"DB_PATH must be a Path object, got {type(cls.DB_PATH)}")
 
         if not isinstance(cls.DATA_DIR, Path):
             raise ValueError(f"DATA_DIR must be a Path object, got {type(cls.DATA_DIR)}")
+
+    @classmethod
+    def validate(cls) -> None:
+        """Validate configuration values.
+
+        Raises:
+            ValueError: If any configuration value is invalid
+        """
+        cls._validate_non_negative("MIN_WATTS_ACTIVE", cls.MIN_WATTS_ACTIVE)
+        cls._validate_non_negative("MIN_HR_ACTIVE", cls.MIN_HR_ACTIVE)
+        cls._validate_positive_int("MIN_RECORDS_FOR_ROLLING", cls.MIN_RECORDS_FOR_ROLLING)
+
+        cls._validate_open_unit_range("ML_LEARNING_RATE", cls.ML_LEARNING_RATE)
+        cls._validate_open_unit_range("VT1_SLOPE_THRESHOLD", cls.VT1_SLOPE_THRESHOLD)
+        cls._validate_open_unit_range("VT2_SLOPE_THRESHOLD", cls.VT2_SLOPE_THRESHOLD)
+
+        cls._validate_confidence_values()
 
 
 # Validate configuration on module load

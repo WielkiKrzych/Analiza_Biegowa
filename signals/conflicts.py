@@ -13,7 +13,7 @@ NO STREAMLIT OR UI DEPENDENCIES ALLOWED.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -339,6 +339,81 @@ def detect_decoupling(
 # ============================================================
 
 
+def _extract_signal(df: pd.DataFrame, column: str) -> Optional[pd.Series]:
+    """Extract a signal column from DataFrame if it exists."""
+    return df[column] if column in df.columns else None
+
+
+def _collect_signal_names(
+    hr_data: Optional[pd.Series],
+    power_data: Optional[pd.Series],
+    smo2_data: Optional[pd.Series],
+    dfa_data: Optional[pd.Series],
+) -> List[str]:
+    """Build list of available signal names."""
+    names: List[str] = []
+    if hr_data is not None:
+        names.append("HR")
+    if power_data is not None:
+        names.append("Power")
+    if smo2_data is not None:
+        names.append("SmO2")
+    if dfa_data is not None:
+        names.append("DFA-a1")
+    return names
+
+
+def _check_hr_power_conflicts(
+    hr_data: Optional[pd.Series],
+    power_data: Optional[pd.Series],
+) -> Tuple[List[SignalConflict], List[str]]:
+    """Detect cardiac drift and HR-Power decoupling conflicts."""
+    if hr_data is None or power_data is None:
+        return [], []
+
+    conflicts: List[SignalConflict] = []
+    recommendations: List[str] = []
+
+    drift = detect_cardiac_drift(hr_data, power_data)
+    if drift:
+        conflicts.append(drift)
+        recommendations.append("⚠️ Rozważ czynniki: nawodnienie, temperatura, zmęczenie")
+
+    decoupling = detect_decoupling(hr_data, power_data, "HR", "Power")
+    if decoupling:
+        conflicts.append(decoupling)
+        recommendations.append("⚠️ HR i Power nie są skorelowane - sprawdź jakość danych")
+
+    return conflicts, recommendations
+
+
+def _check_signal_pair(
+    signal_data: Optional[pd.Series],
+    power_data: Optional[pd.Series],
+    detect_fn: Callable[[pd.Series, pd.Series], Optional[SignalConflict]],
+    warning_msg: str,
+) -> Tuple[List[SignalConflict], List[str]]:
+    """Run a pairwise signal-vs-power conflict check."""
+    if signal_data is None or power_data is None:
+        return [], []
+
+    conflict = detect_fn(signal_data, power_data)
+    if conflict:
+        return [conflict], [warning_msg]
+    return [], []
+
+
+def _calculate_agreement_score(conflicts: List[SignalConflict]) -> float:
+    """Calculate agreement score from conflict severities."""
+    conflict_weight = sum(
+        0.1
+        if c.severity == ConflictSeverity.MINOR
+        else (0.25 if c.severity == ConflictSeverity.MAJOR else 0.4)
+        for c in conflicts
+    )
+    return round(max(0.0, 1.0 - conflict_weight), 2)
+
+
 def detect_signal_conflicts(
     df: pd.DataFrame,
     hr_column: str = "heartrate",
@@ -364,61 +439,47 @@ def detect_signal_conflicts(
     Returns:
         ConflictAnalysisResult with conflicts, agreement score, recommendations
     """
-    conflicts = []
-    signals_analyzed = []
-    recommendations = []
+    conflicts: List[SignalConflict] = []
+    recommendations: List[str] = []
 
-    # Get available signals
-    hr_data = df[hr_column] if hr_column in df.columns else None
-    power_data = df[power_column] if power_column in df.columns else None
-    smo2_data = df[smo2_column] if smo2_column in df.columns else None
-    dfa_data = df[dfa_column] if dfa_column in df.columns else None
+    hr_data = _extract_signal(df, hr_column)
+    power_data = _extract_signal(df, power_column)
+    smo2_data = _extract_signal(df, smo2_column)
+    dfa_data = _extract_signal(df, dfa_column)
 
-    if hr_data is not None:
-        signals_analyzed.append("HR")
-    if power_data is not None:
-        signals_analyzed.append("Power")
-    if smo2_data is not None:
-        signals_analyzed.append("SmO2")
-    if dfa_data is not None:
-        signals_analyzed.append("DFA-a1")
+    signals_analyzed = _collect_signal_names(hr_data, power_data, smo2_data, dfa_data)
 
-    # Check cardiac drift (HR vs Power)
-    if hr_data is not None and power_data is not None:
-        drift = detect_cardiac_drift(hr_data, power_data)
-        if drift:
-            conflicts.append(drift)
-            recommendations.append("⚠️ Rozważ czynniki: nawodnienie, temperatura, zmęczenie")
+    # HR vs Power pair (cardiac drift + decoupling)
+    pair_conflicts, pair_recs = _check_hr_power_conflicts(hr_data, power_data)
+    conflicts.extend(pair_conflicts)
+    recommendations.extend(pair_recs)
 
-        # Check HR-Power decoupling
-        decoupling = detect_decoupling(hr_data, power_data, "HR", "Power")
-        if decoupling:
-            conflicts.append(decoupling)
-            recommendations.append("⚠️ HR i Power nie są skorelowane - sprawdź jakość danych")
+    # SmO2 vs Power
+    smo2_c, smo2_r = _check_signal_pair(
+        smo2_data,
+        power_data,
+        detect_smo2_power_conflict,
+        "⚠️ SmO2 zachowuje się nietypowo - sprawdź pozycje sensora",
+    )
+    conflicts.extend(smo2_c)
+    recommendations.extend(smo2_r)
 
-    # Check SmO2 vs Power
-    if smo2_data is not None and power_data is not None:
-        smo2_conflict = detect_smo2_power_conflict(smo2_data, power_data)
-        if smo2_conflict:
-            conflicts.append(smo2_conflict)
-            recommendations.append("⚠️ SmO2 zachowuje się nietypowo - sprawdź pozycje sensora")
+    # DFA anomalies
+    dfa_c, dfa_r = _check_signal_pair(
+        dfa_data,
+        power_data,
+        detect_dfa_anomaly,
+        "⚠️ DFA-a1 > 1.0 przy wysokiej mocy - możliwe artefakty RR",
+    )
+    conflicts.extend(dfa_c)
+    recommendations.extend(dfa_r)
 
-    # Check DFA anomalies
-    if dfa_data is not None and power_data is not None:
-        dfa_anomaly = detect_dfa_anomaly(dfa_data, power_data)
-        if dfa_anomaly:
-            conflicts.append(dfa_anomaly)
-            recommendations.append("⚠️ DFA-a1 > 1.0 przy wysokiej mocy - możliwe artefakty RR")
-
-    # Calculate agreement score
-    n_signals = len(signals_analyzed)
-    n_signals * (n_signals - 1) // 2 if n_signals > 1 else 1
-
-    conflict_weight = sum(
-        0.1
-        if c.severity == ConflictSeverity.MINOR
-        else (0.25 if c.severity == ConflictSeverity.MAJOR else 0.4)
-        for c in conflicts
+    return ConflictAnalysisResult(
+        has_conflicts=len(conflicts) > 0,
+        conflicts=conflicts,
+        agreement_score=_calculate_agreement_score(conflicts),
+        recommendations=recommendations,
+        signals_analyzed=signals_analyzed,
     )
 
     agreement_score = max(0.0, 1.0 - conflict_weight)

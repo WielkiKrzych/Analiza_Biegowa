@@ -107,6 +107,48 @@ class GeneticAnalyzer:
         "PPARGC1A": "rs8192678",
     }
 
+    @staticmethod
+    def _parse_actn3(genotype: str) -> Optional[Literal["RR", "RX", "XX"]]:
+        """Map ACTN3 rs1815739 genotype to variant code."""
+        if genotype == "CC":
+            return "RR"
+        if genotype in ("CT", "TC"):
+            return "RX"
+        if genotype == "TT":
+            return "XX"
+        return None
+
+    @staticmethod
+    def _parse_ace(genotype: str) -> Optional[Literal["II", "ID", "DD"]]:
+        """Map ACE rs1799752 genotype to variant code."""
+        if genotype in ("II", "--"):
+            return "II"
+        if genotype == "DD":
+            return "DD"
+        if genotype:  # any other non-empty value
+            return "ID"
+        return None
+
+    @staticmethod
+    def _parse_ppargc1a(genotype: str) -> Optional[Literal["GG", "GA", "AA"]]:
+        """Map PPARGC1A rs8192678 genotype to variant code."""
+        if genotype == "GG":
+            return "GG"
+        if genotype in ("GA", "AG"):
+            return "GA"
+        if genotype == "AA":
+            return "AA"
+        return None
+
+    def _parse_snp_line(self, rsid: str, genotype: str, profile: GeneticProfile) -> None:
+        """Dispatch a single SNP line to the appropriate parser."""
+        if rsid == self.SNPS["ACTN3"]:
+            profile.actn3 = self._parse_actn3(genotype)
+        elif rsid == self.SNPS["ACE"]:
+            profile.ace = self._parse_ace(genotype)
+        elif rsid == self.SNPS["PPARGC1A"]:
+            profile.ppargc1a = self._parse_ppargc1a(genotype)
+
     def parse_23andme(self, raw_data: str) -> GeneticProfile:
         """Parse 23andMe raw data file.
 
@@ -126,35 +168,7 @@ class GeneticAnalyzer:
             if len(parts) < 4:
                 continue
 
-            rsid = parts[0]
-            genotype = parts[3].strip()
-
-            # ACTN3 (rs1815739)
-            if rsid == self.SNPS["ACTN3"]:
-                if genotype in ["CC"]:
-                    profile.actn3 = "RR"
-                elif genotype in ["CT", "TC"]:
-                    profile.actn3 = "RX"
-                elif genotype in ["TT"]:
-                    profile.actn3 = "XX"
-
-            # ACE (rs1799752) - Note: This is actually a deletion, simplified
-            elif rsid == self.SNPS["ACE"]:
-                if genotype in ["II", "--"]:
-                    profile.ace = "II"
-                elif genotype in ["DD"]:
-                    profile.ace = "DD"
-                else:
-                    profile.ace = "ID"
-
-            # PPARGC1A (rs8192678)
-            elif rsid == self.SNPS["PPARGC1A"]:
-                if genotype in ["GG"]:
-                    profile.ppargc1a = "GG"
-                elif genotype in ["GA", "AG"]:
-                    profile.ppargc1a = "GA"
-                elif genotype in ["AA"]:
-                    profile.ppargc1a = "AA"
+            self._parse_snp_line(parts[0], parts[3].strip(), profile)
 
         # Recalculate scores with parsed data
         profile._calculate_scores()

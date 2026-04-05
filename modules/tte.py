@@ -294,6 +294,80 @@ def _compute_single_session_tte(
         return None
 
 
+def _submit_session_tasks(
+    executor: ProcessPoolExecutor,
+    sessions: list,
+    file_cache: Dict[str, Path],
+    target_pcts: List[float],
+    ftp: float,
+    tol_pct: float,
+    total: int,
+    progress_callback: Optional[Callable[[int, int, str], None]],
+) -> Tuple[dict, int]:
+    """Submit session TTE tasks to executor.
+
+    Returns (futures dict, fail_count) for sessions whose CSV was not found.
+    """
+    futures = {}
+    fail_count = 0
+
+    for i, row in enumerate(sessions):
+        filename = row["filename"]
+        row_id = row["id"]
+
+        csv_path = file_cache.get(Path(filename).stem)
+
+        if not csv_path or not csv_path.exists():
+            fail_count += 1
+            if progress_callback:
+                progress_callback(i + 1, total, f"❌ {filename}: Not found")
+            continue
+
+        future = executor.submit(_compute_single_session_tte, csv_path, target_pcts, ftp, tol_pct)
+        futures[future] = (row_id, filename, row["extra_metrics"])
+
+    return futures, fail_count
+
+
+def _collect_future_results(
+    futures: dict,
+    total: int,
+    progress_callback: Optional[Callable[[int, int, str], None]],
+) -> Tuple[list, int, int]:
+    """Collect results from completed futures.
+
+    Returns (updates list, success_count, fail_count).
+    """
+    updates = []
+    success_count = 0
+    fail_count = 0
+
+    for j, future in enumerate(as_completed(futures)):
+        row_id, fname, old_extra_json = futures[future]
+        try:
+            new_tte = future.result()
+            if new_tte:
+                extra = json.loads(old_extra_json or "{}")
+                if "tte" not in extra:
+                    extra["tte"] = {}
+                extra["tte"].update(new_tte)
+
+                updates.append((json.dumps(extra), row_id))
+                success_count += 1
+                msg = f"✅ {fname}: OK"
+            else:
+                fail_count += 1
+                msg = f"❌ {fname}: Data error"
+        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            fail_count += 1
+            msg = f"⚠️ {fname}: {str(e)}"
+
+        if progress_callback:
+            progress_callback(j + 1, total, msg)
+
+    return updates, success_count, fail_count
+
+
 def batch_compute_tte_for_all_sessions(
     ftp: float,
     target_pcts: List[float] = None,
@@ -328,57 +402,27 @@ def batch_compute_tte_for_all_sessions(
             total = len(sessions)
 
             # 2. Parallel Processing Setup
-            # Using ProcessPoolExecutor for CPU-bound load_data and compute_tte
             with ProcessPoolExecutor() as executor:
-                futures = {}
+                futures, submit_fails = _submit_session_tasks(
+                    executor,
+                    sessions,
+                    file_cache,
+                    target_pcts,
+                    ftp,
+                    tol_pct,
+                    total,
+                    progress_callback,
+                )
+                updates, success_count, result_fails = _collect_future_results(
+                    futures, total, progress_callback
+                )
 
-                for i, row in enumerate(sessions):
-                    filename = row["filename"]
-                    row_id = row["id"]
+            fail_count = submit_fails + result_fails
 
-                    # O(1) Lookup
-                    csv_path = file_cache.get(Path(filename).stem)
-
-                    if not csv_path or not csv_path.exists():
-                        fail_count += 1
-                        if progress_callback:
-                            progress_callback(i + 1, total, f"❌ {filename}: Not found")
-                        continue
-
-                    future = executor.submit(
-                        _compute_single_session_tte, csv_path, target_pcts, ftp, tol_pct
-                    )
-                    futures[future] = (row_id, filename, row["extra_metrics"])
-
-                # 3. Collect Results as they complete
-                updates = []
-                for j, future in enumerate(as_completed(futures)):
-                    row_id, fname, old_extra_json = futures[future]
-                    try:
-                        new_tte = future.result()
-                        if new_tte:
-                            extra = json.loads(old_extra_json or "{}")
-                            if "tte" not in extra:
-                                extra["tte"] = {}
-                            extra["tte"].update(new_tte)
-
-                            updates.append((json.dumps(extra), row_id))
-                            success_count += 1
-                            msg = f"✅ {fname}: OK"
-                        else:
-                            fail_count += 1
-                            msg = f"❌ {fname}: Data error"
-                    except (ValueError, KeyError, json.JSONDecodeError) as e:
-                        fail_count += 1
-                        msg = f"⚠️ {fname}: {str(e)}"
-
-                    if progress_callback:
-                        progress_callback(j + 1, total, msg)
-
-                # 4. Batch DB Update (N+1 Solution)
-                if updates:
-                    conn.executemany("UPDATE sessions SET extra_metrics = ? WHERE id = ?", updates)
-                    conn.commit()
+            # 3. Batch DB Update (N+1 Solution)
+            if updates:
+                conn.executemany("UPDATE sessions SET extra_metrics = ? WHERE id = ?", updates)
+                conn.commit()
 
     except (sqlite3.Error, json.JSONDecodeError) as e:  # noqa: BLE001
         logger.error(f"Parallel TTE error: {e}")

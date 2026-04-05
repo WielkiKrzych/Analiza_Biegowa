@@ -13,6 +13,129 @@ from .threshold_types import HysteresisResult, StepTestResult
 from .ventilatory import detect_vt_from_steps, detect_vt_transition_zone, run_sensitivity_analysis
 
 
+def _apply_step_range_results(
+    result: StepTestResult,
+    df: pd.DataFrame,
+    step_range: "StepTestRange",
+    ve_column: str,
+    smo2_column: str,
+    power_column: str,
+    hr_column: str,
+    time_column: str,
+    has_ve: bool,
+    has_smo2: bool,
+) -> None:
+    """Apply detected step range: slice data, run VE/SmO2 analysis."""
+    result.step_range = step_range
+    if not (step_range and step_range.is_valid):
+        notes = (
+            step_range.notes if step_range else ["Nie znaleziono prawidłowego testu schodkowego"]
+        )
+        result.analysis_notes.extend([f"⚠️ {n}" for n in notes])
+        result.analysis_notes.append("Używanie detekcji legacy (sliding window)")
+        return
+
+    mask = (df[time_column] >= step_range.start_time) & (df[time_column] <= step_range.end_time)
+    result.steps_analyzed = len(step_range.steps)
+    result.analysis_notes.append(f"✅ Wykryto test schodkowy: {len(step_range.steps)} stopni")
+    result.analysis_notes.extend([f"  • {n}" for n in step_range.notes])
+
+    if has_ve:
+        vt_res = detect_vt_from_steps(
+            df,
+            step_range,
+            ve_column=ve_column,
+            power_column=power_column,
+            hr_column=hr_column,
+            time_column=time_column,
+            vt1_slope_threshold=0.05,
+            vt2_slope_threshold=0.10,
+        )
+        result.vt1_watts = vt_res.vt1_watts
+        result.vt1_hr = vt_res.vt1_hr
+        result.vt2_watts = vt_res.vt2_watts
+        result.vt2_hr = vt_res.vt2_hr
+        result.vt1_ve = vt_res.vt1_ve
+        result.vt1_br = vt_res.vt1_br
+        result.vt2_ve = vt_res.vt2_ve
+        result.vt2_br = vt_res.vt2_br
+        result.analysis_notes.extend(vt_res.notes)
+        result.step_ve_analysis = vt_res.step_analysis
+
+    if has_smo2:
+        smo2_res = detect_smo2_from_steps(
+            df,
+            step_range,
+            smo2_column=smo2_column,
+            power_column=power_column,
+            hr_column=hr_column,
+            time_column=time_column,
+        )
+        result.smo2_1_watts = smo2_res.smo2_1_watts
+        result.smo2_1_hr = smo2_res.smo2_1_hr
+        result.smo2_2_watts = smo2_res.smo2_2_watts
+        result.smo2_2_hr = smo2_res.smo2_2_hr
+        result.smo2_1_value = smo2_res.smo2_1_value
+        result.smo2_2_value = smo2_res.smo2_2_value
+        result.step_smo2_analysis = smo2_res.step_analysis
+
+
+def _run_legacy_ventilatory_analysis(
+    result: StepTestResult,
+    df_test: pd.DataFrame,
+    ve_column: str,
+    power_column: str,
+    hr_column: str,
+    time_column: str,
+) -> None:
+    """Fallback sliding-window VT detection with hysteresis and sensitivity."""
+    df_inc, df_dec = segment_load_phases(df_test, power_col=power_column, time_col=time_column)
+    vt1_inc, vt2_inc = detect_vt_transition_zone(
+        df_inc,
+        window_duration=60,
+        step_size=5,
+        ve_column=ve_column,
+        power_column=power_column,
+        hr_column=hr_column,
+        time_column=time_column,
+    )
+    result.vt1_zone, result.vt2_zone = vt1_inc, vt2_inc
+    if vt1_inc:
+        result.vt1_watts = sum(vt1_inc.range_watts) / 2
+        result.vt1_hr = sum(vt1_inc.range_hr) / 2 if vt1_inc.range_hr else None
+    if vt2_inc:
+        result.vt2_watts = sum(vt2_inc.range_watts) / 2
+        result.vt2_hr = sum(vt2_inc.range_hr) / 2 if vt2_inc.range_hr else None
+
+    if not df_dec.empty:
+        vt1_dec, vt2_dec = detect_vt_transition_zone(
+            df_dec,
+            ve_column=ve_column,
+            power_column=power_column,
+            hr_column=hr_column,
+            time_column=time_column,
+        )
+        h = HysteresisResult(
+            vt1_inc_zone=vt1_inc,
+            vt1_dec_zone=vt1_dec,
+            vt2_inc_zone=vt2_inc,
+            vt2_dec_zone=vt2_dec,
+        )
+        if vt1_inc and vt1_dec:
+            h.vt1_shift_watts = sum(vt1_dec.range_watts) / 2 - sum(vt1_inc.range_watts) / 2
+        if vt2_inc and vt2_dec:
+            h.vt2_shift_watts = sum(vt2_dec.range_watts) / 2 - sum(vt2_inc.range_watts) / 2
+        result.hysteresis = h
+
+    result.sensitivity = run_sensitivity_analysis(
+        df_inc,
+        ve_column=ve_column,
+        power_column=power_column,
+        hr_column=hr_column,
+        time_column=time_column,
+    )
+
+
 def analyze_step_test(
     df: pd.DataFrame,
     step_duration_sec: int = 180,
@@ -24,7 +147,6 @@ def analyze_step_test(
 ) -> StepTestResult:
     """High-level orchestration of step test analysis."""
     result = StepTestResult()
-    # Work on renamed copy to avoid mutating caller's DataFrame
     cols_lower = {c: c.lower().strip() for c in df.columns}
     df_work = df.rename(columns=cols_lower)
 
@@ -37,116 +159,30 @@ def analyze_step_test(
         result.analysis_notes.append("Brak kolumny czasu")
         return result
 
-    step_range = None
     df_test = df
-
     if has_power:
         step_range = detect_step_test_range(df, power_column=power_column, time_column=time_column)
-        result.step_range = step_range
+        _apply_step_range_results(
+            result,
+            df,
+            step_range,
+            ve_column,
+            smo2_column,
+            power_column,
+            hr_column,
+            time_column,
+            has_ve,
+            has_smo2,
+        )
         if step_range and step_range.is_valid:
             mask = (df[time_column] >= step_range.start_time) & (
                 df[time_column] <= step_range.end_time
             )
             df_test = df[mask].copy()
-            result.steps_analyzed = len(step_range.steps)
-            result.analysis_notes.append(
-                f"✅ Wykryto test schodkowy: {len(step_range.steps)} stopni"
-            )
-            result.analysis_notes.extend([f"  • {n}" for n in step_range.notes])
-
-            if has_ve:
-                vt_res = detect_vt_from_steps(
-                    df,
-                    step_range,
-                    ve_column=ve_column,
-                    power_column=power_column,
-                    hr_column=hr_column,
-                    time_column=time_column,
-                    vt1_slope_threshold=0.05,  # First breakpoint in VE slope
-                    vt2_slope_threshold=0.10,  # Accelerated VE rise per INSCYD/WKO5
-                )
-                result.vt1_watts = vt_res.vt1_watts
-                result.vt1_hr = vt_res.vt1_hr
-                result.vt2_watts = vt_res.vt2_watts
-                result.vt2_hr = vt_res.vt2_hr
-                result.vt1_ve = vt_res.vt1_ve
-                result.vt1_br = vt_res.vt1_br
-                result.vt2_ve = vt_res.vt2_ve
-                result.vt2_br = vt_res.vt2_br
-                result.analysis_notes.extend(vt_res.notes)
-                result.step_ve_analysis = vt_res.step_analysis
-
-            if has_smo2:
-                smo2_res = detect_smo2_from_steps(
-                    df,
-                    step_range,
-                    smo2_column=smo2_column,
-                    power_column=power_column,
-                    hr_column=hr_column,
-                    time_column=time_column,
-                )
-                result.smo2_1_watts = smo2_res.smo2_1_watts
-                result.smo2_1_hr = smo2_res.smo2_1_hr
-                result.smo2_2_watts = smo2_res.smo2_2_watts
-                result.smo2_2_hr = smo2_res.smo2_2_hr
-                result.smo2_1_value = smo2_res.smo2_1_value
-                result.smo2_2_value = smo2_res.smo2_2_value
-                result.step_smo2_analysis = smo2_res.step_analysis
-        else:
-            notes = (
-                step_range.notes
-                if step_range
-                else ["Nie znaleziono prawidłowego testu schodkowego"]
-            )
-            result.analysis_notes.extend([f"⚠️ {n}" for n in notes])
-            result.analysis_notes.append("Używanie detekcji legacy (sliding window)")
 
     if has_ve and has_power and result.vt1_watts is None:
-        df_temp = df_test  # Fallback
-        df_inc, df_dec = segment_load_phases(df_temp, power_col=power_column, time_col=time_column)
-        vt1_inc, vt2_inc = detect_vt_transition_zone(
-            df_inc,
-            window_duration=60,
-            step_size=5,
-            ve_column=ve_column,
-            power_column=power_column,
-            hr_column=hr_column,
-            time_column=time_column,
-        )
-        result.vt1_zone, result.vt2_zone = vt1_inc, vt2_inc
-        if vt1_inc:
-            result.vt1_watts = sum(vt1_inc.range_watts) / 2
-            result.vt1_hr = sum(vt1_inc.range_hr) / 2 if vt1_inc.range_hr else None
-        if vt2_inc:
-            result.vt2_watts = sum(vt2_inc.range_watts) / 2
-            result.vt2_hr = sum(vt2_inc.range_hr) / 2 if vt2_inc.range_hr else None
-
-        if not df_dec.empty:
-            vt1_dec, vt2_dec = detect_vt_transition_zone(
-                df_dec,
-                ve_column=ve_column,
-                power_column=power_column,
-                hr_column=hr_column,
-                time_column=time_column,
-            )
-            h = HysteresisResult(
-                vt1_inc_zone=vt1_inc,
-                vt1_dec_zone=vt1_dec,
-                vt2_inc_zone=vt2_inc,
-                vt2_dec_zone=vt2_dec,
-            )
-            if vt1_inc and vt1_dec:
-                h.vt1_shift_watts = sum(vt1_dec.range_watts) / 2 - sum(vt1_inc.range_watts) / 2
-            if vt2_inc and vt2_dec:
-                h.vt2_shift_watts = sum(vt2_dec.range_watts) / 2 - sum(vt2_inc.range_watts) / 2
-            result.hysteresis = h
-
-        result.sensitivity = run_sensitivity_analysis(
-            df_inc,
-            ve_column=ve_column,
-            power_column=power_column,
-            hr_column=hr_column,
-            time_column=time_column,
+        _run_legacy_ventilatory_analysis(
+            result, df_test, ve_column, power_column, hr_column, time_column
         )
 
     return result

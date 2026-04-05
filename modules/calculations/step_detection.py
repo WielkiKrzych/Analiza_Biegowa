@@ -10,6 +10,87 @@ import pandas as pd
 from .threshold_types import DetectedStep, StepTestRange
 
 
+def _build_power_segments(
+    df: pd.DataFrame,
+    time_column: str,
+    power_column: str,
+    segment_duration: int = 30,
+    min_samples: int = 5,
+) -> list:
+    """Split data into fixed-duration segments with average power."""
+    min_time = int(df[time_column].min())
+    max_time = int(df[time_column].max())
+    segments: list = []
+    for t in range(min_time, max_time - segment_duration + 1, segment_duration):
+        mask = (df[time_column] >= t) & (df[time_column] < t + segment_duration)
+        seg = df[mask]
+        if len(seg) >= min_samples:
+            segments.append(
+                {"start": t, "end": t + segment_duration, "avg_power": seg[power_column].mean()}
+            )
+    return segments
+
+
+def _merge_segments_into_steps(segments: list, power_tol: float = 10.0) -> list:
+    """Merge adjacent segments with similar average power into steps."""
+    if not segments:
+        return []
+
+    steps_raw: list = []
+    curr_seg = [segments[0]]
+    for i in range(1, len(segments)):
+        curr_avg = np.mean([s["avg_power"] for s in curr_seg])
+        if abs(segments[i]["avg_power"] - curr_avg) <= power_tol:
+            curr_seg.append(segments[i])
+        else:
+            steps_raw.append(_finalize_step(curr_seg))
+            curr_seg = [segments[i]]
+    if curr_seg:
+        steps_raw.append(_finalize_step(curr_seg))
+    return steps_raw
+
+
+def _finalize_step(curr_seg: list) -> dict:
+    """Build a step dict from a list of consecutive segments."""
+    return {
+        "start": curr_seg[0]["start"],
+        "end": curr_seg[-1]["end"],
+        "duration": curr_seg[-1]["end"] - curr_seg[0]["start"],
+        "avg_power": float(np.mean([s["avg_power"] for s in curr_seg])),
+    }
+
+
+def _find_test_end_after_last_step(
+    df: pd.DataFrame,
+    time_column: str,
+    power_column: str,
+    last_end: float,
+    max_power: float,
+    drop_threshold: float,
+) -> float:
+    """Find the test end time by looking for a power drop after the last step."""
+    mask_after = df[time_column] > last_end
+    if not mask_after.any():
+        return df[time_column].max()
+
+    power_after = df.loc[mask_after, power_column].rolling(window=10, min_periods=3).mean()
+    for idx in power_after.dropna().index:
+        if power_after[idx] < max_power * drop_threshold:
+            return float(df.loc[idx, time_column])
+    return float(df[time_column].max())
+
+
+def _build_detected_steps(best_seq: list) -> list:
+    """Convert raw step dicts into DetectedStep objects with power diffs."""
+    detected: list = []
+    for i, p in enumerate(best_seq):
+        diff = 0 if i == 0 else p["avg_power"] - best_seq[i - 1]["avg_power"]
+        detected.append(
+            DetectedStep(i + 1, p["start"], p["end"], p["duration"], p["avg_power"], diff)
+        )
+    return detected
+
+
 def detect_step_test_range(
     df: pd.DataFrame,
     power_column: str = "watts",
@@ -35,45 +116,11 @@ def detect_step_test_range(
             min_time, max_time, [], 0, 0, False, [f"Data too short ({total_duration:.0f}s)"]
         )
 
-    segment_duration = 30
-    segments = []
-    for t in range(int(min_time), int(max_time) - segment_duration + 1, segment_duration):
-        mask = (df[time_column] >= t) & (df[time_column] < t + segment_duration)
-        seg = df[mask]
-        if len(seg) >= 5:
-            segments.append(
-                {"start": t, "end": t + segment_duration, "avg_power": seg[power_column].mean()}
-            )
-
+    segments = _build_power_segments(df, time_column, power_column)
     if len(segments) < min_steps * 4:
         return StepTestRange(min_time, max_time, [], 0, 0, False, ["Not enough segments"])
 
-    power_tol = 10
-    steps_raw = []
-    curr_seg = [segments[0]]
-    for i in range(1, len(segments)):
-        if abs(segments[i]["avg_power"] - np.mean([s["avg_power"] for s in curr_seg])) <= power_tol:
-            curr_seg.append(segments[i])
-        else:
-            steps_raw.append(
-                {
-                    "start": curr_seg[0]["start"],
-                    "end": curr_seg[-1]["end"],
-                    "duration": curr_seg[-1]["end"] - curr_seg[0]["start"],
-                    "avg_power": np.mean([s["avg_power"] for s in curr_seg]),
-                }
-            )
-            curr_seg = [segments[i]]
-    if curr_seg:
-        steps_raw.append(
-            {
-                "start": curr_seg[0]["start"],
-                "end": curr_seg[-1]["end"],
-                "duration": curr_seg[-1]["end"] - curr_seg[0]["start"],
-                "avg_power": np.mean([s["avg_power"] for s in curr_seg]),
-            }
-        )
-
+    steps_raw = _merge_segments_into_steps(segments)
     valid_steps = [
         s for s in steps_raw if min_step_duration <= s["duration"] <= max_step_duration + 60
     ]
@@ -83,29 +130,16 @@ def detect_step_test_range(
         )
 
     best_seq = _find_longest_step_sequence(valid_steps, min_power_increment, max_power_increment)
-
     if len(best_seq) < min_steps:
         return StepTestRange(
             min_time, max_time, [], 0, 0, False, [f"Best sequence too small ({len(best_seq)})"]
         )
 
-    last_end = best_seq[-1]["end"]
     max_p = best_seq[-1]["avg_power"]
-    mask_after = df[time_column] > last_end
-    test_end = df[time_column].max()
-    if mask_after.any():
-        power_after = df.loc[mask_after, power_column].rolling(window=10, min_periods=3).mean()
-        for idx in power_after.dropna().index:
-            if power_after[idx] < max_p * end_power_drop_threshold:
-                test_end = df.loc[idx, time_column]
-                break
-
-    detected = []
-    for i, p in enumerate(best_seq):
-        diff = 0 if i == 0 else p["avg_power"] - best_seq[i - 1]["avg_power"]
-        detected.append(
-            DetectedStep(i + 1, p["start"], p["end"], p["duration"], p["avg_power"], diff)
-        )
+    test_end = _find_test_end_after_last_step(
+        df, time_column, power_column, best_seq[-1]["end"], max_p, end_power_drop_threshold
+    )
+    detected = _build_detected_steps(best_seq)
 
     return StepTestRange(
         best_seq[0]["start"],

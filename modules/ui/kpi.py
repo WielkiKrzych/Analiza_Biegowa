@@ -1,8 +1,300 @@
+import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
 from modules.calculations import calculate_trend, calculate_vo2max
 from modules.config import Config
+
+
+def _build_drift_chart(
+    df_plot_resampled: object,
+    tick_step: int = 5,
+) -> tuple:
+    """Build the drift/scatter chart and return (fig_dec, has_data)."""
+    fig_dec = go.Figure()
+    has_data = False
+
+    if "pace_smooth" not in df_plot_resampled.columns:
+        return fig_dec, False
+
+    pace_display = df_plot_resampled["pace_smooth"] / 60.0
+    pace_customdata = []
+    for p in pace_display:
+        minutes = int(p)
+        seconds = int((p - minutes) * 60)
+        pace_customdata.append(f"{minutes}:{seconds:02d}")
+
+    fig_dec.add_trace(
+        go.Scatter(
+            x=df_plot_resampled["time_min"],
+            y=pace_display,
+            name="Tempo",
+            line=dict(color=Config.COLOR_POWER, width=1.5),
+            hovertemplate="Tempo: %{customdata} min/km<extra></extra>",
+            customdata=[pace_customdata],
+        )
+    )
+
+    if "heartrate_smooth" in df_plot_resampled.columns:
+        fig_dec.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=df_plot_resampled["heartrate_smooth"],
+                name="HR",
+                yaxis="y2",
+                line=dict(color=Config.COLOR_HR, width=1.5),
+                hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+            )
+        )
+    if "smo2_smooth" in df_plot_resampled.columns:
+        fig_dec.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=df_plot_resampled["smo2_smooth"],
+                name="SmO2",
+                yaxis="y3",
+                line=dict(color=Config.COLOR_SMO2, dash="dot", width=1.5),
+                hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
+            )
+        )
+
+    time_vals = (
+        df_plot_resampled["time_min"].values
+        if hasattr(df_plot_resampled["time_min"], "values")
+        else np.array(df_plot_resampled["time_min"])
+    )
+    tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
+    tick_text = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals]
+
+    fig_dec.update_layout(
+        template="plotly_dark",
+        title="Dryf Tempa, Tętna i SmO2 w Czasie",
+        hovermode="x unified",
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals,
+            ticktext=tick_text,
+        ),
+        yaxis=dict(title="Tempo [min/km]", autorange="reversed"),
+        yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
+        yaxis3=dict(
+            title="SmO2 [%]",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            showticklabels=False,
+            range=[0, 100],
+        ),
+        legend=dict(orientation="h", y=1.1, x=0),
+    )
+    return fig_dec, True
+
+
+def _render_smo2_panel(df_plot: object, df_plot_resampled: object, tick_step: int = 5) -> None:
+    """Render the SmO2 trend chart in the left column."""
+    col_smo2 = (
+        "smo2_smooth_ultra"
+        if "smo2_smooth_ultra" in df_plot.columns
+        else ("smo2_smooth" if "smo2_smooth" in df_plot.columns else None)
+    )
+    if not col_smo2:
+        st.info("Brak danych SmO2")
+        return
+
+    fig_s = go.Figure()
+    fig_s.add_trace(
+        go.Scatter(
+            x=df_plot_resampled["time_min"],
+            y=df_plot_resampled[col_smo2],
+            name="SmO2",
+            line=dict(color="#ab63fa", width=2),
+            hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
+        )
+    )
+
+    trend_y = calculate_trend(
+        df_plot_resampled["time_min"].values, df_plot_resampled[col_smo2].values
+    )
+    if trend_y is not None:
+        fig_s.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=trend_y,
+                name="Trend",
+                line=dict(color="white", dash="dash", width=1.5),
+                hovertemplate="Trend: %{y:.1f}%<extra></extra>",
+            )
+        )
+
+    time_vals_s = (
+        df_plot_resampled["time_min"].values
+        if hasattr(df_plot_resampled["time_min"], "values")
+        else np.array(df_plot_resampled["time_min"])
+    )
+    tick_vals_s = np.arange(0, time_vals_s.max() + tick_step, tick_step)
+    tick_text_s = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_s]
+
+    fig_s.update_layout(
+        template="plotly_dark",
+        title="Lokalna Oksydacja (SmO2)",
+        hovermode="x unified",
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals_s,
+            ticktext=tick_text_s,
+        ),
+        yaxis=dict(title="SmO2 [%]", range=[0, 100]),
+        legend=dict(orientation="h", y=1.1, x=0),
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=400,
+    )
+    st.plotly_chart(fig_s, use_container_width=True)
+
+    st.info("""
+    **💡 Hemodynamika Mięśniowa (SmO2) - Lokalny Monitoring:**
+
+    SmO2 to "wskaźnik paliwa" bezpośrednio w pracującym mięśniu (zazwyczaj czworogłowym uda).
+    * **Równowaga (Linia Płaska):** Podaż tlenu = Zapotrzebowanie. To stan zrównoważony (Steady State).
+    * **Desaturacja (Spadek):** Popyt > Podaż. Wchodzisz w dług tlenowy. Jeśli dzieje się to przy stałej mocy -> zmęczenie metaboliczne.
+    * **Reoksygenacja (Wzrost):** Odpoczynek. Szybkość powrotu do normy to doskonały wskaźnik wytrenowania (regeneracji).
+    """)
+
+
+def _render_hr_panel(df_plot_resampled: object, tick_step: int = 5) -> None:
+    """Render the HR chart in the right column."""
+    fig_h = go.Figure()
+    if "heartrate_smooth" in df_plot_resampled.columns:
+        fig_h.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=df_plot_resampled["heartrate_smooth"],
+                name="HR",
+                fill="tozeroy",
+                line=dict(color="#ef553b", width=2),
+                hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+            )
+        )
+    else:
+        st.info("Brak danych tętna (HR)")
+
+    time_vals_h = (
+        df_plot_resampled["time_min"].values
+        if hasattr(df_plot_resampled["time_min"], "values")
+        else np.array(df_plot_resampled["time_min"])
+    )
+    tick_vals_h = np.arange(0, time_vals_h.max() + tick_step, tick_step)
+    tick_text_h = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_h]
+
+    fig_h.update_layout(
+        template="plotly_dark",
+        title="Odpowiedź Sercowa (HR)",
+        hovermode="x unified",
+        xaxis=dict(
+            title="Czas [hh:mm:ss]",
+            tickmode="array",
+            tickvals=tick_vals_h,
+            ticktext=tick_text_h,
+        ),
+        yaxis=dict(title="HR [bpm]"),
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=400,
+    )
+    st.plotly_chart(fig_h, use_container_width=True)
+
+    st.info("""
+    **💡 Reakcja Sercowo-Naczyniowa (HR) - Globalny System:**
+
+    Serce to pompa centralna. Jego reakcja jest **opóźniona** względem wysiłku.
+    * **Lag (Opóźnienie):** W krótkich interwałach (np. 30s) tętno nie zdąży wzrosnąć, mimo że moc jest max. Nie steruj sprintami na tętno!
+    * **Decoupling (Rozjazd):** Jeśli moc jest stała, a tętno rośnie (dryfuje) -> organizm walczy z przegrzaniem lub odwodnieniem.
+    * **Recovery HR:** Jak szybko tętno spada po wysiłku? Szybki spadek = sprawne przywspółczulne układu nerwowego (dobra forma).
+    """)
+
+
+def _render_ventilation_chart(
+    df_plot_resampled: object,
+    vt1_vent: float,
+    vt2_vent: float,
+) -> None:
+    """Render the VE/RR dual-axis ventilation chart."""
+    fig_v = go.Figure()
+
+    if "tymeventilation_smooth" in df_plot_resampled.columns:
+        fig_v.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=df_plot_resampled["tymeventilation_smooth"],
+                name="VE",
+                line=dict(color="#ffa15a", width=2),
+                hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
+            )
+        )
+        trend_ve = calculate_trend(
+            df_plot_resampled["time_min"].values, df_plot_resampled["tymeventilation_smooth"].values
+        )
+        if trend_ve is not None:
+            fig_v.add_trace(
+                go.Scatter(
+                    x=df_plot_resampled["time_min"],
+                    y=trend_ve,
+                    name="Trend VE",
+                    line=dict(color="#ffa15a", dash="dash", width=1.5),
+                    hovertemplate="Trend: %{y:.1f} L/min<extra></extra>",
+                )
+            )
+
+    if "tymebreathrate_smooth" in df_plot_resampled.columns:
+        fig_v.add_trace(
+            go.Scatter(
+                x=df_plot_resampled["time_min"],
+                y=df_plot_resampled["tymebreathrate_smooth"],
+                name="RR",
+                yaxis="y2",
+                line=dict(color="#19d3f3", dash="dot", width=2),
+                hovertemplate="RR: %{y:.1f} /min<extra></extra>",
+            )
+        )
+
+    fig_v.add_hline(
+        y=vt1_vent,
+        line_dash="dot",
+        line_color="green",
+        annotation_text="VT1",
+        annotation_position="bottom right",
+    )
+    fig_v.add_hline(
+        y=vt2_vent,
+        line_dash="dot",
+        line_color="red",
+        annotation_text="VT2",
+        annotation_position="bottom right",
+    )
+
+    tick_step_v = 5
+    time_vals_v = (
+        df_plot_resampled["time_min"].values
+        if hasattr(df_plot_resampled["time_min"], "values")
+        else np.array(df_plot_resampled["time_min"])
+    )
+    tick_vals_v = np.arange(0, time_vals_v.max() + tick_step_v, tick_step_v)
+    tick_text_v = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_v]
+
+    fig_v.update_layout(
+        template="plotly_dark",
+        title="Mechanika Oddechu (Wydajność vs Częstość)",
+        hovermode="x unified",
+        xaxis=dict(
+            title="Czas [hh:mm:ss]", tickmode="array", tickvals=tick_vals_v, ticktext=tick_text_v
+        ),
+        yaxis=dict(title="Wentylacja [L/min]"),
+        yaxis2=dict(title="Kadencja Oddechu [RR]", overlaying="y", side="right", showgrid=False),
+        legend=dict(orientation="h", y=1.1, x=0),
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=450,
+    )
+    st.plotly_chart(fig_v, use_container_width=True)
 
 
 def render_kpi_tab(
@@ -20,9 +312,7 @@ def render_kpi_tab(
     c1.metric("Średnia Moc", f"{metrics.get('avg_watts', 0):.0f} W")
     c2.metric("Średnie Tętno", f"{metrics.get('avg_hr', 0):.0f} BPM")
     c3.metric("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f} %")
-    c4.metric(
-        "Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM"
-    )  # FIX: SPM (steps/min) for running, not RPM
+    c4.metric("Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM")
 
     vo2max_est = calculate_vo2max(
         df_plot["watts"].rolling(window=300).mean().max() if "watts" in df_plot.columns else 0,
@@ -53,87 +343,9 @@ def render_kpi_tab(
     c12.metric("Oddechy (RR)", f"{metrics.get('avg_rr', 0):.1f} /min")
 
     st.subheader("Wizualizacja Dryfu i Zmienności")
-    if "pace_smooth" in df_plot.columns:
-        fig_dec = go.Figure()
-
-        # Convert pace from sec/km to min/km for display
-        pace_display = df_plot_resampled["pace_smooth"] / 60.0
-
-        # Format pace for hover (mm:ss)
-        pace_customdata = []
-        for p in pace_display:
-            minutes = int(p)
-            seconds = int((p - minutes) * 60)
-            pace_customdata.append(f"{minutes}:{seconds:02d}")
-
-        fig_dec.add_trace(
-            go.Scatter(
-                x=df_plot_resampled["time_min"],
-                y=pace_display,
-                name="Tempo",
-                line=dict(color=Config.COLOR_POWER, width=1.5),
-                hovertemplate="Tempo: %{customdata} min/km<extra></extra>",
-                customdata=[pace_customdata],
-            )
-        )
-
-        if "heartrate_smooth" in df_plot.columns:
-            fig_dec.add_trace(
-                go.Scatter(
-                    x=df_plot_resampled["time_min"],
-                    y=df_plot_resampled["heartrate_smooth"],
-                    name="HR",
-                    yaxis="y2",
-                    line=dict(color=Config.COLOR_HR, width=1.5),
-                    hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
-                )
-            )
-        if "smo2_smooth" in df_plot.columns:
-            fig_dec.add_trace(
-                go.Scatter(
-                    x=df_plot_resampled["time_min"],
-                    y=df_plot_resampled["smo2_smooth"],
-                    name="SmO2",
-                    yaxis="y3",
-                    line=dict(color=Config.COLOR_SMO2, dash="dot", width=1.5),
-                    hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
-                )
-            )
-
-        # Convert time_min to hh:mm:ss format for x-axis
-        time_vals = (
-            df_plot_resampled["time_min"].values
-            if hasattr(df_plot_resampled["time_min"], "values")
-            else np.array(df_plot_resampled["time_min"])
-        )
-        tick_step = 5  # every 5 minutes
-        tick_vals = np.arange(0, time_vals.max() + tick_step, tick_step)
-        tick_text = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals]
-
-        fig_dec.update_layout(
-            template="plotly_dark",
-            title="Dryf Tempa, Tętna i SmO2 w Czasie",
-            hovermode="x unified",
-            xaxis=dict(
-                title="Czas [hh:mm:ss]",
-                tickmode="array",
-                tickvals=tick_vals,
-                ticktext=tick_text,
-            ),
-            yaxis=dict(title="Tempo [min/km]", autorange="reversed"),
-            yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
-            yaxis3=dict(
-                title="SmO2 [%]",
-                overlaying="y",
-                side="right",
-                showgrid=False,
-                showticklabels=False,
-                range=[0, 100],
-            ),
-            legend=dict(orientation="h", y=1.1, x=0),
-        )
+    fig_dec, has_data = _build_drift_chart(df_plot_resampled)
+    if has_data:
         st.plotly_chart(fig_dec, use_container_width=True)
-
         st.info("""
         **💡 Interpretacja: Fizjologia Zmęczenia (Triada: Tempo - HR - SmO2)**
 
@@ -166,223 +378,16 @@ def render_kpi_tab(
     st.divider()
 
     c1, c2 = st.columns(2)
-
-    # LEWA KOLUMNA: SmO2 + TREND
     with c1:
         st.subheader("SmO2")
-        col_smo2 = (
-            "smo2_smooth_ultra"
-            if "smo2_smooth_ultra" in df_plot.columns
-            else ("smo2_smooth" if "smo2_smooth" in df_plot.columns else None)
-        )
-
-        if col_smo2:
-            fig_s = go.Figure()
-            fig_s.add_trace(
-                go.Scatter(
-                    x=df_plot_resampled["time_min"],
-                    y=df_plot_resampled[col_smo2],
-                    name="SmO2",
-                    line=dict(color="#ab63fa", width=2),
-                    hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
-                )
-            )
-
-            trend_y = calculate_trend(
-                df_plot_resampled["time_min"].values, df_plot_resampled[col_smo2].values
-            )
-            if trend_y is not None:
-                fig_s.add_trace(
-                    go.Scatter(
-                        x=df_plot_resampled["time_min"],
-                        y=trend_y,
-                        name="Trend",
-                        line=dict(color="white", dash="dash", width=1.5),
-                        hovertemplate="Trend: %{y:.1f}%<extra></extra>",
-                    )
-                )
-
-            # Convert time_min to hh:mm:ss format for x-axis
-            time_vals_s = (
-                df_plot_resampled["time_min"].values
-                if hasattr(df_plot_resampled["time_min"], "values")
-                else np.array(df_plot_resampled["time_min"])
-            )
-            tick_vals_s = np.arange(0, time_vals_s.max() + tick_step, tick_step)
-            tick_text_s = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_s]
-
-            fig_s.update_layout(
-                template="plotly_dark",
-                title="Lokalna Oksydacja (SmO2)",
-                hovermode="x unified",
-                xaxis=dict(
-                    title="Czas [hh:mm:ss]",
-                    tickmode="array",
-                    tickvals=tick_vals_s,
-                    ticktext=tick_text_s,
-                ),
-                yaxis=dict(title="SmO2 [%]", range=[0, 100]),
-                legend=dict(orientation="h", y=1.1, x=0),
-                margin=dict(l=10, r=10, t=40, b=10),
-                height=400,
-            )
-            st.plotly_chart(fig_s, use_container_width=True)
-
-            st.info("""
-            **💡 Hemodynamika Mięśniowa (SmO2) - Lokalny Monitoring:**
-
-            SmO2 to "wskaźnik paliwa" bezpośrednio w pracującym mięśniu (zazwyczaj czworogłowym uda).
-            * **Równowaga (Linia Płaska):** Podaż tlenu = Zapotrzebowanie. To stan zrównoważony (Steady State).
-            * **Desaturacja (Spadek):** Popyt > Podaż. Wchodzisz w dług tlenowy. Jeśli dzieje się to przy stałej mocy -> zmęczenie metaboliczne.
-            * **Reoksygenacja (Wzrost):** Odpoczynek. Szybkość powrotu do normy to doskonały wskaźnik wytrenowania (regeneracji).
-            """)
-        else:
-            st.info("Brak danych SmO2")
-
-    # PRAWA KOLUMNA: TĘTNO (HR)
+        _render_smo2_panel(df_plot, df_plot_resampled)
     with c2:
         st.subheader("Tętno")
-        fig_h = go.Figure()
-        if "heartrate_smooth" not in df_plot_resampled.columns:
-            st.info("Brak danych tętna (HR)")
-        else:
-            fig_h.add_trace(
-                go.Scatter(
-                    x=df_plot_resampled["time_min"],
-                    y=df_plot_resampled["heartrate_smooth"],
-                    name="HR",
-                    fill="tozeroy",
-                    line=dict(color="#ef553b", width=2),
-                    hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
-                )
-            )
-        # Convert time_min to hh:mm:ss format for x-axis
-        time_vals_h = (
-            df_plot_resampled["time_min"].values
-            if hasattr(df_plot_resampled["time_min"], "values")
-            else np.array(df_plot_resampled["time_min"])
-        )
-        tick_vals_h = np.arange(0, time_vals_h.max() + tick_step, tick_step)
-        tick_text_h = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_h]
-
-        fig_h.update_layout(
-            template="plotly_dark",
-            title="Odpowiedź Sercowa (HR)",
-            hovermode="x unified",
-            xaxis=dict(
-                title="Czas [hh:mm:ss]",
-                tickmode="array",
-                tickvals=tick_vals_h,
-                ticktext=tick_text_h,
-            ),
-            yaxis=dict(title="HR [bpm]"),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=400,
-        )
-        st.plotly_chart(fig_h, use_container_width=True)
-
-        st.info("""
-        **💡 Reakcja Sercowo-Naczyniowa (HR) - Globalny System:**
-
-        Serce to pompa centralna. Jego reakcja jest **opóźniona** względem wysiłku.
-        * **Lag (Opóźnienie):** W krótkich interwałach (np. 30s) tętno nie zdąży wzrosnąć, mimo że moc jest max. Nie steruj sprintami na tętno!
-        * **Decoupling (Rozjazd):** Jeśli moc jest stała, a tętno rośnie (dryfuje) -> organizm walczy z przegrzaniem lub odwodnieniem.
-        * **Recovery HR:** Jak szybko tętno spada po wysiłku? Szybki spadek = sprawne przywspółczulne układu nerwowego (dobra forma).
-        """)
+        _render_hr_panel(df_plot_resampled)
 
     st.divider()
-
     st.subheader("Wentylacja (VE) i Oddechy (RR)")
-
-    fig_v = go.Figure()
-
-    # 1. WENTYLACJA (Oś Lewa)
-    if "tymeventilation_smooth" in df_plot_resampled.columns:
-        fig_v.add_trace(
-            go.Scatter(
-                x=df_plot_resampled["time_min"],
-                y=df_plot_resampled["tymeventilation_smooth"],
-                name="VE",
-                line=dict(color="#ffa15a", width=2),
-                hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
-            )
-        )
-
-        # Trend VE
-        trend_ve = calculate_trend(
-            df_plot_resampled["time_min"].values, df_plot_resampled["tymeventilation_smooth"].values
-        )
-        if trend_ve is not None:
-            fig_v.add_trace(
-                go.Scatter(
-                    x=df_plot_resampled["time_min"],
-                    y=trend_ve,
-                    name="Trend VE",
-                    line=dict(color="#ffa15a", dash="dash", width=1.5),
-                    hovertemplate="Trend: %{y:.1f} L/min<extra></extra>",
-                )
-            )
-
-    # 2. ODDECHY / RR (Oś Prawa)
-    if "tymebreathrate_smooth" in df_plot_resampled.columns:
-        fig_v.add_trace(
-            go.Scatter(
-                x=df_plot_resampled["time_min"],
-                y=df_plot_resampled["tymebreathrate_smooth"],
-                name="RR",
-                yaxis="y2",  # Druga oś
-                line=dict(color="#19d3f3", dash="dot", width=2),
-                hovertemplate="RR: %{y:.1f} /min<extra></extra>",
-            )
-        )
-
-    # Linie Progi Wentylacyjne
-    fig_v.add_hline(
-        y=vt1_vent,
-        line_dash="dot",
-        line_color="green",
-        annotation_text="VT1",
-        annotation_position="bottom right",
-    )
-    fig_v.add_hline(
-        y=vt2_vent,
-        line_dash="dot",
-        line_color="red",
-        annotation_text="VT2",
-        annotation_position="bottom right",
-    )
-
-    # Convert time_min to hh:mm:ss format for x-axis
-    time_vals_v = (
-        df_plot_resampled["time_min"].values
-        if hasattr(df_plot_resampled["time_min"], "values")
-        else np.array(df_plot_resampled["time_min"])
-    )
-    tick_step_v = 5  # every 5 minutes
-    tick_vals_v = np.arange(0, time_vals_v.max() + tick_step_v, tick_step_v)
-    tick_text_v = [f"{int(m // 60):02d}:{int(m % 60):02d}:00" for m in tick_vals_v]
-
-    # LAYOUT (Unified Hover)
-    fig_v.update_layout(
-        template="plotly_dark",
-        title="Mechanika Oddechu (Wydajność vs Częstość)",
-        hovermode="x unified",
-        # X-axis with hh:mm:ss format
-        xaxis=dict(
-            title="Czas [hh:mm:ss]",
-            tickmode="array",
-            tickvals=tick_vals_v,
-            ticktext=tick_text_v,
-        ),
-        # Oś Lewa
-        yaxis=dict(title="Wentylacja [L/min]"),
-        # Oś Prawa
-        yaxis2=dict(title="Kadencja Oddechu [RR]", overlaying="y", side="right", showgrid=False),
-        legend=dict(orientation="h", y=1.1, x=0),
-        margin=dict(l=10, r=10, t=40, b=10),
-        height=450,
-    )
-    st.plotly_chart(fig_v, use_container_width=True)
+    _render_ventilation_chart(df_plot_resampled, vt1_vent, vt2_vent)
 
     st.info("""
     **💡 Interpretacja: Mechanika Oddychania**

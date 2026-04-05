@@ -265,6 +265,54 @@ def calculate_cci(
 # =============================================================================
 
 
+def _score_pulse_power(pp: float) -> Dict[str, float]:
+    if pp > 2.0:
+        return {"efficient": 2.0}
+    if pp > 1.5:
+        return {"efficient": 1.0, "compensating": 0.5}
+    if pp > 1.0:
+        return {"compensating": 1.5}
+    return {"decompensating": 2.0}
+
+
+def _score_efficiency_factor(ef: float) -> Dict[str, float]:
+    if ef > 1.8:
+        return {"efficient": 2.0}
+    if ef > 1.4:
+        return {"efficient": 1.0}
+    if ef > 1.0:
+        return {"compensating": 1.5}
+    return {"decompensating": 1.5}
+
+
+def _score_hr_drift(drift: float) -> Dict[str, float]:
+    if drift < 3:
+        return {"efficient": 2.0}
+    if drift < 5:
+        return {"compensating": 1.5}
+    if drift < 8:
+        return {"decompensating": 1.0}
+    return {"decompensating": 2.5}
+
+
+def _score_cci(cci: float) -> Dict[str, float]:
+    if cci < 0.15:
+        return {"efficient": 1.5}
+    if cci < 0.25:
+        return {"compensating": 1.0}
+    return {"decompensating": 1.5}
+
+
+def _aggregate_scores(
+    *partial_scores: Dict[str, float],
+) -> Dict[str, float]:
+    totals: Dict[str, float] = {"efficient": 0.0, "compensating": 0.0, "decompensating": 0.0}
+    for partial in partial_scores:
+        for key, value in partial.items():
+            totals[key] += value
+    return totals
+
+
 def classify_cardiovascular_efficiency(metrics: CardiovascularMetrics) -> Tuple[str, float, str]:
     """
     Classify cardiovascular efficiency status.
@@ -272,51 +320,12 @@ def classify_cardiovascular_efficiency(metrics: CardiovascularMetrics) -> Tuple[
     Returns:
         (status, confidence, interpretation)
     """
-    scores = {"efficient": 0.0, "compensating": 0.0, "decompensating": 0.0}
-
-    pp = metrics.pulse_power
-    ef = metrics.efficiency_factor
-    drift = metrics.hr_drift_pct
-    cci = metrics.cci_avg
-
-    # --- PULSE POWER ANALYSIS ---
-    if pp > 2.0:
-        scores["efficient"] += 2.0
-    elif pp > 1.5:
-        scores["efficient"] += 1.0
-        scores["compensating"] += 0.5
-    elif pp > 1.0:
-        scores["compensating"] += 1.5
-    else:
-        scores["decompensating"] += 2.0
-
-    # --- EFFICIENCY FACTOR ANALYSIS ---
-    if ef > 1.8:
-        scores["efficient"] += 2.0
-    elif ef > 1.4:
-        scores["efficient"] += 1.0
-    elif ef > 1.0:
-        scores["compensating"] += 1.5
-    else:
-        scores["decompensating"] += 1.5
-
-    # --- HR DRIFT ANALYSIS ---
-    if drift < 3:
-        scores["efficient"] += 2.0
-    elif drift < 5:
-        scores["compensating"] += 1.5
-    elif drift < 8:
-        scores["decompensating"] += 1.0
-    else:
-        scores["decompensating"] += 2.5
-
-    # --- CCI ANALYSIS ---
-    if cci < 0.15:
-        scores["efficient"] += 1.5
-    elif cci < 0.25:
-        scores["compensating"] += 1.0
-    else:
-        scores["decompensating"] += 1.5
+    scores = _aggregate_scores(
+        _score_pulse_power(metrics.pulse_power),
+        _score_efficiency_factor(metrics.efficiency_factor),
+        _score_hr_drift(metrics.hr_drift_pct),
+        _score_cci(metrics.cci_avg),
+    )
 
     # Determine winner
     total = sum(scores.values()) or 1.0

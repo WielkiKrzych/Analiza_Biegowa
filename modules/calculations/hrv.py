@@ -263,6 +263,141 @@ def _generate_cache_key(
     return key
 
 
+def _find_rr_column(df: pd.DataFrame) -> Optional[str]:
+    """Find the R-R/HRV column name using case-insensitive matching.
+
+    Searches for exact matches first, then falls back to partial matches
+    (e.g. 'HRV (ms)').
+
+    Args:
+        df: DataFrame whose columns to search.
+
+    Returns:
+        Column name string if found, else None.
+    """
+    search_terms = ["rr", "rr_interval", "hrv", "ibi", "r-r", "rr_ms"]
+
+    # Exact match (case-insensitive, trimmed)
+    col = next(
+        (c for c in df.columns if any(x == c.lower().strip() for x in search_terms)),
+        None,
+    )
+    if col is not None:
+        return col
+
+    # Partial match (e.g. "HRV (ms)")
+    return next(
+        (c for c in df.columns if any(x in c.lower() for x in search_terms)),
+        None,
+    )
+
+
+def _normalize_numeric_rr(val: float) -> float:
+    """Normalize a numeric RR value to milliseconds.
+
+    Accepts ms (300-2000), seconds (0.3-2.0), and μs (300000-2000000).
+    Returns np.nan for out-of-range values.
+    """
+    if 300 <= val <= 2000:
+        return float(val)
+    if 0.3 <= val <= 2.0:
+        return float(val * 1000)
+    if 300000 <= val <= 2000000:
+        return float(val / 1000)
+    return np.nan
+
+
+def _parse_colon_separated_rr(val: str) -> float:
+    """Parse colon-separated RR intervals ('493:490') or HH:MM:SS into ms.
+
+    Returns np.nan if the format cannot be parsed or the result is out of
+    the 300-2000 ms physiological range.
+    """
+    parts = val.split(":")
+    if not parts:
+        return np.nan
+
+    # Try interpreting all parts as RR intervals (Intervals.icu format)
+    try:
+        rr_vals = [float(p) for p in parts if p.strip()]
+        mean_rr = float(np.mean(rr_vals))
+        if 300 <= mean_rr <= 2000:
+            return mean_rr
+    except ValueError:
+        pass
+
+    # Fallback: HH:MM:SS interpretation (only for exactly 3 parts)
+    if len(parts) == 3:
+        try:
+            hours = float(parts[0])
+            minutes = float(parts[1])
+            seconds = float(parts[2])
+            total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000
+            if 300 <= total_ms <= 2000:
+                return total_ms
+        except ValueError:
+            pass
+
+    return np.nan
+
+
+def _clean_rr_value(val: object) -> float:
+    """Convert various RR formats to milliseconds.
+
+    Handles:
+    - Numeric values in ms, seconds, or microseconds
+    - String numbers ("648")
+    - Colon-separated intervals ("493:490", "455:465:451")
+    - HH:MM:SS Excel time artifacts ("0:01:05")
+
+    Returns np.nan for unparseable or out-of-range values.
+    """
+    if pd.isna(val):
+        return np.nan
+
+    if isinstance(val, (int, float)):
+        return _normalize_numeric_rr(float(val))
+
+    if isinstance(val, str):
+        val = val.strip()
+        # Try simple numeric parse first
+        try:
+            return _normalize_numeric_rr(float(val))
+        except ValueError:
+            pass
+
+        # Colon-separated formats
+        if ":" in val:
+            return _parse_colon_separated_rr(val)
+
+    return np.nan
+
+
+def _remove_rr_outliers(
+    rr_data: pd.DataFrame,
+    rr_col: str,
+) -> pd.DataFrame:
+    """Remove RR outliers using IQR method, clamped to 300-2000 ms.
+
+    Args:
+        rr_data: DataFrame with 'time' and *rr_col* columns.
+        rr_col: Name of the RR interval column.
+
+    Returns:
+        Filtered DataFrame with outliers removed.
+    """
+    q1 = rr_data[rr_col].quantile(0.25)
+    q3 = rr_data[rr_col].quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+
+    valid_mask = (rr_data[rr_col] >= max(300, lower_bound)) & (
+        rr_data[rr_col] <= min(2000, upper_bound)
+    )
+    return rr_data[valid_mask].copy()
+
+
 def calculate_dynamic_dfa_v2(
     df_pl,
     window_sec: int = 300,
@@ -295,86 +430,14 @@ def calculate_dynamic_dfa_v2(
     logger.debug("Executing calculate_dynamic_dfa_v2 logic...")
     df = ensure_pandas(df_pl)
 
-    # Robust column detection (case-insensitive)
-    search_terms = ["rr", "rr_interval", "hrv", "ibi", "r-r", "rr_ms"]
-    rr_col = next(
-        (c for c in df.columns if any(x == c.lower().strip() for x in search_terms)), None
-    )
-
-    # If not found, try partial match (e.g. "HRV (ms)")
-    if rr_col is None:
-        rr_col = next((c for c in df.columns if any(x in c.lower() for x in search_terms)), None)
-
+    rr_col = _find_rr_column(df)
     if rr_col is None:
         return None, f"Missing R-R/HRV data column. Available: {list(df.columns)}"
 
     rr_data = df[["time", rr_col]].dropna().copy()
 
-    # Clean HRV data - handle Excel time format (HH:MM:SS) and other invalid formats
-    def clean_rr_value(val):
-        """Convert various RR formats to milliseconds."""
-        if pd.isna(val):
-            return np.nan
-
-        # If already numeric, validate range
-        if isinstance(val, (int, float)):
-            if 300 <= val <= 2000:  # Normal RR range in ms
-                return float(val)
-            elif 0.3 <= val <= 2.0:  # Seconds
-                return float(val * 1000)
-            elif 300000 <= val <= 2000000:  # Microseconds
-                return float(val / 1000)
-            else:
-                return np.nan  # Out of range
-
-        # Handle string formats (e.g., "648", "681:07:00")
-        if isinstance(val, str):
-            val = val.strip()
-            # Try parsing as simple number first
-            try:
-                num_val = float(val)
-                return clean_rr_value(num_val)
-            except ValueError:
-                pass
-
-            # Handle colon-separated RR intervals (Intervals.icu: "493:490")
-            # and HH:MM:SS format (Excel time export artifact)
-            if ":" in val:
-                parts = val.split(":")
-                if len(parts) == 2:
-                    # Intervals.icu format: "493:490" — two RR intervals
-                    try:
-                        rr_vals = [float(p) for p in parts if p.strip()]
-                        mean_rr = np.mean(rr_vals)
-                        if 300 <= mean_rr <= 2000:
-                            return float(mean_rr)
-                    except ValueError:
-                        pass
-                elif len(parts) >= 3:
-                    # Could be HH:MM:SS or "455:465:451" (3+ RR intervals)
-                    try:
-                        rr_vals = [float(p) for p in parts if p.strip()]
-                        mean_rr = np.mean(rr_vals)
-                        if 300 <= mean_rr <= 2000:
-                            return float(mean_rr)
-                    except ValueError:
-                        pass
-                    # Fallback: try HH:MM:SS format
-                    if len(parts) == 3:
-                        try:
-                            hours = float(parts[0])
-                            minutes = float(parts[1])
-                            seconds = float(parts[2])
-                            total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000
-                            if 300 <= total_ms <= 2000:
-                                return total_ms
-                        except ValueError:
-                            pass
-
-        return np.nan
-
-    # Apply cleaning
-    rr_data[rr_col] = rr_data[rr_col].apply(clean_rr_value)
+    # Clean and validate RR values
+    rr_data[rr_col] = rr_data[rr_col].apply(_clean_rr_value)
     rr_data = rr_data.dropna()
     rr_data = rr_data[rr_data[rr_col] > 0]
 
@@ -382,17 +445,7 @@ def calculate_dynamic_dfa_v2(
         return None, f"Za mało danych R-R ({len(rr_data)} < {min_samples_hrv})"
 
     # Outlier removal using IQR method
-    q1 = rr_data[rr_col].quantile(0.25)
-    q3 = rr_data[rr_col].quantile(0.75)
-    iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
-
-    # Keep only values within IQR bounds (but minimum 300ms, max 2000ms)
-    valid_mask = (rr_data[rr_col] >= max(300, lower_bound)) & (
-        rr_data[rr_col] <= min(2000, upper_bound)
-    )
-    rr_data = rr_data[valid_mask].copy()
+    rr_data = _remove_rr_outliers(rr_data, rr_col)
 
     if len(rr_data) < min_samples_hrv:
         return (
@@ -400,7 +453,7 @@ def calculate_dynamic_dfa_v2(
             f"Za mało danych R-R po usunięciu artefaktów ({len(rr_data)} < {min_samples_hrv})",
         )
 
-    # Data is already cleaned to ms by clean_rr_value (300-2000ms range).
+    # Data is already cleaned to ms by _clean_rr_value (300-2000ms range).
     # No secondary unit conversion needed — the cleaning step handles all
     # unit normalization. Removed dead code that could cause latent bugs.
 
@@ -520,6 +573,41 @@ def calculate_ddfa(
     }
 
 
+def _find_sustained_crossing(
+    alpha1_series: np.ndarray,
+    time_indices: np.ndarray,
+    time_stamps: np.ndarray,
+    threshold: float,
+    sustained_sec: float = 60.0,
+) -> Tuple[Optional[int], Optional[float]]:
+    """Return beat index and time where alpha1 stays below threshold for >= sustained_sec."""
+    candidate_idx: Optional[int] = None
+    candidate_time: Optional[float] = None
+
+    for a1, beat_idx in zip(alpha1_series, time_indices, strict=False):
+        if np.isnan(a1):
+            candidate_idx = None
+            continue
+        t = float(time_stamps[min(beat_idx, len(time_stamps) - 1)])
+        if a1 < threshold:
+            if candidate_idx is None:
+                candidate_idx = int(beat_idx)
+                candidate_time = t
+            elif t - candidate_time >= sustained_sec:
+                return candidate_idx, candidate_time
+        else:
+            candidate_idx = None
+            candidate_time = None
+    return None, None
+
+
+def _lookup_hrv_value(beat_idx: Optional[int], source: Optional[np.ndarray]) -> Optional[float]:
+    """Look up a physiological value at the given beat index."""
+    if beat_idx is None or source is None:
+        return None
+    return float(source[min(beat_idx, len(source) - 1)])
+
+
 def detect_hrv_thresholds(
     rr_intervals: np.ndarray,
     time_stamps: Optional[np.ndarray] = None,
@@ -546,9 +634,8 @@ def detect_hrv_thresholds(
     rr = np.asarray(rr_intervals, dtype=np.float64)
     ddfa = calculate_ddfa(rr, window_beats=120, step_beats=10)
 
-    # Build cumulative time from RR intervals when timestamps are absent
     if time_stamps is None:
-        time_stamps = np.cumsum(rr) / 1000.0  # ms -> seconds
+        time_stamps = np.cumsum(rr) / 1000.0
 
     empty_result = {
         "hrvt1_time_sec": None,
@@ -564,52 +651,24 @@ def detect_hrv_thresholds(
     if len(ddfa["alpha1_series"]) == 0:
         return empty_result
 
-    sustained_sec = 60.0
+    hrvt1_beat, hrvt1_t = _find_sustained_crossing(
+        ddfa["alpha1_series"], ddfa["time_indices"], time_stamps, 0.75
+    )
+    hrvt2_beat, hrvt2_t = _find_sustained_crossing(
+        ddfa["alpha1_series"], ddfa["time_indices"], time_stamps, 0.50
+    )
 
-    def _find_sustained_crossing(threshold: float):
-        """Return beat index where alpha1 stays below *threshold* for >=60 s."""
-        series = ddfa["alpha1_series"]
-        indices = ddfa["time_indices"]
-        candidate_idx = None
-        candidate_time = None
-
-        for _i, (a1, beat_idx) in enumerate(zip(series, indices, strict=False)):
-            if np.isnan(a1):
-                candidate_idx = None
-                continue
-            t = float(time_stamps[min(beat_idx, len(time_stamps) - 1)])
-            if a1 < threshold:
-                if candidate_idx is None:
-                    candidate_idx = beat_idx
-                    candidate_time = t
-                elif t - candidate_time >= sustained_sec:
-                    return int(candidate_idx), candidate_time
-            else:
-                candidate_idx = None
-                candidate_time = None
-        return None, None
-
-    def _lookup(beat_idx, source):
-        if beat_idx is None or source is None:
-            return None
-        idx = min(beat_idx, len(source) - 1)
-        return float(source[idx])
-
-    hrvt1_beat, hrvt1_t = _find_sustained_crossing(0.75)
-    hrvt2_beat, hrvt2_t = _find_sustained_crossing(0.50)
-
-    # Confidence heuristic: ratio of valid alpha1 windows
     valid_count = int(np.sum(~np.isnan(ddfa["alpha1_series"])))
     total = len(ddfa["alpha1_series"])
     confidence = valid_count / total if total > 0 else 0.0
 
     return {
         "hrvt1_time_sec": int(hrvt1_t) if hrvt1_t is not None else None,
-        "hrvt1_hr": _lookup(hrvt1_beat, hr_series),
-        "hrvt1_pace": _lookup(hrvt1_beat, pace_series),
+        "hrvt1_hr": _lookup_hrv_value(hrvt1_beat, hr_series),
+        "hrvt1_pace": _lookup_hrv_value(hrvt1_beat, pace_series),
         "hrvt2_time_sec": int(hrvt2_t) if hrvt2_t is not None else None,
-        "hrvt2_hr": _lookup(hrvt2_beat, hr_series),
-        "hrvt2_pace": _lookup(hrvt2_beat, pace_series),
+        "hrvt2_hr": _lookup_hrv_value(hrvt2_beat, hr_series),
+        "hrvt2_pace": _lookup_hrv_value(hrvt2_beat, pace_series),
         "alpha1_series": ddfa["alpha1_series"],
         "confidence": round(confidence, 3),
     }

@@ -270,35 +270,39 @@ def analyze_trends(reports: List[Dict[str, Any]]) -> TrendAnalysis:
     return analysis
 
 
+def _score_improving(metrics: list[tuple[str, int]]) -> int:
+    """Sum weights for metrics whose direction is 'improving'."""
+    return sum(weight for direction, weight in metrics if direction == "improving")
+
+
 def _classify_adaptation_direction(analysis: TrendAnalysis) -> str:
     """
     Classify overall adaptation direction based on metric trends.
 
     Returns: central, peripheral, thermal, or balanced
     """
-    scores = {"central": 0, "peripheral": 0, "thermal": 0}
-
-    # Central indicators: VT1, VT2, CP, EF
-    if analysis.vt1.direction == "improving":
-        scores["central"] += 2
-    if analysis.vt2.direction == "improving":
-        scores["central"] += 2
-    if analysis.cp.direction == "improving":
-        scores["central"] += 3
-    if analysis.ef.direction == "improving":
-        scores["central"] += 2
-
-    # Peripheral indicators: SmO2 slope, Occlusion Index, W'
-    if analysis.smo2_slope.direction == "improving":
-        scores["peripheral"] += 3
-    if analysis.occlusion_index.direction == "improving":
-        scores["peripheral"] += 3
-    if analysis.w_prime.direction == "improving":
-        scores["peripheral"] += 2
-
-    # Thermal indicators: HSI
-    if analysis.hsi.direction == "improving":
-        scores["thermal"] += 4
+    scores = {
+        "central": _score_improving(
+            [
+                (analysis.vt1.direction, 2),
+                (analysis.vt2.direction, 2),
+                (analysis.cp.direction, 3),
+                (analysis.ef.direction, 2),
+            ]
+        ),
+        "peripheral": _score_improving(
+            [
+                (analysis.smo2_slope.direction, 3),
+                (analysis.occlusion_index.direction, 3),
+                (analysis.w_prime.direction, 2),
+            ]
+        ),
+        "thermal": _score_improving(
+            [
+                (analysis.hsi.direction, 4),
+            ]
+        ),
+    }
 
     # Find dominant direction
     max_score = max(scores.values())

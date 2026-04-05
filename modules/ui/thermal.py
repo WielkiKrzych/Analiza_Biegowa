@@ -102,12 +102,14 @@ def _build_thermal_chart(df_plot) -> Optional[go.Figure]:
     return fig
 
 
-def render_thermal_tab(df_plot):
-    st.header("Wydajność Chłodzenia i Koszt Termiczny")
+def _find_column(df, aliases: list) -> Optional[str]:
+    for alias in aliases:
+        if alias in df.columns:
+            return alias
+    return None
 
-    # --- NOWA SEKCJA: KPI KOSZTU TERMICZNEGO ---
-    decay_res = calculate_thermal_decay(df_plot)
 
+def _render_thermal_kpi(decay_res: dict) -> None:
     col1, col2, col3 = st.columns(3)
     if decay_res["r_squared"] > 0:
         val_color = "inverse" if decay_res["decay_pct_per_c"] < -5 else "normal"
@@ -123,7 +125,6 @@ def render_thermal_tab(df_plot):
             f"{decay_res['r_squared']:.2f}",
             help="Jak dobrze linia trendu pasuje do danych. >0.5 oznacza wysoką wiarygodność.",
         )
-
         status = (
             "🔴 Wysoki"
             if decay_res["decay_pct_per_c"] < -6
@@ -133,9 +134,142 @@ def render_thermal_tab(df_plot):
     else:
         st.info("💡 " + decay_res["message"])
 
+
+def _render_core_temp_zones(df_plot) -> None:
+    temp_col_name = _find_column(
+        df_plot, ["core_temperature_smooth", "core_temperature", "core_temp"]
+    )
+    if not temp_col_name:
+        return
+
+    st.subheader("🌡️ Strefy Temperatury Głębokiej")
+    temp_series = df_plot[temp_col_name].dropna()
+    if len(temp_series) <= 60:
+        st.divider()
+        return
+
+    zones_time = calculate_core_temp_zones_time(temp_series)
+    total_sec = sum(zones_time.values())
+    if total_sec > 0:
+        zone_colors = {
+            "Optimal (<38.0°C)": "#2ecc71",
+            "Elevated (38.0-38.5°C)": "#f1c40f",
+            "High (38.5-39.0°C)": "#e67e22",
+            "Critical (39.0-39.5°C)": "#e74c3c",
+            "Dangerous (>39.5°C)": "#9b59b6",
+        }
+        zone_names = list(zones_time.keys())
+        zone_pcts = [zones_time[z] / total_sec * 100 for z in zone_names]
+        zone_cols = [zone_colors.get(z, "#808080") for z in zone_names]
+        fig_tz = go.Figure(
+            data=[
+                go.Bar(
+                    x=zone_pcts,
+                    y=zone_names,
+                    orientation="h",
+                    marker_color=zone_cols,
+                    text=[f"{p:.0f}%" for p in zone_pcts],
+                    textposition="auto",
+                )
+            ]
+        )
+        fig_tz.update_layout(
+            template="plotly_dark",
+            title="Czas w strefach temperatury głębokiej",
+            xaxis_title="% czasu",
+            height=250,
+            margin=dict(l=10, r=10, t=40, b=10),
+        )
+        st.plotly_chart(fig_tz, use_container_width=True)
+
+    drift = calculate_thermal_drift_rate(temp_series)
+    if drift.get("is_valid"):
+        col_dr1, col_dr2, col_dr3 = st.columns(3)
+        col_dr1.metric(
+            "Drift Rate",
+            f"{drift['drift_c_per_hour']:.2f} °C/h",
+            help="Szybkość wzrostu temperatury — marker hydratacji i sprawności termoregulacyjnej",
+        )
+        col_dr2.metric("R²", f"{drift['r_squared']:.2f}")
+        col_dr3.metric("Klasyfikacja", drift["classification"])
+
     st.divider()
 
-    # Use cached chart building
+
+def _render_efficiency_vs_temp(df_plot) -> None:
+    temp_col = _find_column(
+        df_plot,
+        [
+            "core_temperature_smooth",
+            "core_temperature",
+            "core_temp",
+            "temp",
+            "temperature",
+            "core temp",
+        ],
+    )
+    hr_col = _find_column(
+        df_plot,
+        [
+            "heartrate",
+            "heartrate_smooth",
+            "heart_rate",
+            "hr",
+            "heart rate",
+            "bpm",
+            "pulse",
+        ],
+    )
+    pwr_col = _find_column(df_plot, ["watts", "watts_smooth", "power", "pwr", "moc"])
+
+    if not (pwr_col and hr_col and temp_col):
+        st.error("Brak danych (Moc, HR lub Core Temp) do pełnej analizy.")
+        return
+
+    mask = (df_plot[pwr_col] > 10) & (df_plot[hr_col] > 60)
+    df_clean = df_plot[mask].copy()
+    df_clean["eff_raw"] = df_clean[pwr_col] / df_clean[hr_col]
+    df_clean = df_clean[df_clean["eff_raw"] < 6.0]
+
+    if df_clean.empty:
+        st.warning("Zbyt mało danych do analizy dryfu.")
+        return
+
+    fig_te = px.scatter(
+        df_clean,
+        x=temp_col,
+        y="eff_raw",
+        trendline="lowess",
+        trendline_options=dict(frac=0.3),
+        trendline_color_override="#FF4B4B",
+        template="plotly_dark",
+        opacity=0.3,
+        labels={temp_col: "Core Temperature", "eff_raw": "Efficiency Factor"},
+        hover_data={temp_col: ":.2f", "eff_raw": ":.2f"},
+    )
+    fig_te.update_traces(selector=dict(mode="markers"), marker=dict(size=5, color="#1f77b4"))
+    fig_te.update_layout(
+        title="Spadek Efektywności (W/HR) vs Temperatura",
+        xaxis=dict(title="Core Temperature [°C]", tickformat=".2f"),
+        yaxis=dict(title="Efficiency Factor [W/bpm]", tickformat=".2f"),
+        height=450,
+        margin=dict(l=10, r=10, t=40, b=10),
+        hovermode="x unified",
+    )
+    st.plotly_chart(fig_te, use_container_width=True)
+
+    st.info("""
+    ℹ️ **Interpretacja WKO5:**
+    Ten wykres pokazuje, ile Watów generujesz z jednego uderzenia serca wraz ze wzrostem temperatury. Jeśli linia opada stromo, Twój koszt termiczny jest wysoki.
+    """)
+
+
+def render_thermal_tab(df_plot):
+    st.header("Wydajność Chłodzenia i Koszt Termiczny")
+
+    _render_thermal_kpi(calculate_thermal_decay(df_plot))
+    st.divider()
+
     fig_t = _build_thermal_chart(df_plot)
     if fig_t is not None:
         st.plotly_chart(fig_t, use_container_width=True)
@@ -168,129 +302,7 @@ def render_thermal_tab(df_plot):
         3. **Nawadnianie:** Nie tylko woda – elektrolity (sód!) są kluczowe, by utrzymać objętość osocza i rzut serca.
         """)
 
-    # ===== CORE TEMP ZONES & DRIFT RATE =====
-    temp_col_name = None
-    for alias in ["core_temperature_smooth", "core_temperature", "core_temp"]:
-        if alias in df_plot.columns:
-            temp_col_name = alias
-            break
-
-    if temp_col_name:
-        st.subheader("🌡️ Strefy Temperatury Głębokiej")
-
-        temp_series = df_plot[temp_col_name].dropna()
-        if len(temp_series) > 60:
-            zones_time = calculate_core_temp_zones_time(temp_series)
-            total_sec = sum(zones_time.values())
-
-            if total_sec > 0:
-                zone_colors = {
-                    "Optimal (<38.0°C)": "#2ecc71",
-                    "Elevated (38.0-38.5°C)": "#f1c40f",
-                    "High (38.5-39.0°C)": "#e67e22",
-                    "Critical (39.0-39.5°C)": "#e74c3c",
-                    "Dangerous (>39.5°C)": "#9b59b6",
-                }
-                zone_names = list(zones_time.keys())
-                zone_pcts = [zones_time[z] / total_sec * 100 for z in zone_names]
-                zone_cols = [zone_colors.get(z, "#808080") for z in zone_names]
-
-                fig_tz = go.Figure(
-                    data=[
-                        go.Bar(
-                            x=zone_pcts,
-                            y=zone_names,
-                            orientation="h",
-                            marker_color=zone_cols,
-                            text=[f"{p:.0f}%" for p in zone_pcts],
-                            textposition="auto",
-                        )
-                    ]
-                )
-                fig_tz.update_layout(
-                    template="plotly_dark",
-                    title="Czas w strefach temperatury głębokiej",
-                    xaxis_title="% czasu",
-                    height=250,
-                    margin=dict(l=10, r=10, t=40, b=10),
-                )
-                st.plotly_chart(fig_tz, use_container_width=True)
-
-            # Thermal drift rate
-            drift = calculate_thermal_drift_rate(temp_series)
-            if drift.get("is_valid"):
-                col_dr1, col_dr2, col_dr3 = st.columns(3)
-                col_dr1.metric(
-                    "Drift Rate",
-                    f"{drift['drift_c_per_hour']:.2f} °C/h",
-                    help="Szybkość wzrostu temperatury — marker hydratacji i sprawności termoregulacyjnej",
-                )
-                col_dr2.metric("R²", f"{drift['r_squared']:.2f}")
-                col_dr3.metric("Klasyfikacja", drift["classification"])
-
-        st.divider()
+    _render_core_temp_zones(df_plot)
 
     st.header("Cardiac Drift vs Temperatura")
-
-    # Helper function to find column by aliases
-    def find_column(df, aliases):
-        for alias in aliases:
-            if alias in df.columns:
-                return alias
-        return None
-
-    temp_aliases = [
-        "core_temperature_smooth",
-        "core_temperature",
-        "core_temp",
-        "temp",
-        "temperature",
-        "core temp",
-    ]
-    hr_aliases = ["heartrate", "heartrate_smooth", "heart_rate", "hr", "heart rate", "bpm", "pulse"]
-    pwr_aliases = ["watts", "watts_smooth", "power", "pwr", "moc"]
-
-    temp_col = find_column(df_plot, temp_aliases)
-    hr_col = find_column(df_plot, hr_aliases)
-    pwr_col = find_column(df_plot, pwr_aliases)
-
-    if pwr_col and hr_col and temp_col:
-        mask = (df_plot[pwr_col] > 10) & (df_plot[hr_col] > 60)
-        df_clean = df_plot[mask].copy()
-        df_clean["eff_raw"] = df_clean[pwr_col] / df_clean[hr_col]
-        df_clean = df_clean[df_clean["eff_raw"] < 6.0]
-
-        if not df_clean.empty:
-            fig_te = px.scatter(
-                df_clean,
-                x=temp_col,
-                y="eff_raw",
-                trendline="lowess",
-                trendline_options=dict(frac=0.3),
-                trendline_color_override="#FF4B4B",
-                template="plotly_dark",
-                opacity=0.3,
-                labels={temp_col: "Core Temperature", "eff_raw": "Efficiency Factor"},
-                hover_data={temp_col: ":.2f", "eff_raw": ":.2f"},
-            )
-            fig_te.update_traces(
-                selector=dict(mode="markers"), marker=dict(size=5, color="#1f77b4")
-            )
-            fig_te.update_layout(
-                title="Spadek Efektywności (W/HR) vs Temperatura",
-                xaxis=dict(title="Core Temperature [°C]", tickformat=".2f"),
-                yaxis=dict(title="Efficiency Factor [W/bpm]", tickformat=".2f"),
-                height=450,
-                margin=dict(l=10, r=10, t=40, b=10),
-                hovermode="x unified",
-            )
-            st.plotly_chart(fig_te, use_container_width=True)
-
-            st.info("""
-            ℹ️ **Interpretacja WKO5:**
-            Ten wykres pokazuje, ile Watów generujesz z jednego uderzenia serca wraz ze wzrostem temperatury. Jeśli linia opada stromo, Twój koszt termiczny jest wysoki.
-            """)
-        else:
-            st.warning("Zbyt mało danych do analizy dryfu.")
-    else:
-        st.error("Brak danych (Moc, HR lub Core Temp) do pełnej analizy.")
+    _render_efficiency_vs_temp(df_plot)

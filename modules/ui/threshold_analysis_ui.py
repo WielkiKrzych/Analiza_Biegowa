@@ -8,6 +8,8 @@ Provides:
 - 4-week microcycle plan generator
 """
 
+from typing import Optional
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -31,43 +33,13 @@ def render_threshold_analysis_tab(
         st.error("Brak danych. Wgraj plik CSV z testem schodkowym.")
         return
 
-    # Check for required columns
-    has_ve = "tymeventilation" in target_df.columns
-    has_smo2 = "smo2" in target_df.columns
-    has_watts = "watts" in target_df.columns
-    has_pace = "pace" in target_df.columns or "pace_s" in target_df.columns
-    has_hr = "hr" in target_df.columns or "heartrate" in target_df.columns
-    hr_col = "hr" if "hr" in target_df.columns else "heartrate"
-    pace_col = (
-        "pace"
-        if "pace" in target_df.columns
-        else "pace_s"
-        if "pace_s" in target_df.columns
-        else None
-    )
-
-    # FIX: Allow pace-based analysis when no power meter available
-    if not has_watts and not has_pace:
-        st.error(
-            "Brak danych mocy (kolumna 'watts') ani tempa (kolumna 'pace'). Analiza niemożliwa."
-        )
+    col_info = _detect_columns(target_df)
+    if col_info is None:
         return
 
-    # Determine primary metric for analysis
-    if has_watts:
-        intensity_col = "watts"
-        intensity_label = "Moc (W)"
-    else:
-        intensity_col = pace_col
-        intensity_label = "Tempo (s/km)"
+    intensity_col, intensity_label = _resolve_intensity_col(col_info)
 
-    # Calculate time in minutes for easier UI
-    if "time" in target_df.columns:
-        total_duration_sec = int(target_df["time"].max() - target_df["time"].min())
-        total_duration_min = max(1, total_duration_sec // 60)  # Avoid division by zero
-    else:
-        total_duration_sec = len(target_df)
-        total_duration_min = max(1, total_duration_sec // 60)
+    total_duration_sec, total_duration_min = _compute_duration(target_df)
 
     # =================================================================
     # SECTION 1: Power Preview & Time Range Selection
@@ -77,116 +49,16 @@ def render_threshold_analysis_tab(
         "**Zaznacz zakres czasowy samego testu schodkowego** (bez rozgrzewki i schłodzenia)"
     )
 
-    # Create power preview chart
-    fig = go.Figure()
+    _render_preview_chart(target_df, col_info, intensity_col, intensity_label)
 
-    # Intensity trace (power or pace)
-    if "time" in target_df.columns:
-        x_data = target_df["time"] / 60  # Convert to minutes
-    else:
-        x_data = list(range(len(target_df)))
-        x_data = [x / 60 for x in x_data]
-
-    fig.add_trace(
-        go.Scatter(
-            x=x_data,
-            y=target_df[intensity_col],
-            name=intensity_label,
-            fill="tozeroy",
-            line=dict(color="#00d4aa", width=1),
-            fillcolor="rgba(0, 212, 170, 0.3)",
-        )
-    )
-
-    if has_hr and hr_col in target_df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=x_data,
-                y=target_df[hr_col],
-                name="HR",
-                yaxis="y2",
-                line=dict(color="#ff6b6b", width=1, dash="dot"),
-            )
-        )
-
-    fig.update_layout(
-        height=200,
-        margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(title="Czas (min)", showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
-        yaxis=dict(title=intensity_label, showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
-        yaxis2=dict(title="HR (bpm)", overlaying="y", side="right"),
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="top", y=1.15),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Time range selection
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        test_start_min = st.number_input(
-            "⏱️ Start testu (min)",
-            min_value=0,
-            max_value=total_duration_min - 1,
-            value=min(10, total_duration_min // 4),  # Default: 10 min or 1/4 of workout
-            step=1,
-            help="Minuta rozpoczęcia testu schodkowego (pomiń rozgrzewkę)",
-        )
-    with col2:
-        test_end_min = st.number_input(
-            "🏁 Koniec testu (min)",
-            min_value=test_start_min + 1,
-            max_value=total_duration_min,
-            value=min(test_start_min + 30, total_duration_min),  # Default: +30 min
-            step=1,
-            help="Minuta zakończenia testu schodkowego (przed schłodzeniem)",
-        )
-    with col3:
-        test_duration = test_end_min - test_start_min
-        st.metric("Czas testu", f"{test_duration} min")
-
-    # Convert to seconds for analysis
-    test_start_sec = test_start_min * 60
-    test_end_sec = test_end_min * 60
+    test_start_sec, test_end_sec = _render_time_range_selector(total_duration_min)
 
     st.divider()
 
     # =================================================================
     # SECTION 2: Test Configuration
     # =================================================================
-    st.subheader("⚙️ Konfiguracja Testu")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        step_duration = st.slider(
-            "Czas trwania stopnia (min)",
-            min_value=1,
-            max_value=5,
-            value=3,
-            step=1,
-            help="Standardowy ramp test to 3 minuty na stopień",
-        )
-        expected_steps = test_duration // step_duration
-        st.caption(f"Oczekiwana liczba stopni: ~{expected_steps}")
-
-    with col2:
-        available = []
-        if has_ve:
-            available.append("✅ Wentylacja (VE)")
-        else:
-            available.append("❌ Wentylacja (VE)")
-        if has_smo2:
-            available.append("✅ SmO2")
-        else:
-            available.append("❌ SmO2")
-        if has_hr:
-            available.append("✅ Tętno (HR)")
-        else:
-            available.append("❌ Tętno (HR)")
-        st.markdown("**Dostępne dane:**")
-        st.markdown(" | ".join(available))
+    _render_test_config(col_info, total_duration_min)
 
     st.divider()
 
@@ -195,9 +67,10 @@ def render_threshold_analysis_tab(
     # =================================================================
     st.subheader("📈 Detekcja Progów")
 
+    step_duration = st.session_state.get("step_duration", 3)
+
     if st.button("🔍 Analizuj Test", type="primary"):
         with st.spinner("Analizuję test schodkowy..."):
-            # Filter data to selected range
             if "time" in target_df.columns:
                 min_time = target_df["time"].min()
                 mask = (target_df["time"] >= min_time + test_start_sec) & (
@@ -218,79 +91,320 @@ def render_threshold_analysis_tab(
 
     # Display results
     if "threshold_result" in st.session_state:
-        result = st.session_state["threshold_result"]
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            vt1 = result.vt1_watts
-            if vt1:
-                st.metric("🟢 VT1 (Próg Tlenowy)", f"{vt1:.0f} W")
-                if result.vt1_hr:
-                    st.caption(f"@ {result.vt1_hr:.0f} bpm")
-            else:
-                st.metric("🟢 VT1", "—")
-
-        with col2:
-            vt2 = result.vt2_watts
-            if vt2:
-                st.metric("🔴 VT2 (Próg Beztlenowy)", f"{vt2:.0f} W")
-                if result.vt2_hr:
-                    st.caption(f"@ {result.vt2_hr:.0f} bpm")
-            else:
-                st.metric("🔴 VT2", "—")
-
-        with col3:
-            lt1 = result.smo2_1_watts  # SmO2 threshold 1
-            if lt1:
-                st.metric("🟡 LT1 (SmO2)", f"{lt1:.0f} W")
-            else:
-                st.metric("🟡 LT1", "—")
-
-        with col4:
-            lt2 = result.smo2_2_watts  # SmO2 threshold 2
-            if lt2:
-                st.metric("🟠 LT2 (SmO2)", f"{lt2:.0f} W")
-            else:
-                st.metric("🟠 LT2", "—")
-
-        if result.analysis_notes:
-            with st.expander("📋 Notatki z analizy"):
-                for note in result.analysis_notes:
-                    st.info(note)
-
-        detected_vt1 = result.vt1_watts or result.smo2_1_watts or int(ftp_input * 0.75)
-        detected_vt2 = result.vt2_watts or result.smo2_2_watts or ftp_input
-        st.session_state["detected_vt1"] = detected_vt1
-        st.session_state["detected_vt2"] = detected_vt2
+        _display_threshold_results(st.session_state["threshold_result"])
 
     st.divider()
 
     # =================================================================
     # SECTION 4: Training Zones
     # =================================================================
+    _render_training_zones(cp_input, ftp_input, max_hr_input)
+
+
+# ---------------------------------------------------------------------------
+# Column detection
+# ---------------------------------------------------------------------------
+
+
+class _ColumnInfo:
+    __slots__ = ("has_ve", "has_smo2", "has_watts", "has_pace", "has_hr", "hr_col", "pace_col")
+
+    def __init__(
+        self,
+        has_ve: bool,
+        has_smo2: bool,
+        has_watts: bool,
+        has_pace: bool,
+        has_hr: bool,
+        hr_col: Optional[str],
+        pace_col: Optional[str],
+    ):
+        self.has_ve = has_ve
+        self.has_smo2 = has_smo2
+        self.has_watts = has_watts
+        self.has_pace = has_pace
+        self.has_hr = has_hr
+        self.hr_col = hr_col
+        self.pace_col = pace_col
+
+
+def _detect_columns(target_df: pd.DataFrame) -> Optional[_ColumnInfo]:
+    has_ve = "tymeventilation" in target_df.columns
+    has_smo2 = "smo2" in target_df.columns
+    has_watts = "watts" in target_df.columns
+    has_pace = "pace" in target_df.columns or "pace_s" in target_df.columns
+    has_hr = "hr" in target_df.columns or "heartrate" in target_df.columns
+    hr_col = (
+        "hr"
+        if "hr" in target_df.columns
+        else "heartrate"
+        if "heartrate" in target_df.columns
+        else None
+    )
+    pace_col = (
+        "pace"
+        if "pace" in target_df.columns
+        else "pace_s"
+        if "pace_s" in target_df.columns
+        else None
+    )
+
+    if not has_watts and not has_pace:
+        st.error(
+            "Brak danych mocy (kolumna 'watts') ani tempa (kolumna 'pace'). Analiza niemożliwa."
+        )
+        return None
+
+    return _ColumnInfo(has_ve, has_smo2, has_watts, has_pace, has_hr, hr_col, pace_col)
+
+
+def _resolve_intensity_col(col_info: _ColumnInfo) -> tuple:
+    if col_info.has_watts:
+        return "watts", "Moc (W)"
+    return col_info.pace_col, "Tempo (s/km)"
+
+
+def _compute_duration(target_df: pd.DataFrame) -> tuple:
+    if "time" in target_df.columns:
+        total_sec = int(target_df["time"].max() - target_df["time"].min())
+    else:
+        total_sec = len(target_df)
+    return total_sec, max(1, total_sec // 60)
+
+
+# ---------------------------------------------------------------------------
+# Section 1: Preview chart
+# ---------------------------------------------------------------------------
+
+
+def _render_preview_chart(
+    target_df: pd.DataFrame,
+    col_info: _ColumnInfo,
+    intensity_col: str,
+    intensity_label: str,
+) -> None:
+    fig = go.Figure()
+
+    if "time" in target_df.columns:
+        x_data = target_df["time"] / 60
+    else:
+        x_data = [x / 60 for x in range(len(target_df))]
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_data,
+            y=target_df[intensity_col],
+            name=intensity_label,
+            fill="tozeroy",
+            line=dict(color="#00d4aa", width=1),
+            fillcolor="rgba(0, 212, 170, 0.3)",
+        )
+    )
+
+    if col_info.has_hr and col_info.hr_col in target_df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_data,
+                y=target_df[col_info.hr_col],
+                name="HR",
+                yaxis="y2",
+                line=dict(color="#ff6b6b", width=1, dash="dot"),
+            )
+        )
+
+    fig.update_layout(
+        height=200,
+        margin=dict(l=0, r=0, t=10, b=0),
+        xaxis=dict(title="Czas (min)", showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
+        yaxis=dict(title=intensity_label, showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
+        yaxis2=dict(title="HR (bpm)", overlaying="y", side="right"),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="top", y=1.15),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
+# Section 1: Time range selector
+# ---------------------------------------------------------------------------
+
+
+def _render_time_range_selector(total_duration_min: int) -> tuple:
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        test_start_min = st.number_input(
+            "⏱️ Start testu (min)",
+            min_value=0,
+            max_value=total_duration_min - 1,
+            value=min(10, total_duration_min // 4),
+            step=1,
+            help="Minuta rozpoczęcia testu schodkowego (pomiń rozgrzewkę)",
+        )
+    with col2:
+        test_end_min = st.number_input(
+            "🏁 Koniec testu (min)",
+            min_value=test_start_min + 1,
+            max_value=total_duration_min,
+            value=min(test_start_min + 30, total_duration_min),
+            step=1,
+            help="Minuta zakończenia testu schodkowego (przed schłodzeniem)",
+        )
+    with col3:
+        st.metric("Czas testu", f"{test_end_min - test_start_min} min")
+
+    return test_start_min * 60, test_end_min * 60
+
+
+# ---------------------------------------------------------------------------
+# Section 2: Test config
+# ---------------------------------------------------------------------------
+
+
+def _render_test_config(col_info: _ColumnInfo, total_duration_min: int) -> None:
+    st.subheader("⚙️ Konfiguracja Testu")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        step_duration = st.slider(
+            "Czas trwania stopnia (min)",
+            min_value=1,
+            max_value=5,
+            value=3,
+            step=1,
+            help="Standardowy ramp test to 3 minuty na stopień",
+        )
+        st.caption(f"Oczekiwana liczba stopni: ~{total_duration_min // step_duration}")
+
+    with col2:
+        _render_data_availability(col_info)
+
+
+def _render_data_availability(col_info: _ColumnInfo) -> None:
+    items = []
+    items.append("✅ Wentylacja (VE)" if col_info.has_ve else "❌ Wentylacja (VE)")
+    items.append("✅ SmO2" if col_info.has_smo2 else "❌ SmO2")
+    items.append("✅ Tętno (HR)" if col_info.has_hr else "❌ Tętno (HR)")
+    st.markdown("**Dostępne dane:**")
+    st.markdown(" | ".join(items))
+
+
+# ---------------------------------------------------------------------------
+# Section 3: Threshold detection
+# ---------------------------------------------------------------------------
+
+
+def _render_threshold_detection(
+    target_df: pd.DataFrame, test_start_sec: int, test_end_sec: int
+) -> None:
+    st.subheader("📈 Detekcja Progów")
+
+    if st.button("🔍 Analizuj Test", type="primary"):
+        _run_step_test_analysis(target_df, test_start_sec, test_end_sec)
+
+    if "threshold_result" in st.session_state:
+        _display_threshold_results(st.session_state["threshold_result"])
+
+
+def _run_step_test_analysis(
+    target_df: pd.DataFrame, test_start_sec: int, test_end_sec: int
+) -> None:
+    with st.spinner("Analizuję test schodkowy..."):
+        if "time" in target_df.columns:
+            min_time = target_df["time"].min()
+            mask = (target_df["time"] >= min_time + test_start_sec) & (
+                target_df["time"] <= min_time + test_end_sec
+            )
+        else:
+            mask = (target_df.index >= test_start_sec) & (target_df.index <= test_end_sec)
+
+        test_df = target_df[mask].copy()
+
+        if len(test_df) < 100:
+            st.error(
+                f"Za mało danych w wybranym zakresie ({len(test_df)} rekordów). Rozszerz zakres."
+            )
+        else:
+            result = analyze_step_test(df=test_df, step_duration_sec=step_duration * 60)
+            st.session_state["threshold_result"] = result
+
+
+def _display_threshold_results(result) -> None:
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        _render_threshold_metric(
+            col1, "🟢 VT1 (Próg Tlenowy)", result.vt1_watts, "W", result.vt1_hr
+        )
+    with col2:
+        _render_threshold_metric(
+            col2, "🔴 VT2 (Próg Beztlenowy)", result.vt2_watts, "W", result.vt2_hr
+        )
+    with col3:
+        _render_simple_metric(col3, "🟡 LT1 (SmO2)", result.smo2_1_watts, "W")
+    with col4:
+        _render_simple_metric(col4, "🟠 LT2 (SmO2)", result.smo2_2_watts, "W")
+
+    if result.analysis_notes:
+        with st.expander("📋 Notatki z analizy"):
+            for note in result.analysis_notes:
+                st.info(note)
+
+
+def _render_threshold_metric(col, label: str, value, unit: str, hr_value) -> None:
+    if value:
+        col.metric(label, f"{value:.0f} {unit}")
+        if hr_value:
+            st.caption(f"@ {hr_value:.0f} bpm")
+    else:
+        col.metric(label.replace(" (Próg Tlenowy)", "").replace(" (Próg Beztlenowy)", ""), "—")
+
+
+def _render_simple_metric(col, label: str, value, unit: str) -> None:
+    if value:
+        col.metric(label, f"{value:.0f} {unit}")
+    else:
+        col.metric(label, "—")
+
+
+# ---------------------------------------------------------------------------
+# Section 4: Training zones
+# ---------------------------------------------------------------------------
+
+
+def _render_training_zones(cp_input, ftp_input, max_hr_input) -> None:
     st.subheader("🎨 Strefy Treningowe")
 
     use_detected = st.checkbox(
         "Użyj wykrytych progów", value=True, disabled="threshold_result" not in st.session_state
     )
 
-    if use_detected and "detected_vt1" in st.session_state:
-        vt1_for_zones = int(st.session_state["detected_vt1"])
-        vt2_for_zones = int(st.session_state["detected_vt2"])
-    else:
-        col1, col2 = st.columns(2)
-        with col1:
-            vt1_for_zones = st.number_input(
-                "VT1 (W)", min_value=50, max_value=500, value=int(ftp_input * 0.75)
-            )
-        with col2:
-            vt2_for_zones = st.number_input("VT2 (W)", min_value=50, max_value=600, value=ftp_input)
+    vt1_for_zones, vt2_for_zones = _resolve_zone_thresholds(use_detected, ftp_input)
 
     zones = calculate_training_zones_from_thresholds(
         vt1_for_zones, vt2_for_zones, cp_input, max_hr_input
     )
 
+    zone_data = _build_zone_table(zones)
+    st.dataframe(pd.DataFrame(zone_data), use_container_width=True, hide_index=True)
+    _render_zones_bar(zones["power_zones"])
+
+
+def _resolve_zone_thresholds(use_detected: bool, ftp_input) -> tuple:
+    if use_detected and "detected_vt1" in st.session_state:
+        return int(st.session_state["detected_vt1"]), int(st.session_state["detected_vt2"])
+
+    col1, col2 = st.columns(2)
+    with col1:
+        vt1 = st.number_input("VT1 (W)", min_value=50, max_value=500, value=int(ftp_input * 0.75))
+    with col2:
+        vt2 = st.number_input("VT2 (W)", min_value=50, max_value=600, value=ftp_input)
+    return vt1, vt2
+
+
+def _build_zone_table(zones: dict) -> list:
     zone_data = []
     for zone_name, (low, high) in zones["power_zones"].items():
         hr_range = zones["hr_zones"].get(zone_name, (None, None))
@@ -302,14 +416,7 @@ def render_threshold_analysis_tab(
                 "Opis": zones["zone_descriptions"].get(zone_name, ""),
             }
         )
-
-    st.dataframe(pd.DataFrame(zone_data), use_container_width=True, hide_index=True)
-    _render_zones_bar(zones["power_zones"])
-
-
-# _analyze_step_test_internal and _calculate_zones removed - using shared modules:
-# - analyze_step_test from modules.calculations.thresholds
-# - calculate_training_zones_from_thresholds from modules.calculations.thresholds
+    return zone_data
 
 
 def _render_zones_bar(power_zones: dict):

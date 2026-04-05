@@ -333,6 +333,56 @@ def _detect_exhaustion_end(power_arr: np.ndarray) -> bool:
     return drop_pct > 0.30
 
 
+def _get_power_col(df: pd.DataFrame) -> Optional[str]:
+    """Return the power column name if present, else None."""
+    if "watts" in df.columns:
+        return "watts"
+    if "power" in df.columns:
+        return "power"
+    return None
+
+
+def _classify_ramp_from_power(df: pd.DataFrame) -> Optional[SessionType]:
+    """Check power data for ramp test patterns."""
+    power_col = _get_power_col(df)
+    if power_col is None:
+        return None
+    power = df[power_col].dropna()
+    if len(power) >= 300:
+        ramp_result = classify_ramp_test(power)
+        if ramp_result.is_ramp:
+            return ramp_result.suggested_type
+    return None
+
+
+def _classify_progressive_from_pace(df: pd.DataFrame) -> Optional[SessionType]:
+    """Check pace data for progressive run patterns."""
+    if "pace" not in df.columns:
+        return None
+    pace = df["pace"].dropna()
+    if len(pace) >= 600:
+        progressive_result = classify_progressive_run(pace)
+        if progressive_result.is_progressive:
+            return SessionType.RAMP_TEST
+    return None
+
+
+def _classify_training_default(df: pd.DataFrame) -> Optional[SessionType]:
+    """Check for valid power/pace data indicating a training session."""
+    power_col = _get_power_col(df)
+    if power_col is not None:
+        valid_power = df[power_col].dropna()
+        if len(valid_power) > 0 and valid_power.mean() > 0:
+            return SessionType.TRAINING
+
+    if "pace" in df.columns:
+        valid_pace = df["pace"].dropna()
+        if len(valid_pace) > 0 and valid_pace.mean() > 0:
+            return SessionType.TRAINING
+
+    return None
+
+
 def classify_session_type(df: pd.DataFrame, filename: str = "") -> SessionType:
     """Classify the session type based on filename and data patterns.
 
@@ -355,34 +405,19 @@ def classify_session_type(df: pd.DataFrame, filename: str = "") -> SessionType:
         return SessionType.RAMP_TEST
 
     # Rule 2: Deterministic ramp test classification
-    if "watts" in df.columns or "power" in df.columns:
-        power_col = "watts" if "watts" in df.columns else "power"
-        power = df[power_col].dropna()
-
-        if len(power) >= 300:  # At least 5 minutes
-            ramp_result = classify_ramp_test(power)
-            if ramp_result.is_ramp:
-                return ramp_result.suggested_type
+    ramp_type = _classify_ramp_from_power(df)
+    if ramp_type is not None:
+        return ramp_type
 
     # Rule 3: Check for progressive run (pace-based test)
-    if "pace" in df.columns:
-        pace = df["pace"].dropna()
-        if len(pace) >= 600:  # At least 10 minutes
-            progressive_result = classify_progressive_run(pace)
-            if progressive_result.is_progressive:
-                return SessionType.RAMP_TEST  # Reuse for progressive runs
+    progressive_type = _classify_progressive_from_pace(df)
+    if progressive_type is not None:
+        return progressive_type
 
     # Rule 4: Default to Training if valid power/pace data exists
-    if "watts" in df.columns or "power" in df.columns:
-        power_col = "watts" if "watts" in df.columns else "power"
-        valid_power = df[power_col].dropna()
-        if len(valid_power) > 0 and valid_power.mean() > 0:
-            return SessionType.TRAINING
-
-    if "pace" in df.columns:
-        valid_pace = df["pace"].dropna()
-        if len(valid_pace) > 0 and valid_pace.mean() > 0:
-            return SessionType.TRAINING
+    training_type = _classify_training_default(df)
+    if training_type is not None:
+        return training_type
 
     return SessionType.UNKNOWN
 

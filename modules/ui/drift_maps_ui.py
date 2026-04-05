@@ -26,6 +26,102 @@ def _format_min_to_mmss(decimal_min: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
+def _render_scatter_plots(df_plot: pd.DataFrame, has_smo2: bool) -> None:
+    """Render the pace-HR and pace-SmO2 scatter plot columns."""
+    st.subheader("🔵 Scatter Plots")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig_pace_hr = scatter_pace_hr(df_plot, title="Tempo vs HR")
+        if fig_pace_hr:
+            st.plotly_chart(fig_pace_hr, use_container_width=True)
+        else:
+            st.info("Za mało danych do wygenerowania wykresu Tempo vs HR.")
+
+    with col2:
+        if has_smo2:
+            fig_pace_smo2 = scatter_pace_smo2(df_plot, title="Tempo vs SmO₂")
+            if fig_pace_smo2:
+                st.plotly_chart(fig_pace_smo2, use_container_width=True)
+            else:
+                st.info("Za mało danych SmO₂ do wygenerowania wykresu.")
+        else:
+            st.info("📉 Brak danych SmO₂ - wykres niedostępny.")
+
+
+def _render_manual_pace_drift(df_plot: pd.DataFrame) -> None:
+    """Render manual pace input fallback when no auto-detected segments exist."""
+    st.info("Nie wykryto segmentów stałego tempa (min. 2 minuty, ±10%).")
+
+    pace_col = next(
+        (col for col in ["pace", "pace_sec_per_km", "tempo"] if col in df_plot.columns),
+        None,
+    )
+
+    st.markdown("**Ręczny wybór tempa:**")
+    col_manual1, col_manual2 = st.columns(2)
+    with col_manual1:
+        default_pace = int(df_plot[pace_col].median()) if pace_col else 300
+        pace_target_sec = st.number_input(
+            "Docelowe tempo [s/km]",
+            min_value=120,
+            max_value=900,
+            value=default_pace,
+            step=10,
+            key="drift_pace_target",
+        )
+    with col_manual2:
+        tolerance = st.slider(
+            "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance"
+        )
+
+    fig_drift, drift_metrics = trend_at_constant_pace(
+        df_plot, pace_target_sec, tolerance_pct=tolerance
+    )
+
+    if fig_drift:
+        st.plotly_chart(fig_drift, use_container_width=True)
+        _display_drift_metrics(drift_metrics)
+    else:
+        pace_min = pace_target_sec / 60.0
+        st.warning(f"Brak danych w zakresie {pace_min:.2f} min/km ±{tolerance}%.")
+
+
+def _render_segment_drift(df_plot: pd.DataFrame, segments: list) -> None:
+    """Render segment selector and drift analysis for auto-detected segments."""
+    segment_options = [
+        f"{i + 1}. {(seg[2] / 60.0):.2f} min/km ({_format_min_to_mmss((seg[1] - seg[0]) / 60)})"
+        for i, seg in enumerate(segments)
+    ]
+
+    selected_idx = st.selectbox(
+        "Wybierz segment stałego tempa:",
+        range(len(segments)),
+        format_func=lambda x: segment_options[x],
+        key="segment_selector",
+    )
+
+    selected_segment = segments[selected_idx]
+    pace_target_sec = selected_segment[2]
+
+    col_opts1, _col_opts2 = st.columns(2)
+    with col_opts1:
+        tolerance = st.slider(
+            "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance_seg"
+        )
+
+    fig_drift, drift_metrics = trend_at_constant_pace(
+        df_plot, pace_target_sec, tolerance_pct=tolerance
+    )
+
+    if fig_drift:
+        st.plotly_chart(fig_drift, use_container_width=True)
+        _display_drift_metrics(drift_metrics)
+    else:
+        st.warning("Nie można obliczyć dryfu dla wybranego segmentu.")
+
+
 def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
     """Render the Drift Maps tab in Performance section.
 
@@ -54,105 +150,19 @@ def render_drift_maps_tab(df_plot: pd.DataFrame) -> None:
         return
 
     # ===== SCATTER PLOTS =====
-    st.subheader("🔵 Scatter Plots")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig_pace_hr = scatter_pace_hr(df_plot, title="Tempo vs HR")
-        if fig_pace_hr:
-            st.plotly_chart(fig_pace_hr, use_container_width=True)
-        else:
-            st.info("Za mało danych do wygenerowania wykresu Tempo vs HR.")
-
-    with col2:
-        if has_smo2:
-            fig_pace_smo2 = scatter_pace_smo2(df_plot, title="Tempo vs SmO₂")
-            if fig_pace_smo2:
-                st.plotly_chart(fig_pace_smo2, use_container_width=True)
-            else:
-                st.info("Za mało danych SmO₂ do wygenerowania wykresu.")
-        else:
-            st.info("📉 Brak danych SmO₂ - wykres niedostępny.")
+    _render_scatter_plots(df_plot, has_smo2)
 
     st.divider()
 
     # ===== CONSTANT PACE SEGMENT ANALYSIS =====
     st.subheader("📏 Analiza Dryfu przy Stałym Temie")
 
-    # Detect segments
     segments = detect_constant_pace_segments(df_plot, tolerance_pct=10, min_duration_sec=120)
 
-    # Get pace column for manual input
-    pace_col = None
-    for col in ["pace", "pace_sec_per_km", "tempo"]:
-        if col in df_plot.columns:
-            pace_col = col
-            break
-
     if not segments:
-        st.info("Nie wykryto segmentów stałego tempa (min. 2 minuty, ±10%).")
-
-        # Manual pace input fallback
-        st.markdown("**Ręczny wybór tempa:**")
-        col_manual1, col_manual2 = st.columns(2)
-        with col_manual1:
-            default_pace = int(df_plot[pace_col].median()) if pace_col else 300
-            pace_target_sec = st.number_input(
-                "Docelowe tempo [s/km]",
-                min_value=120,
-                max_value=900,
-                value=default_pace,
-                step=10,
-                key="drift_pace_target",
-            )
-        with col_manual2:
-            tolerance = st.slider(
-                "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance"
-            )
-
-        fig_drift, drift_metrics = trend_at_constant_pace(
-            df_plot, pace_target_sec, tolerance_pct=tolerance
-        )
-
-        if fig_drift:
-            st.plotly_chart(fig_drift, use_container_width=True)
-            _display_drift_metrics(drift_metrics)
-        else:
-            pace_min = pace_target_sec / 60.0
-            st.warning(f"Brak danych w zakresie {pace_min:.2f} min/km ±{tolerance}%.")
+        _render_manual_pace_drift(df_plot)
     else:
-        # Segment selector
-        segment_options = [
-            f"{i + 1}. {(seg[2] / 60.0):.2f} min/km ({_format_min_to_mmss((seg[1] - seg[0]) / 60)})"
-            for i, seg in enumerate(segments)
-        ]
-
-        selected_idx = st.selectbox(
-            "Wybierz segment stałego tempa:",
-            range(len(segments)),
-            format_func=lambda x: segment_options[x],
-            key="segment_selector",
-        )
-
-        selected_segment = segments[selected_idx]
-        pace_target_sec = selected_segment[2]
-
-        col_opts1, col_opts2 = st.columns(2)
-        with col_opts1:
-            tolerance = st.slider(
-                "Tolerancja [%]", min_value=5, max_value=20, value=10, key="drift_tolerance_seg"
-            )
-
-        fig_drift, drift_metrics = trend_at_constant_pace(
-            df_plot, pace_target_sec, tolerance_pct=tolerance
-        )
-
-        if fig_drift:
-            st.plotly_chart(fig_drift, use_container_width=True)
-            _display_drift_metrics(drift_metrics)
-        else:
-            st.warning("Nie można obliczyć dryfu dla wybranego segmentu.")
+        _render_segment_drift(df_plot, segments)
 
     st.divider()
 

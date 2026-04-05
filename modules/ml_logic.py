@@ -279,7 +279,7 @@ if MLX_AVAILABLE:
         X_all = mx.array(X_all_np)
         Y_all = mx.array(Y_all_np)
 
-        for i in range(100):
+        for _i in range(100):
             loss, grads = loss_and_grad_fn(model, X_all, Y_all)
             optimizer.update(model, grads)
             mx.eval(model.parameters(), optimizer.state)

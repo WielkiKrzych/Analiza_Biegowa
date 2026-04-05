@@ -168,203 +168,209 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
     return fig
 
 
-def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weight):
-    """Renderowanie panelu z metrykami pod wykresem przebiegu treningu."""
+def _col_mean(df_plot: pd.DataFrame, col: str) -> float:
+    return df_plot[col].mean() if col in df_plot.columns else 0
 
-    # Oblicz metryki z danych
-    duration_min = len(df_plot) / 60 if len(df_plot) > 0 else 0
 
-    # Distance (from 'distance' column — cumulative meters)
-    total_distance_km = 0.0
-    if "distance" in df_plot.columns:
-        dist_vals = df_plot["distance"].dropna()
-        if len(dist_vals) > 0:
-            total_distance_km = (
-                dist_vals.iloc[-1] / 1000.0 if dist_vals.max() > 100 else dist_vals.iloc[-1]
-            )
+def _col_min(df_plot: pd.DataFrame, col: str) -> float:
+    return df_plot[col].min() if col in df_plot.columns else 0
 
-    # Pace (convert via speed domain for correct averaging)
-    avg_pace_str = "--"
-    if "pace" in df_plot.columns:
-        pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
-        if len(pace_valid) > 0:
-            speed_vals = 1000.0 / pace_valid
-            avg_speed = speed_vals.mean()
-            if avg_speed > 0:
-                avg_pace_s = 1000.0 / avg_speed
-                avg_pace_str = f"{int(avg_pace_s // 60)}:{int(avg_pace_s % 60):02d} /km"
 
-    # Power
-    avg_power = df_plot["watts"].mean() if "watts" in df_plot.columns else 0
+def _col_max(df_plot: pd.DataFrame, col: str) -> float:
+    return df_plot[col].max() if col in df_plot.columns else 0
+
+
+def _compute_distance_km(df_plot: pd.DataFrame) -> float:
+    if "distance" not in df_plot.columns:
+        return 0.0
+    dist_vals = df_plot["distance"].dropna()
+    if len(dist_vals) == 0:
+        return 0.0
+    return dist_vals.iloc[-1] / 1000.0 if dist_vals.max() > 100 else dist_vals.iloc[-1]
+
+
+def _compute_avg_pace_str(df_plot: pd.DataFrame) -> str:
+    if "pace" not in df_plot.columns:
+        return "--"
+    pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
+    if len(pace_valid) == 0:
+        return "--"
+    avg_speed = (1000.0 / pace_valid).mean()
+    if avg_speed <= 0:
+        return "--"
+    avg_pace_s = 1000.0 / avg_speed
+    return f"{int(avg_pace_s // 60)}:{int(avg_pace_s % 60):02d} /km"
+
+
+def _fmt(value: float, fmt_str: str) -> str:
+    return fmt_str.format(value) if value else "--"
+
+
+def _render_core_metrics(
+    df_plot: pd.DataFrame,
+    metrics: dict,
+    duration_min: float,
+) -> None:
+    total_distance_km = _compute_distance_km(df_plot)
+    avg_pace_str = _compute_avg_pace_str(df_plot)
+    avg_power = _col_mean(df_plot, "watts")
     np_power = _calculate_np(df_plot["watts"]) if "watts" in df_plot.columns else 0
     work_kj = df_plot["watts"].sum() / 1000.0 if "watts" in df_plot.columns else 0
 
-    # HR
-    hr_col = (
-        "heartrate" if "heartrate" in df_plot.columns else "hr" if "hr" in df_plot.columns else None
-    )
+    hr_col = _resolve_hr_col(df_plot)
     avg_hr = df_plot[hr_col].mean() if hr_col else 0
-    df_plot[hr_col].min() if hr_col else 0
     max_hr = df_plot[hr_col].max() if hr_col else 0
 
-    # SmO2
-    avg_smo2 = df_plot["smo2"].mean() if "smo2" in df_plot.columns else 0
-    min_smo2 = df_plot["smo2"].min() if "smo2" in df_plot.columns else 0
-    df_plot["smo2"].max() if "smo2" in df_plot.columns else 0
+    avg_smo2 = _col_mean(df_plot, "smo2")
+    min_smo2 = _col_min(df_plot, "smo2")
+    avg_core = _col_mean(df_plot, "core_temperature")
+    max_core = _col_max(df_plot, "core_temperature")
 
-    # VE
-    avg_ve = df_plot["tymeventilation"].mean() if "tymeventilation" in df_plot.columns else 0
-    min_ve = df_plot["tymeventilation"].min() if "tymeventilation" in df_plot.columns else 0
-    max_ve = df_plot["tymeventilation"].max() if "tymeventilation" in df_plot.columns else 0
-
-    # BR
-    avg_br = df_plot["tymebreathrate"].mean() if "tymebreathrate" in df_plot.columns else 0
-    min_br = df_plot["tymebreathrate"].min() if "tymebreathrate" in df_plot.columns else 0
-    max_br = df_plot["tymebreathrate"].max() if "tymebreathrate" in df_plot.columns else 0
-
-    # Core temperature
-    avg_core = df_plot["core_temperature"].mean() if "core_temperature" in df_plot.columns else 0
-    max_core = df_plot["core_temperature"].max() if "core_temperature" in df_plot.columns else 0
-
-    # Estymacje
     est_vo2max = metrics.get("vo2_max_est", 0) if metrics else 0
     est_vlamax = metrics.get("vlamax_est", 0) if metrics else 0
-
-    # Estymacja CP/W' z danych
     est_cp, est_w_prime = _estimate_cp_wprime(df_plot)
 
-    # Wyświetlanie w 4 kolumnach
     st.markdown("### 📈 Metryki Treningowe")
 
-    # Wiersz 1: Czas, Dystans, Tempo, Praca/Moc
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("⏱️ Czas", f"{duration_min:.1f} min")
     c2.metric("📏 Dystans", f"{total_distance_km:.2f} km" if total_distance_km > 0 else "--")
     c3.metric("🏃 AVG Tempo", avg_pace_str)
-    c4.metric("⚡ AVG Power", f"{avg_power:.0f} W" if avg_power else "--")
+    c4.metric("⚡ AVG Power", _fmt(avg_power, "{:.0f} W"))
 
-    # Wiersz 2: HR + NP + praca
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("❤️ AVG HR", f"{avg_hr:.0f} bpm" if avg_hr else "--")
-    c2.metric("❤️ MAX HR", f"{max_hr:.0f} bpm" if max_hr else "--")
-    c3.metric("📊 NP", f"{np_power:.0f} W" if np_power else "--")
-    c4.metric("🔋 Praca", f"{work_kj:.0f} kJ" if work_kj else "--")
+    c1.metric("❤️ AVG HR", _fmt(avg_hr, "{:.0f} bpm"))
+    c2.metric("❤️ MAX HR", _fmt(max_hr, "{:.0f} bpm"))
+    c3.metric("📊 NP", _fmt(np_power, "{:.0f} W"))
+    c4.metric("🔋 Praca", _fmt(work_kj, "{:.0f} kJ"))
 
-    # Wiersz 3: SmO2 + Core Temp
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🩸 AVG SmO2", f"{avg_smo2:.1f}%" if avg_smo2 else "--")
-    c2.metric("🩸 MIN SmO2", f"{min_smo2:.1f}%" if min_smo2 else "--")
-    c3.metric("🌡️ AVG Core", f"{avg_core:.1f} °C" if avg_core else "--")
-    c4.metric("🌡️ MAX Core", f"{max_core:.1f} °C" if max_core else "--")
+    c1.metric("🩸 AVG SmO2", _fmt(avg_smo2, "{:.1f}%"))
+    c2.metric("🩸 MIN SmO2", _fmt(min_smo2, "{:.1f}%"))
+    c3.metric("🌡️ AVG Core", _fmt(avg_core, "{:.1f} °C"))
+    c4.metric("🌡️ MAX Core", _fmt(max_core, "{:.1f} °C"))
 
-    # Wiersz 4: VE (only if present)
+    avg_ve = _col_mean(df_plot, "tymeventilation")
     if avg_ve:
+        min_ve = _col_min(df_plot, "tymeventilation")
+        max_ve = _col_max(df_plot, "tymeventilation")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("🫁 AVG VE", f"{avg_ve:.1f} L/min")
         c2.metric("🫁 MIN VE", f"{min_ve:.1f} L/min")
         c3.metric("🫁 MAX VE", f"{max_ve:.1f} L/min")
         c4.empty()
 
-    # Wiersz 5: BR (only if present)
+    avg_br = _col_mean(df_plot, "tymebreathrate")
     if avg_br:
+        min_br = _col_min(df_plot, "tymebreathrate")
+        max_br = _col_max(df_plot, "tymebreathrate")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("💨 AVG BR", f"{avg_br:.0f} /min")
         c2.metric("💨 MIN BR", f"{min_br:.0f} /min")
         c3.metric("💨 MAX BR", f"{max_br:.0f} /min")
         c4.empty()
 
-    # Wiersz 6: Estymacje
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🎯 Est. VO2max", f"{est_vo2max:.1f} ml/kg/min" if est_vo2max else "--")
-    c2.metric("🧬 Est. VLamax", f"{est_vlamax:.2f} mmol/L/s" if est_vlamax else "--")
-    c3.metric("⚡ Est. CP", f"{est_cp:.0f} W" if est_cp else "--")
-    c4.metric("🔋 Est. W'", f"{est_w_prime:.0f} J" if est_w_prime else "--")
+    c1.metric("🎯 Est. VO2max", _fmt(est_vo2max, "{:.1f} ml/kg/min"))
+    c2.metric("🧬 Est. VLamax", _fmt(est_vlamax, "{:.2f} mmol/L/s"))
+    c3.metric("⚡ Est. CP", _fmt(est_cp, "{:.0f} W"))
+    c4.metric("🔋 Est. W'", _fmt(est_w_prime, "{:.0f} J"))
 
-    # Wiersz 7: Running Dynamics (FIT)
-    has_dynamics = any(
-        col in df_plot.columns
-        for col in ["stance_time", "stance_time_balance", "vertical_ratio", "step_length"]
+
+def _resolve_hr_col(df_plot: pd.DataFrame) -> Optional[str]:
+    if "heartrate" in df_plot.columns:
+        return "heartrate"
+    if "hr" in df_plot.columns:
+        return "hr"
+    return None
+
+
+def _render_optional_metric(
+    col, df_plot: pd.DataFrame, col_name: str, label: str, unit: str
+) -> None:
+    if col_name not in df_plot.columns:
+        col.empty()
+        return
+    data = df_plot[col_name].dropna()
+    if len(data) > 0:
+        col.metric(label, f"{data.mean():.1f} {unit}")
+    else:
+        col.empty()
+
+
+def _render_running_dynamics(df_plot: pd.DataFrame) -> None:
+    dynamics_cols = ["stance_time", "stance_time_balance", "vertical_ratio", "step_length"]
+    if not any(c in df_plot.columns for c in dynamics_cols):
+        return
+
+    st.markdown("### 🦶 Running Dynamics (Garmin FIT)")
+    c1, c2, c3, c4 = st.columns(4)
+
+    gct_col = (
+        "stance_time"
+        if "stance_time" in df_plot.columns
+        else "gct"
+        if "gct" in df_plot.columns
+        else None
     )
-    if has_dynamics:
-        st.markdown("### 🦶 Running Dynamics (Garmin FIT)")
-        c1, c2, c3, c4 = st.columns(4)
+    if gct_col:
+        c1.metric("⏱️ AVG GCT", f"{df_plot[gct_col].mean():.0f} ms")
+    else:
+        c1.empty()
 
-        if "stance_time" in df_plot.columns:
-            gct_mean = df_plot["stance_time"].mean()
-            c1.metric("⏱️ AVG GCT", f"{gct_mean:.0f} ms")
-        elif "gct" in df_plot.columns:
-            gct_mean = df_plot["gct"].mean()
-            c1.metric("⏱️ AVG GCT", f"{gct_mean:.0f} ms")
-        else:
-            c1.empty()
+    if "stance_time_balance" in df_plot.columns:
+        bal = df_plot["stance_time_balance"].mean()
+        imbalance = abs(bal - 50.0)
+        c2.metric(
+            "⚖️ Balans L/P",
+            f"{bal:.1f}%",
+            delta=f"{imbalance:.1f}% asymetrii",
+            delta_color="inverse" if imbalance > 2.0 else "off",
+        )
+    else:
+        c2.empty()
 
-        if "stance_time_balance" in df_plot.columns:
-            bal = df_plot["stance_time_balance"].mean()
-            imbalance = abs(bal - 50.0)
+    if "vertical_ratio" in df_plot.columns:
+        c3.metric("📐 Vertical Ratio", f"{df_plot['vertical_ratio'].mean():.1f}%")
+    else:
+        c3.empty()
+
+    if "step_length" in df_plot.columns:
+        c4.metric("📏 Długość kroku", f"{df_plot['step_length'].mean():.3f} m")
+    else:
+        c4.empty()
+
+
+def _render_extra_fit_data(df_plot: pd.DataFrame) -> None:
+    extras_cols = ["hrv", "temperature", "o2hb", "hhb"]
+    if not any(c in df_plot.columns for c in extras_cols):
+        return
+
+    st.markdown("### 🔬 Dane Dodatkowe (FIT)")
+    c1, c2, c3, c4 = st.columns(4)
+
+    _render_optional_metric(c1, df_plot, "hrv", "💓 AVG HRV (RMSSD)", "ms")
+    _render_optional_metric(c3, df_plot, "o2hb", "🔴 AVG O2Hb", "a.u.")
+    _render_optional_metric(c4, df_plot, "hhb", "🔵 AVG HHb", "a.u.")
+
+    if "temperature" in df_plot.columns:
+        temp_data = df_plot["temperature"].dropna()
+        if len(temp_data) > 0:
             c2.metric(
-                "⚖️ Balans L/P",
-                f"{bal:.1f}%",
-                delta=f"{imbalance:.1f}% asymetrii",
-                delta_color="inverse" if imbalance > 2.0 else "off",
+                "🌡️ AVG Temp",
+                f"{temp_data.mean():.1f} °C",
+                delta=f"max {temp_data.max():.0f} °C",
+                delta_color="off",
             )
         else:
             c2.empty()
+    else:
+        c2.empty()
 
-        if "vertical_ratio" in df_plot.columns:
-            vr = df_plot["vertical_ratio"].mean()
-            c3.metric("📐 Vertical Ratio", f"{vr:.1f}%")
-        else:
-            c3.empty()
 
-        if "step_length" in df_plot.columns:
-            sl = df_plot["step_length"].mean()
-            c4.metric("📏 Długość kroku", f"{sl:.3f} m")
-        else:
-            c4.empty()
+def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weight):
+    duration_min = len(df_plot) / 60 if len(df_plot) > 0 else 0
 
-    # Wiersz 8: HRV, Temperature, O2Hb/HHb
-    has_extras = any(col in df_plot.columns for col in ["hrv", "temperature", "o2hb", "hhb"])
-    if has_extras:
-        st.markdown("### 🔬 Dane Dodatkowe (FIT)")
-        c1, c2, c3, c4 = st.columns(4)
-
-        if "hrv" in df_plot.columns:
-            hrv_data = df_plot["hrv"].dropna()
-            if len(hrv_data) > 0:
-                c1.metric("💓 AVG HRV (RMSSD)", f"{hrv_data.mean():.1f} ms")
-            else:
-                c1.empty()
-        else:
-            c1.empty()
-
-        if "temperature" in df_plot.columns:
-            temp_data = df_plot["temperature"].dropna()
-            if len(temp_data) > 0:
-                c2.metric(
-                    "🌡️ AVG Temp",
-                    f"{temp_data.mean():.1f} °C",
-                    delta=f"max {temp_data.max():.0f} °C",
-                    delta_color="off",
-                )
-            else:
-                c2.empty()
-        else:
-            c2.empty()
-
-        if "o2hb" in df_plot.columns:
-            o2hb_data = df_plot["o2hb"].dropna()
-            if len(o2hb_data) > 0:
-                c3.metric("🔴 AVG O2Hb", f"{o2hb_data.mean():.1f} a.u.")
-            else:
-                c3.empty()
-        else:
-            c3.empty()
-
-        if "hhb" in df_plot.columns:
-            hhb_data = df_plot["hhb"].dropna()
-            if len(hhb_data) > 0:
-                c4.metric("🔵 AVG HHb", f"{hhb_data.mean():.1f} a.u.")
-            else:
-                c4.empty()
-        else:
-            c4.empty()
+    _render_core_metrics(df_plot, metrics, duration_min)
+    _render_running_dynamics(df_plot)
+    _render_extra_fit_data(df_plot)

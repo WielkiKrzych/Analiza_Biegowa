@@ -29,6 +29,357 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 
+def _make_table_style(
+    header_color: str = "#1f77b4",
+    row_colors: Optional[list] = None,
+) -> TableStyle:
+    """Create a common table style with header and alternating row backgrounds."""
+    commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(header_color)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+    ]
+    if row_colors:
+        for idx, color in row_colors:
+            commands.append(("BACKGROUND", (0, idx), (-1, idx), colors.HexColor(color)))
+    return TableStyle(commands)
+
+
+def _build_title_page(
+    styles: Any,
+    cp_input: int,
+    w_prime_input: int,
+    rider_weight: float,
+    uploaded_file_name: str,
+) -> list:
+    """Build the title page elements."""
+    title_style = ParagraphStyle(
+        "CustomTitle",
+        parent=styles["Heading1"],
+        fontName=FONT_FAMILY_BOLD,
+        fontSize=24,
+        textColor=colors.HexColor("#1f77b4"),
+        spaceAfter=30,
+        alignment=1,
+    )
+    normal_style = ParagraphStyle(name="normal", parent=styles["Normal"], fontName=FONT_FAMILY)
+
+    story: list = []
+    story.append(Spacer(1, 3 * cm))
+    story.append(Paragraph("📊 Podsumowanie Treningu", title_style))
+    story.append(Spacer(1, 1 * cm))
+    story.append(Paragraph(f"Plik: {uploaded_file_name}", normal_style))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(f"CP: {cp_input} W | W': {w_prime_input} J", normal_style))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(f"Waga: {rider_weight} kg", normal_style))
+    story.append(PageBreak())
+    return story
+
+
+def _build_training_overview_page(
+    df_plot: pd.DataFrame,
+    metrics: Dict[str, Any],
+    section_style: ParagraphStyle,
+) -> list:
+    """Build the training overview page (Page 1)."""
+    story: list = []
+    story.append(Paragraph("1️⃣ Przebieg Treningu", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    if "watts" in df_plot.columns:
+        chart_bytes = _create_training_chart_matplotlib(df_plot)
+        if chart_bytes:
+            story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
+            story.append(Spacer(1, 0.5 * cm))
+
+    if metrics:
+        metrics_data = [
+            ["Parametr", "Wartość"],
+            ["Średnia moc", f"{metrics.get('avg_power', 0):.0f} W"],
+            ["Maksymalna moc", f"{metrics.get('max_power', 0):.0f} W"],
+            ["Średnie HR", f"{metrics.get('avg_hr', 0):.0f} bpm"],
+            ["Maksymalne HR", f"{metrics.get('max_hr', 0):.0f} bpm"],
+            ["Średnie VE", f"{metrics.get('avg_ve', 0):.1f} L/min"],
+            ["Średnie BR", f"{metrics.get('avg_br', 0):.0f} /min"],
+        ]
+        tbl = Table(metrics_data, colWidths=[8 * cm, 8 * cm])
+        tbl.setStyle(_make_table_style("#1f77b4"))
+        story.append(tbl)
+
+    story.append(PageBreak())
+    return story
+
+
+def _build_ve_br_page(
+    df_plot: pd.DataFrame,
+    section_style: ParagraphStyle,
+    value_style: ParagraphStyle,
+) -> list:
+    """Build the VE/BR ventilation page (Page 2)."""
+    story: list = []
+    story.append(Paragraph("2️⃣ Wentylacja (VE) i Oddechy (BR)", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    if "tymeventilation" not in df_plot.columns:
+        story.append(PageBreak())
+        return story
+
+    chart_bytes = _create_ve_br_chart_matplotlib(df_plot)
+    if chart_bytes:
+        story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
+        story.append(Spacer(1, 0.5 * cm))
+
+    ve_min = df_plot["tymeventilation"].min()
+    ve_max = df_plot["tymeventilation"].max()
+    ve_mean = df_plot["tymeventilation"].mean()
+    story.append(Paragraph("<b>🫁 Statystyki VE (Wentylacja):</b>", value_style))
+    story.append(
+        Paragraph(
+            f"Min: {ve_min:.1f} L/min | Max: {ve_max:.1f} L/min | Śr: {ve_mean:.1f} L/min",
+            value_style,
+        )
+    )
+    story.append(Spacer(1, 0.3 * cm))
+
+    if "tymebreathrate" in df_plot.columns:
+        br_min = df_plot["tymebreathrate"].min()
+        br_max = df_plot["tymebreathrate"].max()
+        br_mean = df_plot["tymebreathrate"].mean()
+        story.append(Paragraph("<b>🌬️ Statystyki BR (Oddechy):</b>", value_style))
+        story.append(
+            Paragraph(
+                f"Min: {br_min:.0f} /min | Max: {br_max:.0f} /min | Śr: {br_mean:.0f} /min",
+                value_style,
+            )
+        )
+
+    story.append(PageBreak())
+    return story
+
+
+def _build_cp_model_page(
+    df_plot: pd.DataFrame,
+    cp_input: int,
+    w_prime_input: int,
+    section_style: ParagraphStyle,
+) -> list:
+    """Build the CP model page (Page 3)."""
+    story: list = []
+    story.append(Paragraph("3️⃣ Model Matematyczny CP", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    cp_data: list = [
+        ["Parametr", "Wartość"],
+        ["CP (Critical Power)", f"{cp_input} W"],
+        ["W' (W Prime)", f"{w_prime_input} J"],
+        ["W' (kJ)", f"{w_prime_input / 1000:.1f} kJ"],
+    ]
+    if "watts" in df_plot.columns:
+        max_power = df_plot["watts"].max()
+        cp_data.append(["Maksymalna moc", f"{max_power:.0f} W"])
+        cp_data.append(["% CP", f"{(max_power / cp_input * 100):.1f}%" if cp_input > 0 else "N/A"])
+
+    tbl = Table(cp_data, colWidths=[8 * cm, 8 * cm])
+    tbl.setStyle(_make_table_style("#9467bd"))
+    story.append(tbl)
+    story.append(PageBreak())
+    return story
+
+
+def _build_smo2_thb_page(
+    df_plot: pd.DataFrame,
+    section_style: ParagraphStyle,
+    value_style: ParagraphStyle,
+) -> list:
+    """Build the SmO2/THb page (Page 4)."""
+    story: list = []
+    story.append(Paragraph("4️⃣ SmO2 vs THb w czasie", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    if "smo2" not in df_plot.columns:
+        story.append(PageBreak())
+        return story
+
+    chart_bytes = _create_smo2_thb_chart_matplotlib(df_plot)
+    if chart_bytes:
+        story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
+        story.append(Spacer(1, 0.5 * cm))
+
+    smo2_min = df_plot["smo2"].min()
+    smo2_max = df_plot["smo2"].max()
+    smo2_mean = df_plot["smo2"].mean()
+    story.append(Paragraph("<b>🩸 SmO2 Statystyki:</b>", value_style))
+    story.append(
+        Paragraph(
+            f"Min: {smo2_min:.1f}% | Max: {smo2_max:.1f}% | Śr: {smo2_mean:.1f}%", value_style
+        )
+    )
+    story.append(Spacer(1, 0.3 * cm))
+
+    if "thb" in df_plot.columns:
+        thb_min = df_plot["thb"].min()
+        thb_max = df_plot["thb"].max()
+        thb_mean = df_plot["thb"].mean()
+        story.append(Paragraph("<b>💉 THb Statystyki:</b>", value_style))
+        story.append(
+            Paragraph(
+                f"Min: {thb_min:.2f} g/dL | Max: {thb_max:.2f} g/dL | Śr: {thb_mean:.2f} g/dL",
+                value_style,
+            )
+        )
+
+    story.append(PageBreak())
+    return story
+
+
+def _build_vt_thresholds_page(
+    cp_input: int,
+    vt1_watts: int,
+    vt2_watts: int,
+    threshold_result: Any,
+    section_style: ParagraphStyle,
+    value_style: ParagraphStyle,
+) -> list:
+    """Build the VT1/VT2 thresholds page (Page 5)."""
+    story: list = []
+    story.append(Paragraph("5️⃣ Progi Wentylacyjne (VT1/VT2)", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    vt1_hr = getattr(threshold_result, "vt1_hr", 0) or 0
+    vt1_ve = getattr(threshold_result, "vt1_ve", 0) or 0
+    vt1_br = getattr(threshold_result, "vt1_br", 0) or 0
+    vt1_tv = (vt1_ve / vt1_br * 1000) if vt1_br > 0 else 0
+
+    vt2_hr = getattr(threshold_result, "vt2_hr", 0) or 0
+    vt2_ve = getattr(threshold_result, "vt2_ve", 0) or 0
+    vt2_br = getattr(threshold_result, "vt2_br", 0) or 0
+    vt2_tv = (vt2_ve / vt2_br * 1000) if vt2_br > 0 else 0
+
+    vt_data = [
+        ["Próg", "Moc", "HR", "VE", "BR", "TV"],
+        [
+            "VT1 (Próg Tlenowy)",
+            f"{vt1_watts} W",
+            f"{vt1_hr:.0f} bpm" if vt1_hr else "-",
+            f"{vt1_ve:.1f} L/min" if vt1_ve else "-",
+            f"{vt1_br:.0f} /min" if vt1_br else "-",
+            f"{vt1_tv:.0f} mL" if vt1_tv else "-",
+        ],
+        [
+            "VT2 (Próg Beztlenowy)",
+            f"{vt2_watts} W",
+            f"{vt2_hr:.0f} bpm" if vt2_hr else "-",
+            f"{vt2_ve:.1f} L/min" if vt2_ve else "-",
+            f"{vt2_br:.0f} /min" if vt2_br else "-",
+            f"{vt2_tv:.0f} mL" if vt2_tv else "-",
+        ],
+    ]
+
+    tbl = Table(vt_data, colWidths=[4 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm])
+    tbl.setStyle(_make_table_style("#ffa15a", [(1, "#ffe4cc"), (2, "#ffcccc")]))
+    story.append(tbl)
+
+    if cp_input > 0:
+        story.append(Spacer(1, 0.5 * cm))
+        story.append(
+            Paragraph(
+                f"VT1: ~{(vt1_watts / cp_input) * 100:.0f}% CP | VT2: ~{(vt2_watts / cp_input) * 100:.0f}% CP",
+                value_style,
+            )
+        )
+
+    story.append(PageBreak())
+    return story
+
+
+def _build_lt_thresholds_page(
+    cp_input: int,
+    lt1_watts: int,
+    lt2_watts: int,
+    smo2_result: Any,
+    section_style: ParagraphStyle,
+    value_style: ParagraphStyle,
+) -> list:
+    """Build the LT1/LT2 SmO2 thresholds page (Page 6)."""
+    story: list = []
+    story.append(Paragraph("6️⃣ Progi SmO2 (LT1/LT2)", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    if smo2_result:
+        lt1_hr = getattr(smo2_result, "t1_hr", 0) or 0
+        lt1_smo2 = getattr(smo2_result, "t1_smo2", 0) or 0
+        lt2_hr = getattr(smo2_result, "t2_onset_hr", 0) or 0
+        lt2_smo2 = getattr(smo2_result, "t2_onset_smo2", 0) or 0
+    else:
+        lt1_hr = lt1_smo2 = lt2_hr = lt2_smo2 = 0
+
+    lt_data = [
+        ["Próg", "Moc", "HR", "SmO2"],
+        [
+            "LT1 (SteadyState)",
+            f"{lt1_watts} W",
+            f"{lt1_hr:.0f} bpm" if lt1_hr else "-",
+            f"{lt1_smo2:.1f}%" if lt1_smo2 else "-",
+        ],
+        [
+            "LT2 (RCP)",
+            f"{lt2_watts} W" if lt2_watts > 0 else "Nie wykryto",
+            f"{lt2_hr:.0f} bpm" if lt2_hr else "-",
+            f"{lt2_smo2:.1f}%" if lt2_smo2 else "-",
+        ],
+    ]
+
+    tbl = Table(lt_data, colWidths=[5 * cm, 5 * cm, 5 * cm, 5 * cm])
+    tbl.setStyle(_make_table_style("#2ca02c", [(1, "#ccffcc"), (2, "#ffcccc")]))
+    story.append(tbl)
+
+    if cp_input > 0 and lt1_watts > 0:
+        story.append(Spacer(1, 0.5 * cm))
+        story.append(Paragraph(f"LT1: ~{(lt1_watts / cp_input) * 100:.0f}% CP", value_style))
+
+    story.append(PageBreak())
+    return story
+
+
+def _build_vo2max_page(
+    df_plot: pd.DataFrame,
+    rider_weight: float,
+    section_style: ParagraphStyle,
+    value_style: ParagraphStyle,
+    italic_style: ParagraphStyle,
+) -> list:
+    """Build the VO2max estimation page (Page 7)."""
+    story: list = []
+    story.append(Paragraph("7️⃣ Estymacja VO2max", section_style))
+    story.append(Spacer(1, 0.5 * cm))
+
+    if "watts" not in df_plot.columns or rider_weight <= 0:
+        return story
+
+    rolling_5min = df_plot["watts"].rolling(300, min_periods=1).mean()
+    mmp_5min = rolling_5min.max()
+    vo2max = 16.61 + 8.87 * (mmp_5min / rider_weight)
+
+    chart_bytes = _create_vo2max_chart_matplotlib(df_plot, rolling_5min, rider_weight)
+    if chart_bytes:
+        story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
+        story.append(Spacer(1, 0.5 * cm))
+
+    story.append(Paragraph(f"<b>Estymowane VO2max:</b> {vo2max:.1f} ml/kg/min", value_style))
+    story.append(Spacer(1, 0.3 * cm))
+    story.append(Paragraph(f"MMP5: {mmp_5min:.0f} W", value_style))
+    story.append(Paragraph(f"Waga: {rider_weight:.1f} kg", value_style))
+    story.append(Spacer(1, 0.3 * cm))
+    story.append(Paragraph("<i>Wzór: VO2max = 16.61 + 8.87 × (MMP5 / Waga)</i>", italic_style))
+    return story
+
+
 def generate_summary_pdf(
     df_plot: pd.DataFrame,
     metrics: Dict[str, Any],
@@ -43,17 +394,7 @@ def generate_summary_pdf(
     smo2_result: Any,
     uploaded_file_name: str,
 ) -> bytes:
-    """
-    Generate PDF from Summary tab with each section on separate page.
-
-    Each page contains:
-    - Title and section number
-    - Chart (if applicable)
-    - All values and statistics
-
-    Returns:
-        PDF bytes
-    """
+    """Generate PDF from Summary tab with each section on separate page."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -64,17 +405,7 @@ def generate_summary_pdf(
         bottomMargin=2 * cm,
     )
 
-    # Prepare styles with Polish font support from existing styles module
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "CustomTitle",
-        parent=styles["Heading1"],
-        fontName=FONT_FAMILY_BOLD,
-        fontSize=24,
-        textColor=colors.HexColor("#1f77b4"),
-        spaceAfter=30,
-        alignment=1,  # Center
-    )
     section_style = ParagraphStyle(
         "SectionTitle",
         parent=styles["Heading2"],
@@ -91,337 +422,28 @@ def generate_summary_pdf(
         spaceAfter=10,
     )
 
-    story = []
-
-    # Page 0: Title Page
-    story.append(Spacer(1, 3 * cm))
-    story.append(Paragraph("📊 Podsumowanie Treningu", title_style))
-    story.append(Spacer(1, 1 * cm))
-    normal_style = ParagraphStyle(name="normal", parent=styles["Normal"], fontName=FONT_FAMILY)
-    story.append(Paragraph(f"Plik: {uploaded_file_name}", normal_style))
-    story.append(Spacer(1, 0.5 * cm))
-    story.append(Paragraph(f"CP: {cp_input} W | W': {w_prime_input} J", normal_style))
-    story.append(Spacer(1, 0.5 * cm))
-    story.append(Paragraph(f"Waga: {rider_weight} kg", normal_style))
-    story.append(PageBreak())
-
-    # Page 1: Training Overview (Wykres 1)
-    story.append(Paragraph("1️⃣ Przebieg Treningu", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # Add training chart
-    if "watts" in df_plot.columns:
-        chart_bytes = _create_training_chart_matplotlib(df_plot)
-        if chart_bytes:
-            story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
-            story.append(Spacer(1, 0.5 * cm))
-
-    # Add basic metrics
-    if metrics:
-        metrics_data = [
-            ["Parametr", "Wartość"],
-            ["Średnia moc", f"{metrics.get('avg_power', 0):.0f} W"],
-            ["Maksymalna moc", f"{metrics.get('max_power', 0):.0f} W"],
-            ["Średnie HR", f"{metrics.get('avg_hr', 0):.0f} bpm"],
-            ["Maksymalne HR", f"{metrics.get('max_hr', 0):.0f} bpm"],
-            ["Średnie VE", f"{metrics.get('avg_ve', 0):.1f} L/min"],
-            ["Średnie BR", f"{metrics.get('avg_br', 0):.0f} /min"],
-        ]
-        metrics_table = Table(metrics_data, colWidths=[8 * cm, 8 * cm])
-        metrics_table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f77b4")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, 0), 12),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                    ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 1), (-1, -1), 10),
-                ]
-            )
-        )
-        story.append(metrics_table)
-
-    story.append(PageBreak())
-
-    # Page 2: Ventilation VE and BR (Wykres 2)
-    story.append(Paragraph("2️⃣ Wentylacja (VE) i Oddechy (BR)", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    if "tymeventilation" in df_plot.columns:
-        chart_bytes = _create_ve_br_chart_matplotlib(df_plot)
-        if chart_bytes:
-            story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
-            story.append(Spacer(1, 0.5 * cm))
-
-        # VE Statistics
-        ve_min = df_plot["tymeventilation"].min()
-        ve_max = df_plot["tymeventilation"].max()
-        ve_mean = df_plot["tymeventilation"].mean()
-
-        story.append(Paragraph("<b>🫁 Statystyki VE (Wentylacja):</b>", value_style))
-        story.append(
-            Paragraph(
-                f"Min: {ve_min:.1f} L/min | Max: {ve_max:.1f} L/min | Śr: {ve_mean:.1f} L/min",
-                value_style,
-            )
-        )
-        story.append(Spacer(1, 0.3 * cm))
-
-        # BR Statistics
-        if "tymebreathrate" in df_plot.columns:
-            br_min = df_plot["tymebreathrate"].min()
-            br_max = df_plot["tymebreathrate"].max()
-            br_mean = df_plot["tymebreathrate"].mean()
-
-            story.append(Paragraph("<b>🌬️ Statystyki BR (Oddechy):</b>", value_style))
-            story.append(
-                Paragraph(
-                    f"Min: {br_min:.0f} /min | Max: {br_max:.0f} /min | Śr: {br_mean:.0f} /min",
-                    value_style,
-                )
-            )
-
-    story.append(PageBreak())
-
-    # Page 3: CP Model (Wykres 3)
-    story.append(Paragraph("3️⃣ Model Matematyczny CP", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # CP Model values
-    cp_data = [
-        ["Parametr", "Wartość"],
-        ["CP (Critical Power)", f"{cp_input} W"],
-        ["W' (W Prime)", f"{w_prime_input} J"],
-        ["W' (kJ)", f"{w_prime_input / 1000:.1f} kJ"],
-    ]
-
-    if "watts" in df_plot.columns:
-        max_power = df_plot["watts"].max()
-        cp_data.append(["Maksymalna moc", f"{max_power:.0f} W"])
-        cp_data.append(["% CP", f"{(max_power / cp_input * 100):.1f}%" if cp_input > 0 else "N/A"])
-
-    cp_table = Table(cp_data, colWidths=[8 * cm, 8 * cm])
-    cp_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#9467bd")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), 12),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ]
+    story: list = []
+    story.extend(
+        _build_title_page(styles, cp_input, w_prime_input, rider_weight, uploaded_file_name)
+    )
+    story.extend(_build_training_overview_page(df_plot, metrics, section_style))
+    story.extend(_build_ve_br_page(df_plot, section_style, value_style))
+    story.extend(_build_cp_model_page(df_plot, cp_input, w_prime_input, section_style))
+    story.extend(_build_smo2_thb_page(df_plot, section_style, value_style))
+    story.extend(
+        _build_vt_thresholds_page(
+            cp_input, vt1_watts, vt2_watts, threshold_result, section_style, value_style
         )
     )
-    story.append(cp_table)
-
-    story.append(PageBreak())
-
-    # Page 4: SmO2 vs THb (Wykres 4)
-    story.append(Paragraph("4️⃣ SmO2 vs THb w czasie", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    if "smo2" in df_plot.columns:
-        chart_bytes = _create_smo2_thb_chart_matplotlib(df_plot)
-        if chart_bytes:
-            story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
-            story.append(Spacer(1, 0.5 * cm))
-
-        # SmO2 Statistics
-        smo2_min = df_plot["smo2"].min()
-        smo2_max = df_plot["smo2"].max()
-        smo2_mean = df_plot["smo2"].mean()
-
-        story.append(Paragraph("<b>🩸 SmO2 Statystyki:</b>", value_style))
-        story.append(
-            Paragraph(
-                f"Min: {smo2_min:.1f}% | Max: {smo2_max:.1f}% | Śr: {smo2_mean:.1f}%", value_style
-            )
-        )
-        story.append(Spacer(1, 0.3 * cm))
-
-        # THb Statistics
-        if "thb" in df_plot.columns:
-            thb_min = df_plot["thb"].min()
-            thb_max = df_plot["thb"].max()
-            thb_mean = df_plot["thb"].mean()
-
-            story.append(Paragraph("<b>💉 THb Statystyki:</b>", value_style))
-            story.append(
-                Paragraph(
-                    f"Min: {thb_min:.2f} g/dL | Max: {thb_max:.2f} g/dL | Śr: {thb_mean:.2f} g/dL",
-                    value_style,
-                )
-            )
-
-    story.append(PageBreak())
-
-    # Page 5: Ventilatory Thresholds VT1/VT2 (Wykres 5)
-    story.append(Paragraph("5️⃣ Progi Wentylacyjne (VT1/VT2)", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # VT1 and VT2 data
-    vt_data = [
-        ["Próg", "Moc", "HR", "VE", "BR", "TV"],
-    ]
-
-    # Get VT1 values
-    vt1_hr = getattr(threshold_result, "vt1_hr", 0) or 0
-    vt1_ve = getattr(threshold_result, "vt1_ve", 0) or 0
-    vt1_br = getattr(threshold_result, "vt1_br", 0) or 0
-    vt1_tv = (vt1_ve / vt1_br * 1000) if vt1_br > 0 else 0
-
-    vt_data.append(
-        [
-            "VT1 (Próg Tlenowy)",
-            f"{vt1_watts} W",
-            f"{vt1_hr:.0f} bpm" if vt1_hr else "-",
-            f"{vt1_ve:.1f} L/min" if vt1_ve else "-",
-            f"{vt1_br:.0f} /min" if vt1_br else "-",
-            f"{vt1_tv:.0f} mL" if vt1_tv else "-",
-        ]
-    )
-
-    # Get VT2 values
-    vt2_hr = getattr(threshold_result, "vt2_hr", 0) or 0
-    vt2_ve = getattr(threshold_result, "vt2_ve", 0) or 0
-    vt2_br = getattr(threshold_result, "vt2_br", 0) or 0
-    vt2_tv = (vt2_ve / vt2_br * 1000) if vt2_br > 0 else 0
-
-    vt_data.append(
-        [
-            "VT2 (Próg Beztlenowy)",
-            f"{vt2_watts} W",
-            f"{vt2_hr:.0f} bpm" if vt2_hr else "-",
-            f"{vt2_ve:.1f} L/min" if vt2_ve else "-",
-            f"{vt2_br:.0f} /min" if vt2_br else "-",
-            f"{vt2_tv:.0f} mL" if vt2_tv else "-",
-        ]
-    )
-
-    vt_table = Table(vt_data, colWidths=[4 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm])
-    vt_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ffa15a")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ffe4cc")),
-                ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#ffcccc")),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ]
+    story.extend(
+        _build_lt_thresholds_page(
+            cp_input, lt1_watts, lt2_watts, smo2_result, section_style, value_style
         )
     )
-    story.append(vt_table)
-
-    if cp_input > 0:
-        story.append(Spacer(1, 0.5 * cm))
-        story.append(
-            Paragraph(
-                f"VT1: ~{(vt1_watts / cp_input) * 100:.0f}% CP | VT2: ~{(vt2_watts / cp_input) * 100:.0f}% CP",
-                value_style,
-            )
-        )
-
-    story.append(PageBreak())
-
-    # Page 6: SmO2 Thresholds LT1/LT2 (Wykres 6)
-    story.append(Paragraph("6️⃣ Progi SmO2 (LT1/LT2)", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # LT1 and LT2 data
-    lt_data = [
-        ["Próg", "Moc", "HR", "SmO2"],
-    ]
-
-    # Get LT1 values from smo2_result
-    if smo2_result:
-        lt1_hr = getattr(smo2_result, "t1_hr", 0) or 0
-        lt1_smo2 = getattr(smo2_result, "t1_smo2", 0) or 0
-        lt2_hr = getattr(smo2_result, "t2_onset_hr", 0) or 0
-        lt2_smo2 = getattr(smo2_result, "t2_onset_smo2", 0) or 0
-    else:
-        lt1_hr = lt1_smo2 = lt2_hr = lt2_smo2 = 0
-
-    lt_data.append(
-        [
-            "LT1 (SteadyState)",
-            f"{lt1_watts} W",
-            f"{lt1_hr:.0f} bpm" if lt1_hr else "-",
-            f"{lt1_smo2:.1f}%" if lt1_smo2 else "-",
-        ]
+    story.extend(
+        _build_vo2max_page(df_plot, rider_weight, section_style, value_style, styles["Italic"])
     )
 
-    lt_data.append(
-        [
-            "LT2 (RCP)",
-            f"{lt2_watts} W" if lt2_watts > 0 else "Nie wykryto",
-            f"{lt2_hr:.0f} bpm" if lt2_hr else "-",
-            f"{lt2_smo2:.1f}%" if lt2_smo2 else "-",
-        ]
-    )
-
-    lt_table = Table(lt_data, colWidths=[5 * cm, 5 * cm, 5 * cm, 5 * cm])
-    lt_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2ca02c")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), 12),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ccffcc")),
-                ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#ffcccc")),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ]
-        )
-    )
-    story.append(lt_table)
-
-    if cp_input > 0 and lt1_watts > 0:
-        story.append(Spacer(1, 0.5 * cm))
-        story.append(Paragraph(f"LT1: ~{(lt1_watts / cp_input) * 100:.0f}% CP", value_style))
-
-    story.append(PageBreak())
-
-    # Page 7: VO2max Estimation with chart
-    story.append(Paragraph("7️⃣ Estymacja VO2max", section_style))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # Calculate VO2max and create chart
-    if "watts" in df_plot.columns and rider_weight > 0:
-        # Calculate rolling 5-min mean power
-        rolling_5min = df_plot["watts"].rolling(300, min_periods=1).mean()
-        mmp_5min = rolling_5min.max()
-        vo2max = 16.61 + 8.87 * (mmp_5min / rider_weight)
-
-        # Create VO2max chart
-        chart_bytes = _create_vo2max_chart_matplotlib(df_plot, rolling_5min, rider_weight)
-        if chart_bytes:
-            story.append(RLImage(io.BytesIO(chart_bytes), width=16 * cm, height=8 * cm))
-            story.append(Spacer(1, 0.5 * cm))
-
-        story.append(Paragraph(f"<b>Estymowane VO2max:</b> {vo2max:.1f} ml/kg/min", value_style))
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(Paragraph(f"MMP5: {mmp_5min:.0f} W", value_style))
-        story.append(Paragraph(f"Waga: {rider_weight:.1f} kg", value_style))
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(
-            Paragraph("<i>Wzór: VO2max = 16.61 + 8.87 × (MMP5 / Waga)</i>", styles["Italic"])
-        )
-
-    # Build PDF
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()

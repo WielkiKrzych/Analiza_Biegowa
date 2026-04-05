@@ -450,43 +450,35 @@ def _render_hrv_section(df_plot: pd.DataFrame):
     st.markdown("---")
 
 
-def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):
+def _compute_vo2max_metrics(
+    df_plot: pd.DataFrame,
+    rider_weight: float,
+) -> dict[str, float | str] | None:
+    """Compute VO2max estimate, CI95%, and confidence classification.
+
+    Returns a dict with all computed values or None if data is insufficient.
     """
-    Estymacja VO2max z przedziałem ufności 95% (CI95%).
-
-    Wzór Sitko et al. 2021: VO2max = 16.61 + 8.87 × 5' max power (W/kg)
-
-    CI95% oparta na:
-    - Zmienności mocy w ostatnich 5 minutach rampy (SD)
-    - Stabilności odpowiedzi HR (CV)
-    """
-
-    # Walidacja danych
     if "watts" not in df_plot.columns:
         st.warning("⚠️ **Brak danych mocy** — nie można estymować VO2max.")
-        return
+        return None
 
     if rider_weight <= 0:
         st.warning("⚠️ **Nieprawidłowa waga zawodnika** — nie można estymować VO2max.")
-        return
+        return None
 
-    # Oblicz maksymalną 5-minutową moc (MMP5) używając rolling window
-    # Tak samo jak w głównej metryce VO2max
     if len(df_plot) < 300:
         st.warning("⚠️ **Za mało danych** (wymagane min. 5 minut) — nie można estymować VO2max.")
-        return
+        return None
 
     # Znajdź najlepszy 5-minutowy okres (tak jak w głównej metryce)
     rolling_5min = df_plot["watts"].rolling(window=300, min_periods=300).mean()
     best_5min_idx = rolling_5min.idxmax()
     mmp_5min = rolling_5min.max()
 
-    # Pobierz dane z najlepszego 5-minutowego okresu do obliczenia SD i CV
     best_5min_start = max(0, best_5min_idx - 299)
     df_best5 = df_plot.iloc[best_5min_start : best_5min_idx + 1]
 
-    # Obliczenia mocy dla najlepszego okresu
-    power_mean = mmp_5min  # Średnia moc w najlepszym 5-min okresie
+    power_mean = mmp_5min
     power_sd = df_best5["watts"].std()
     power_cv = (power_sd / power_mean * 100) if power_mean > 0 else 0
     n = len(df_best5)
@@ -495,97 +487,87 @@ def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):
     power_per_kg = power_mean / rider_weight
     vo2max = 16.61 + 8.87 * power_per_kg
 
-    # Obliczenie SE i CI95% dla VO2max
     # Propagacja błędu: SE_vo2 = 8.87 / kg * SE_power
     se_power = power_sd / np.sqrt(n)
     se_vo2 = 8.87 * se_power / rider_weight
     ci95_vo2 = 1.96 * se_vo2
 
     # Dodatkowa niepewność z HR response (jeśli dostępne)
-    hr_penalty = 0
-    hr_col = None
-    for alias in ["hr", "heartrate", "heart_rate", "bpm"]:
-        if alias in df_best5.columns:
-            hr_col = alias
-            break
-
-    if hr_col:
-        hr_mean = df_best5[hr_col].mean()
-        hr_sd = df_best5[hr_col].std()
-        hr_cv = (hr_sd / hr_mean * 100) if hr_mean > 0 else 0
-        # Wysoki CV HR = większa niepewność
-        if hr_cv > 5:
-            hr_penalty = ci95_vo2 * 0.2  # +20% CI za niestabilne HR
+    hr_penalty, hr_col = _compute_hr_penalty(df_best5, ci95_vo2)
 
     ci95_total = ci95_vo2 + hr_penalty
 
-    # Confidence Weight: im mniejszy CI względem VO2max, tym wyższa waga
     confidence_weight = 1 / (1 + ci95_total / vo2max) if vo2max > 0 else 0
     confidence_pct = confidence_weight * 100
 
     # Klasyfikacja pewności
     if confidence_pct >= 80:
-        conf_color = "#00cc96"
-        conf_label = "WYSOKA"
+        conf_color, conf_label = "#00cc96", "WYSOKA"
     elif confidence_pct >= 60:
-        conf_color = "#ffa15a"
-        conf_label = "UMIARKOWANA"
+        conf_color, conf_label = "#ffa15a", "UMIARKOWANA"
     else:
-        conf_color = "#ef553b"
-        conf_label = "NISKA"
+        conf_color, conf_label = "#ef553b", "NISKA"
 
-    # Wyświetlanie głównego wyniku
-    st.markdown(
-        f"""
-    <div style="padding:20px; border-radius:12px; border:3px solid #17a2b8; background-color: #1a1a1a; text-align:center;">
-        <h2 style="margin:0; color: #17a2b8;">VO₂max = {vo2max:.1f} ± {ci95_total:.1f} ml/kg/min</h2>
-        <p style="margin:10px 0 0 0; color:#888; font-size:0.85em;">
-            (CI95%: {vo2max - ci95_total:.1f} – {vo2max + ci95_total:.1f} ml/kg/min)
-        </p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    return {
+        "power_mean": power_mean,
+        "power_sd": power_sd,
+        "power_cv": power_cv,
+        "vo2max": vo2max,
+        "se_power": se_power,
+        "se_vo2": se_vo2,
+        "ci95_vo2": ci95_vo2,
+        "hr_penalty": hr_penalty,
+        "ci95_total": ci95_total,
+        "confidence_pct": confidence_pct,
+        "conf_color": conf_color,
+        "conf_label": conf_label,
+    }
 
-    # Źródło disclaimer
-    st.caption(
-        "📌 **Źródło:** Estymacja modelowa (Sitko et al. 2021), nie pomiar bezpośredni. Używać orientacyjnie."
-    )
 
-    # Confidence Weight
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown(
-            f"""
-        <div style="padding:15px; border-radius:8px; border:2px solid {conf_color}; background-color: #222; text-align:center;">
-            <p style="margin:0; color:#aaa; font-size:0.9em;">Waga Pewności (Confidence Weight)</p>
-            <h3 style="margin:5px 0; color: {conf_color};">{confidence_pct:.0f}% — {conf_label}</h3>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
+def _compute_hr_penalty(df_best5: pd.DataFrame, ci95_vo2: float) -> tuple[float, str | None]:
+    """Compute HR-based CI penalty for unstable heart-rate response."""
+    hr_col: str | None = None
+    for alias in ["hr", "heartrate", "heart_rate", "bpm"]:
+        if alias in df_best5.columns:
+            hr_col = alias
+            break
 
+    if hr_col is None:
+        return 0.0, None
+
+    hr_mean = df_best5[hr_col].mean()
+    hr_sd = df_best5[hr_col].std()
+    hr_cv = (hr_sd / hr_mean * 100) if hr_mean > 0 else 0
+    penalty = ci95_vo2 * 0.2 if hr_cv > 5 else 0.0
+    return penalty, hr_col
+
+
+def _render_vo2max_details(
+    m: dict[str, float | str],
+) -> None:
+    """Render computation details and methodology expanders."""
     # Szczegóły obliczeń
     with st.expander("📊 Szczegóły obliczeń", expanded=False):
         c1, c2, c3 = st.columns(3)
-        c1.metric("MMP5 (najlepsze 5 min)", f"{power_mean:.0f} W")
-        c2.metric("SD mocy", f"{power_sd:.1f} W")
-        c3.metric("CV mocy", f"{power_cv:.1f}%")
+        c1.metric("MMP5 (najlepsze 5 min)", f"{m['power_mean']:.0f} W")
+        c2.metric("SD mocy", f"{m['power_sd']:.1f} W")
+        c3.metric("CV mocy", f"{m['power_cv']:.1f}%")
 
-        if hr_col:
+        if m.get("hr_col"):
+            hr_col = m["hr_col"]
             c1, c2, c3 = st.columns(3)
-            c1.metric("Średnie HR", f"{hr_mean:.0f} bpm")
-            c2.metric("SD HR", f"{hr_sd:.1f} bpm")
-            c3.metric("CV HR", f"{hr_cv:.1f}%")
+            c1.metric("Średnie HR", f"{m['hr_mean']:.0f} bpm")
+            c2.metric("SD HR", f"{m['hr_sd']:.1f} bpm")
+            c3.metric("CV HR", f"{m['hr_cv']:.1f}%")
 
         st.markdown(f"""
         | Parametr | Wartość |
         |----------|---------|
-        | SE mocy | {se_power:.2f} W |
-        | SE VO₂max | {se_vo2:.2f} ml/kg/min |
-        | CI95% (moc) | ±{ci95_vo2:.2f} ml/kg/min |
-        | Korekta HR | +{hr_penalty:.2f} ml/kg/min |
-        | **CI95% całkowity** | **±{ci95_total:.2f} ml/kg/min** |
+        | SE mocy | {m["se_power"]:.2f} W |
+        | SE VO₂max | {m["se_vo2"]:.2f} ml/kg/min |
+        | CI95% (moc) | ±{m["ci95_vo2"]:.2f} ml/kg/min |
+        | Korekta HR | +{m["hr_penalty"]:.2f} ml/kg/min |
+        | **CI95% całkowity** | **±{m["ci95_total"]:.2f} ml/kg/min** |
         """)
 
     # Teoria
@@ -633,3 +615,56 @@ def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):
 
         *Uwaga: Jest to estymacja modelowa, nie zastępuje bezpośredniego pomiaru VO₂max w laboratorium.*
         """)
+
+
+def _render_vo2max_uncertainty(df_plot: pd.DataFrame, rider_weight: float):
+    """
+    Estymacja VO2max z przedziałem ufności 95% (CI95%).
+
+    Wzór Sitko et al. 2021: VO2max = 16.61 + 8.87 × 5' max power (W/kg)
+
+    CI95% oparta na:
+    - Zmienności mocy w ostatnich 5 minutach rampy (SD)
+    - Stabilności odpowiedzi HR (CV)
+    """
+    m = _compute_vo2max_metrics(df_plot, rider_weight)
+    if m is None:
+        return
+
+    vo2max: float = m["vo2max"]  # type: ignore[assignment]
+    ci95_total: float = m["ci95_total"]  # type: ignore[assignment]
+    conf_color: str = m["conf_color"]  # type: ignore[assignment]
+    conf_label: str = m["conf_label"]  # type: ignore[assignment]
+    confidence_pct: float = m["confidence_pct"]  # type: ignore[assignment]
+
+    # Wyświetlanie głównego wyniku
+    st.markdown(
+        f"""
+    <div style="padding:20px; border-radius:12px; border:3px solid #17a2b8; background-color: #1a1a1a; text-align:center;">
+        <h2 style="margin:0; color: #17a2b8;">VO₂max = {vo2max:.1f} ± {ci95_total:.1f} ml/kg/min</h2>
+        <p style="margin:10px 0 0 0; color:#888; font-size:0.85em;">
+            (CI95%: {vo2max - ci95_total:.1f} – {vo2max + ci95_total:.1f} ml/kg/min)
+        </p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.caption(
+        "📌 **Źródło:** Estymacja modelowa (Sitko et al. 2021), nie pomiar bezpośredni. Używać orientacyjnie."
+    )
+
+    # Confidence Weight
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            f"""
+        <div style="padding:15px; border-radius:8px; border:2px solid {conf_color}; background-color: #222; text-align:center;">
+            <p style="margin:0; color:#aaa; font-size:0.9em;">Waga Pewności (Confidence Weight)</p>
+            <h3 style="margin:5px 0; color: {conf_color};">{confidence_pct:.0f}% — {conf_label}</h3>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+    _render_vo2max_details(m)

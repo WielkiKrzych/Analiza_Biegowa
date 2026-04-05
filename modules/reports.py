@@ -1,3 +1,4 @@
+import logging
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -5,6 +6,8 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
@@ -21,8 +24,6 @@ def _calculate_fallback_metrics(metrics: Dict[str, Any], df_plot: pd.DataFrame) 
     Returns:
         Updated metrics dictionary with fallback values
     """
-    import logging
-
     result = metrics.copy()
 
     # Normalized Power (NP)

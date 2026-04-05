@@ -327,81 +327,51 @@ def detect_constant_pace_segments(
 detect_constant_power_segments = detect_constant_pace_segments
 
 
-def trend_at_constant_pace(
-    df: pd.DataFrame,
-    pace_target_sec: float,
-    tolerance_pct: float = 5.0,
-    min_duration_sec: int = 120,
-) -> Tuple[Optional[go.Figure], Optional[DriftMetrics]]:
-    """Extract segment at target pace and compute HR/SmO2 drift.
+def _resolve_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    """Return the first matching column name from candidates, or None."""
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
 
-    Args:
-        df: DataFrame with pace, hr, and optionally smo2
-        pace_target_sec: Target pace in sec/km
-        tolerance_pct: Tolerance around target pace
-        min_duration_sec: Minimum segment duration
+
+def _analyze_smo2_drift(
+    segment: pd.DataFrame,
+    smo2_col: str,
+    pace_col: str,
+    df_full: pd.DataFrame,
+) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    """Run SmO2 linear regression and pace-SmO2 correlation.
 
     Returns:
-        Tuple of (Plotly Figure, DriftMetrics)
+        (smo2_slope, smo2_intercept, smo2_pvalue, corr_pace_smo2)
     """
-    # Detect HR column
-    hr_col = None
-    for col in ["heartrate", "hr", "heart_rate"]:
-        if col in df.columns:
-            hr_col = col
-            break
-
-    # Detect pace column
-    pace_col = None
-    for col in ["pace", "pace_sec_per_km", "tempo"]:
-        if col in df.columns:
-            pace_col = col
-            break
-
-    if pace_col is None or hr_col is None:
-        return None, None
-
-    # Find matching segment
-    lower = pace_target_sec * (1 - tolerance_pct / 100)
-    upper = pace_target_sec * (1 + tolerance_pct / 100)
-
-    mask = (df[pace_col] >= lower) & (df[pace_col] <= upper)
-    segment = df[mask].copy()
-
-    if len(segment) < min_duration_sec:
-        return None, None
-
-    # Create time axis in minutes
-    segment = segment.reset_index(drop=True)
-    segment["time_min"] = segment.index / 60
-
-    # Calculate HR drift
-    hr_slope, hr_intercept, hr_r, hr_p, hr_se = stats.linregress(
-        segment["time_min"], segment[hr_col]
+    if segment[smo2_col].notna().sum() <= 10:
+        return None, None, None, None
+    smo2_clean = segment.dropna(subset=[smo2_col])
+    smo2_slope, smo2_int, _, smo2_p, _ = stats.linregress(
+        smo2_clean["time_min"], smo2_clean[smo2_col]
     )
+    corr_pace_smo2 = (
+        df_full[pace_col].corr(df_full[smo2_col]) if smo2_col in df_full.columns else None
+    )
+    return smo2_slope, smo2_int, smo2_p, corr_pace_smo2
 
-    # Calculate SmO2 drift (if available)
-    smo2_col = None
-    for col in ["smo2", "SmO2", "muscle_oxygen"]:
-        if col in segment.columns:
-            smo2_col = col
-            break
 
-    smo2_slope = None
-    smo2_p = None
-    corr_pace_smo2 = None
-
-    if smo2_col and segment[smo2_col].notna().sum() > 10:
-        smo2_clean = segment.dropna(subset=[smo2_col])
-        smo2_slope, smo2_int, smo2_r, smo2_p, smo2_se = stats.linregress(
-            smo2_clean["time_min"], smo2_clean[smo2_col]
-        )
-        corr_pace_smo2 = df[pace_col].corr(df[smo2_col]) if smo2_col in df.columns else None
-
-    # Create figure
+def _build_drift_figure(
+    segment: pd.DataFrame,
+    hr_col: str,
+    hr_slope: float,
+    hr_intercept: float,
+    smo2_col: Optional[str],
+    smo2_slope: Optional[float],
+    smo2_int: Optional[float],
+    pace_target_sec: float,
+    tolerance_pct: float,
+) -> go.Figure:
+    """Build the Plotly figure for HR and SmO2 drift at constant pace."""
     fig = go.Figure()
 
-    # HR trace (smoothed)
     segment[f"{hr_col}_smooth"] = segment[hr_col].rolling(window=30, min_periods=1).mean()
     fig.add_trace(
         go.Scatter(
@@ -414,7 +384,6 @@ def trend_at_constant_pace(
         )
     )
 
-    # Add trendline for HR
     hr_trend = hr_intercept + hr_slope * segment["time_min"]
     fig.add_trace(
         go.Scatter(
@@ -427,7 +396,6 @@ def trend_at_constant_pace(
         )
     )
 
-    # SmO2 trace on secondary axis (if available)
     if smo2_col:
         segment[f"{smo2_col}_smooth"] = segment[smo2_col].rolling(window=30, min_periods=1).mean()
         fig.add_trace(
@@ -440,8 +408,7 @@ def trend_at_constant_pace(
                 yaxis="y2",
             )
         )
-
-        if smo2_slope is not None:
+        if smo2_slope is not None and smo2_int is not None:
             smo2_trend = smo2_int + smo2_slope * segment["time_min"]
             fig.add_trace(
                 go.Scatter(
@@ -474,10 +441,58 @@ def trend_at_constant_pace(
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(x=0.01, y=0.99),
     )
+    return fig
 
-    # Build metrics
+
+def trend_at_constant_pace(
+    df: pd.DataFrame,
+    pace_target_sec: float,
+    tolerance_pct: float = 5.0,
+    min_duration_sec: int = 120,
+) -> Tuple[Optional[go.Figure], Optional[DriftMetrics]]:
+    """Extract segment at target pace and compute HR/SmO2 drift."""
+    hr_col = _resolve_column(df, ["heartrate", "hr", "heart_rate"])
+    pace_col = _resolve_column(df, ["pace", "pace_sec_per_km", "tempo"])
+
+    if pace_col is None or hr_col is None:
+        return None, None
+
+    lower = pace_target_sec * (1 - tolerance_pct / 100)
+    upper = pace_target_sec * (1 + tolerance_pct / 100)
+    mask = (df[pace_col] >= lower) & (df[pace_col] <= upper)
+    segment = df[mask].copy()
+
+    if len(segment) < min_duration_sec:
+        return None, None
+
+    segment = segment.reset_index(drop=True)
+    segment["time_min"] = segment.index / 60
+
+    hr_slope, hr_intercept, hr_r, hr_p, hr_se = stats.linregress(
+        segment["time_min"], segment[hr_col]
+    )
+
+    smo2_col = _resolve_column(segment, ["smo2", "SmO2", "muscle_oxygen"])
+    smo2_slope, smo2_int, smo2_p, corr_pace_smo2 = (
+        _analyze_smo2_drift(segment, smo2_col, pace_col, df)
+        if smo2_col
+        else (None, None, None, None)
+    )
+
+    fig = _build_drift_figure(
+        segment,
+        hr_col,
+        hr_slope,
+        hr_intercept,
+        smo2_col,
+        smo2_slope,
+        smo2_int,
+        pace_target_sec,
+        tolerance_pct,
+    )
+
     duration_min = len(segment) / 60
-    metrics = DriftMetrics(
+    drift_metrics = DriftMetrics(
         hr_drift_slope=hr_slope,
         hr_drift_pvalue=hr_p,
         smo2_slope=smo2_slope,
@@ -488,7 +503,7 @@ def trend_at_constant_pace(
         avg_pace=pace_target_sec,
     )
 
-    return fig, metrics
+    return fig, drift_metrics
 
 
 # Legacy function name

@@ -229,6 +229,33 @@ def _predict_piecewise_3segment(x, y, bp1, bp2, slopes):
     return y_pred
 
 
+def _grid_search(
+    x: np.ndarray,
+    y: np.ndarray,
+    bp1_vals: np.ndarray,
+    bp2_vals: np.ndarray,
+    min_separation: float,
+    best_rss: float,
+    best_bp1: Optional[float],
+    best_bp2: Optional[float],
+    best_slopes: Optional[tuple],
+) -> Tuple[float, Optional[float], Optional[float], Optional[tuple]]:
+    """Search a grid of (bp1, bp2) pairs for the best piecewise fit."""
+    for bp1 in bp1_vals:
+        for bp2 in bp2_vals:
+            if bp2 <= bp1 + min_separation:
+                continue
+            try:
+                rss, slopes = _fit_piecewise_3segment(x, y, bp1, bp2)
+                if rss < best_rss:
+                    best_rss = rss
+                    best_bp1, best_bp2 = bp1, bp2
+                    best_slopes = slopes
+            except (ValueError, TypeError, np.linalg.LinAlgError):
+                continue
+    return best_rss, best_bp1, best_bp2, best_slopes
+
+
 def _two_phase_breakpoint_search(
     x: np.ndarray,
     y: np.ndarray,
@@ -236,8 +263,7 @@ def _two_phase_breakpoint_search(
     bp2_range: Tuple[float, float],
     min_separation: float,
 ) -> Tuple[Optional[float], Optional[float], Optional[tuple], float]:
-    """
-    Two-phase breakpoint search: coarse grid + fine optimization.
+    """Two-phase breakpoint search: coarse grid + fine optimization.
 
     Phase 1: Coarse grid search (step=20) to find approximate region.
     Phase 2: Fine grid search (step=2) around best coarse result.
@@ -249,28 +275,24 @@ def _two_phase_breakpoint_search(
     best_bp1, best_bp2 = None, None
     best_slopes = None
 
-    # Phase 1: Coarse search with step=20
-    coarse_step = 20
-    bp1_coarse = np.arange(bp1_range[0], bp1_range[1], coarse_step)
-    bp2_coarse = np.arange(bp2_range[0], bp2_range[1], coarse_step)
+    bp1_coarse = np.arange(bp1_range[0], bp1_range[1], 20)
+    bp2_coarse = np.arange(bp2_range[0], bp2_range[1], 20)
 
-    for bp1 in bp1_coarse:
-        for bp2 in bp2_coarse:
-            if bp2 <= bp1 + min_separation:
-                continue
-            try:
-                rss, slopes = _fit_piecewise_3segment(x, y, bp1, bp2)
-                if rss < best_rss:
-                    best_rss = rss
-                    best_bp1, best_bp2 = bp1, bp2
-                    best_slopes = slopes
-            except (ValueError, TypeError, np.linalg.LinAlgError):
-                continue
+    best_rss, best_bp1, best_bp2, best_slopes = _grid_search(
+        x,
+        y,
+        bp1_coarse,
+        bp2_coarse,
+        min_separation,
+        best_rss,
+        best_bp1,
+        best_bp2,
+        best_slopes,
+    )
 
     if best_bp1 is None:
         return None, None, None, np.inf
 
-    # Phase 2: Fine search around best coarse (±15W, step=2)
     fine_step = 2
     fine_range = 15
 
@@ -285,17 +307,16 @@ def _two_phase_breakpoint_search(
         fine_step,
     )
 
-    for bp1 in bp1_fine:
-        for bp2 in bp2_fine:
-            if bp2 <= bp1 + min_separation:
-                continue
-            try:
-                rss, slopes = _fit_piecewise_3segment(x, y, bp1, bp2)
-                if rss < best_rss:
-                    best_rss = rss
-                    best_bp1, best_bp2 = bp1, bp2
-                    best_slopes = slopes
-            except (ValueError, TypeError, np.linalg.LinAlgError):
-                continue
+    best_rss, best_bp1, best_bp2, best_slopes = _grid_search(
+        x,
+        y,
+        bp1_fine,
+        bp2_fine,
+        min_separation,
+        best_rss,
+        best_bp1,
+        best_bp2,
+        best_slopes,
+    )
 
     return best_bp1, best_bp2, best_slopes, best_rss

@@ -232,6 +232,78 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _normalize_velocity_units(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert velocity_smooth from km/h to m/s when median exceeds 10."""
+    if "velocity_smooth" not in df.columns:
+        return df
+    vs_median = df["velocity_smooth"].replace(0, np.nan).median()
+    if pd.notna(vs_median) and vs_median > 10:
+        df["velocity_smooth"] = df["velocity_smooth"] / 3.6
+    return df
+
+
+def _derive_pace_if_missing(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive pace column from speed_m_s or velocity_smooth when absent."""
+    if "pace" in df.columns:
+        return df
+    speed_source = None
+    if "speed_m_s" in df.columns:
+        speed_source = "speed_m_s"
+    elif "velocity_smooth" in df.columns:
+        speed_source = "velocity_smooth"
+    if speed_source is not None:
+        df["pace"] = np.where(df[speed_source] > 0, 1000.0 / df[speed_source], np.nan)
+    return df
+
+
+def _normalize_cadence(df: pd.DataFrame) -> pd.DataFrame:
+    """Double half-cadence values exported by Intervals.icu (~80 SPM)."""
+    if "cadence" not in df.columns:
+        return df
+    cad_median = df["cadence"].median()
+    if 0 < cad_median < 120:
+        df["cadence"] = df["cadence"] * 2
+    return df
+
+
+def _normalize_vertical_oscillation(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert verticaloscillation from mm to cm when median exceeds 20."""
+    if "verticaloscillation" not in df.columns:
+        return df
+    vo_median = df["verticaloscillation"].replace(0, np.nan).median()
+    if pd.notna(vo_median) and vo_median > 20:
+        df["verticaloscillation"] = df["verticaloscillation"] / 10.0
+    return df
+
+
+_GCT_COLUMNS = ["stance_time", "ground_contact", "gct", "groundcontacttime"]
+
+
+def _derive_gct(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive GCT from FIT stance_time or estimate from cadence."""
+    has_gct = any(col in df.columns for col in _GCT_COLUMNS)
+    if has_gct:
+        for col in _GCT_COLUMNS:
+            if col in df.columns and col != "gct":
+                df["gct"] = pd.to_numeric(df[col], errors="coerce")
+                break
+    elif "cadence" in df.columns:
+        cad = df["cadence"]
+        df["gct"] = np.where(cad > 0, 60000.0 / cad * 0.65, np.nan)
+        df.loc[(df["gct"] < 150) | (df["gct"] > 400), "gct"] = np.nan
+    return df
+
+
+def _derive_stride_length(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive stride_length from pace and cadence when absent."""
+    if "stride_length" in df.columns or "pace" not in df.columns or "cadence" not in df.columns:
+        return df
+    speed = np.where(df["pace"] > 0, 1000.0 / df["pace"], 0.0)
+    cadence_hz = df["cadence"] / 60.0
+    df["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)
+    return df
+
+
 @st.cache_data
 def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
     """Load CSV/TXT file into DataFrame with column normalization.
@@ -246,85 +318,24 @@ def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
     Returns:
         Processed DataFrame with normalized columns
     """
-    # 1. IO -> Raw DataFrame
     df_pd = _read_raw_file(file)
 
-    # Check if chunked processing needed for large files
     if len(df_pd) > 100000 and chunk_size is not False:
         return _process_large_dataframe(df_pd, chunk_size or 50000)
 
-    # 2. Normalization -> Standard Column Names
     df_pd = normalize_columns_pandas(df_pd)
-
-    # 2a. Normalize velocity_smooth units (km/h → m/s detection)
-    # FIT exports may have velocity_smooth in km/h (~13 km/h) while Intervals CSV uses m/s (~3.7)
-    if "velocity_smooth" in df_pd.columns:
-        vs_median = df_pd["velocity_smooth"].replace(0, np.nan).median()
-        if pd.notna(vs_median) and vs_median > 10:
-            # Likely km/h (running speed 10-20 km/h), convert to m/s
-            df_pd["velocity_smooth"] = df_pd["velocity_smooth"] / 3.6
-
-    # Prefer speed_m_s (explicit m/s) over velocity_smooth for pace derivation
-    if "pace" not in df_pd.columns:
-        speed_source = None
-        if "speed_m_s" in df_pd.columns:
-            speed_source = "speed_m_s"
-        elif "velocity_smooth" in df_pd.columns:
-            speed_source = "velocity_smooth"
-        if speed_source is not None:
-            df_pd["pace"] = np.where(df_pd[speed_source] > 0, 1000.0 / df_pd[speed_source], np.nan)
-
-    # 2b. Running cadence doubling (Intervals.icu exports half-cadence ~80 strides/min)
-    if "cadence" in df_pd.columns:
-        cad_median = df_pd["cadence"].median()
-        if 0 < cad_median < 120:
-            df_pd["cadence"] = df_pd["cadence"] * 2
-
-    # 2b2. Normalize VerticalOscillation units (mm → cm)
-    # Intervals.icu exports in mm (~90mm), FIT uses cm (~9cm). Canonical: cm.
-    if "verticaloscillation" in df_pd.columns:
-        vo_median = df_pd["verticaloscillation"].replace(0, np.nan).median()
-        if pd.notna(vo_median) and vo_median > 20:
-            df_pd["verticaloscillation"] = df_pd["verticaloscillation"] / 10.0
-
-    # 2c. GCT: prefer real stance_time from FIT, then other GCT columns, then estimate
-    gct_columns = ["stance_time", "ground_contact", "gct", "groundcontacttime"]
-    has_gct = any(col in df_pd.columns for col in gct_columns)
-    if has_gct:
-        # Use real GCT data — prefer stance_time from FIT file
-        for col in gct_columns:
-            if col in df_pd.columns and col != "gct":
-                df_pd["gct"] = pd.to_numeric(df_pd[col], errors="coerce")
-                break
-    elif "cadence" in df_pd.columns:
-        cad = df_pd["cadence"]
-        df_pd["gct"] = np.where(
-            cad > 0,
-            60000.0 / cad * 0.65,  # duty cycle ~65%
-            np.nan,
-        )
-        df_pd.loc[(df_pd["gct"] < 150) | (df_pd["gct"] > 400), "gct"] = np.nan
-
-    # 2d. Stride length derivation from speed and cadence
-    if (
-        "pace" in df_pd.columns
-        and "cadence" in df_pd.columns
-        and "stride_length" not in df_pd.columns
-    ):
-        speed = np.where(df_pd["pace"] > 0, 1000.0 / df_pd["pace"], 0.0)
-        cadence_hz = df_pd["cadence"] / 60.0
-        df_pd["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)
-
-    # 3. Data Cleaning (HRV)
+    df_pd = _normalize_velocity_units(df_pd)
+    df_pd = _derive_pace_if_missing(df_pd)
+    df_pd = _normalize_cadence(df_pd)
+    df_pd = _normalize_vertical_oscillation(df_pd)
+    df_pd = _derive_gct(df_pd)
+    df_pd = _derive_stride_length(df_pd)
     df_pd = _process_hrv_column(df_pd)
 
-    # 4. Structure Enforcement (Time)
     if "time" not in df_pd.columns:
         df_pd["time"] = np.arange(len(df_pd)).astype(float)
 
-    # 5. Type Conversion
     df_pd = _convert_numeric_types(df_pd)
-
     return df_pd
 
 

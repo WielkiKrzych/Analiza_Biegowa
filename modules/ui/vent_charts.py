@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from scipy import stats
@@ -110,17 +111,21 @@ def _render_ve_section(target_df, startsec, endsec, interval_data, slope_ve, int
                     st.rerun()
 
 
-def _render_br_section(target_df):
-    """Render BR (Breath Rate) interactive chart section."""
-    if "tymebreathrate" not in target_df.columns:
-        st.warning("Brak danych Breath Rate (tymebreathrate) w pliku.")
-        return
+def _compute_br_trend(
+    interval_data: "pd.DataFrame",
+) -> tuple[float, float, str]:
+    """Compute linear regression trend for BR interval."""
+    if len(interval_data) > 1:
+        slope, intercept, _, _, _ = stats.linregress(
+            interval_data["time"], interval_data["tymebreathrate"]
+        )
+        trend_desc = f"{slope:.4f} /s"
+        return slope, intercept, trend_desc
+    return 0.0, 0.0, "N/A"
 
-    st.subheader("🫁 Częstość Oddechów (Breath Rate)")
-    st.info(
-        "💡 **ANALIZA BR:** Zaznacz obszar na wykresie (kliknij i przeciągnij), aby sprawdzić statystyki i trend."
-    )
 
+def _render_br_manual_input() -> None:
+    """Render manual time-range input expander for BR section."""
     with st.expander("🔧 Ręczne wprowadzenie zakresu czasowego BR", expanded=False):
         col_br_1, col_br_2 = st.columns(2)
         with col_br_1:
@@ -140,34 +145,24 @@ def _render_br_section(target_df):
                 st.session_state.br_end_sec = br_end
                 st.success(f"✅ Zaktualizowano zakres BR: {manual_br_start} - {manual_br_end}")
 
-    br_startsec = st.session_state.br_start_sec
-    br_endsec = st.session_state.br_end_sec
-    br_mask = (target_df["time"] >= br_startsec) & (target_df["time"] <= br_endsec)
-    br_interval_data = target_df.loc[br_mask]
 
-    if br_interval_data.empty or br_endsec <= br_startsec:
-        return
-
-    br_duration_sec = int(br_endsec - br_startsec)
-
-    avg_br = br_interval_data["tymebreathrate"].mean()
-    min_br = br_interval_data["tymebreathrate"].min()
-    max_br = br_interval_data["tymebreathrate"].max()
-    avg_pace_br = br_interval_data["pace"].mean() if "pace" in br_interval_data.columns else 0
+def _render_br_metrics(
+    interval_data: "pd.DataFrame",
+    startsec: float,
+    endsec: float,
+    slope_br: float,
+    trend_br_desc: str,
+) -> None:
+    """Render BR metric cards."""
+    duration_sec = int(endsec - startsec)
+    avg_br = interval_data["tymebreathrate"].mean()
+    min_br = interval_data["tymebreathrate"].min()
+    max_br = interval_data["tymebreathrate"].max()
+    avg_pace_br = interval_data["pace"].mean() if "pace" in interval_data.columns else 0
     avg_pace_br_min = avg_pace_br / 60.0 if avg_pace_br > 0 else 0
 
-    if len(br_interval_data) > 1:
-        slope_br, intercept_br, _, _, _ = stats.linregress(
-            br_interval_data["time"], br_interval_data["tymebreathrate"]
-        )
-        trend_br_desc = f"{slope_br:.4f} /s"
-    else:
-        slope_br = 0
-        intercept_br = 0
-        trend_br_desc = "N/A"
-
     st.markdown(
-        f"##### METRYKI BR: {_format_time(br_startsec)} - {_format_time(br_endsec)} ({br_duration_sec}s)"
+        f"##### METRYKI BR: {_format_time(startsec)} - {_format_time(endsec)} ({duration_sec}s)"
     )
     br_m1, br_m2, br_m3, br_m4, br_m5 = st.columns(5)
     br_m1.metric("Śr. BR", f"{avg_br:.1f} /min")
@@ -177,6 +172,16 @@ def _render_br_section(target_df):
     trend_color_br = "inverse" if slope_br > 0.01 else "normal"
     br_m5.metric("Trend BR (Slope)", trend_br_desc, delta=trend_br_desc, delta_color=trend_color_br)
 
+
+def _build_br_figure(
+    target_df: "pd.DataFrame",
+    interval_data: "pd.DataFrame",
+    startsec: float,
+    endsec: float,
+    slope_br: float,
+    intercept_br: float,
+) -> go.Figure:
+    """Build the BR chart figure with traces and layout."""
     fig_br = go.Figure()
 
     fig_br.add_trace(
@@ -211,8 +216,8 @@ def _render_br_section(target_df):
         )
 
     fig_br.add_vrect(
-        x0=br_startsec,
-        x1=br_endsec,
+        x0=startsec,
+        x1=endsec,
         fillcolor="green",
         opacity=0.1,
         layer="below",
@@ -221,11 +226,11 @@ def _render_br_section(target_df):
         annotation_position="top left",
     )
 
-    if len(br_interval_data) > 1:
-        trend_line_br = intercept_br + slope_br * br_interval_data["time"]
+    if len(interval_data) > 1:
+        trend_line_br = intercept_br + slope_br * interval_data["time"]
         fig_br.add_trace(
             go.Scatter(
-                x=br_interval_data["time"],
+                x=interval_data["time"],
                 y=trend_line_br,
                 mode="lines",
                 name="Trend BR",
@@ -250,6 +255,59 @@ def _render_br_section(target_df):
         margin=dict(l=20, r=20, t=40, b=20),
         hovermode="x unified",
     )
+    return fig_br
+
+
+def _handle_box_selection(
+    selected: dict | None,
+    start_key: str,
+    end_key: str,
+) -> None:
+    """Update session state from a plotly box selection, if changed."""
+    if not selected or "selection" not in selected or "box" not in selected["selection"]:
+        return
+    box_data = selected["selection"]["box"]
+    if not box_data or len(box_data) == 0:
+        return
+    x_range = box_data[0].get("x", [])
+    if len(x_range) != 2:
+        return
+    new_start = min(x_range)
+    new_end = max(x_range)
+    if new_start != st.session_state[start_key] or new_end != st.session_state[end_key]:
+        st.session_state[start_key] = new_start
+        st.session_state[end_key] = new_end
+        st.rerun()
+
+
+def _render_br_section(target_df):
+    """Render BR (Breath Rate) interactive chart section."""
+    if "tymebreathrate" not in target_df.columns:
+        st.warning("Brak danych Breath Rate (tymebreathrate) w pliku.")
+        return
+
+    st.subheader("🫁 Częstość Oddechów (Breath Rate)")
+    st.info(
+        "💡 **ANALIZA BR:** Zaznacz obszar na wykresie (kliknij i przeciągnij), aby sprawdzić statystyki i trend."
+    )
+
+    _render_br_manual_input()
+
+    br_startsec = st.session_state.br_start_sec
+    br_endsec = st.session_state.br_end_sec
+    br_mask = (target_df["time"] >= br_startsec) & (target_df["time"] <= br_endsec)
+    br_interval_data = target_df.loc[br_mask]
+
+    if br_interval_data.empty or br_endsec <= br_startsec:
+        return
+
+    slope_br, intercept_br, trend_br_desc = _compute_br_trend(br_interval_data)
+
+    _render_br_metrics(br_interval_data, br_startsec, br_endsec, slope_br, trend_br_desc)
+
+    fig_br = _build_br_figure(
+        target_df, br_interval_data, br_startsec, br_endsec, slope_br, intercept_br
+    )
 
     selected_br = st.plotly_chart(
         fig_br,
@@ -259,20 +317,150 @@ def _render_br_section(target_df):
         selection_mode="box",
     )
 
-    if selected_br and "selection" in selected_br and "box" in selected_br["selection"]:
-        box_data_br = selected_br["selection"]["box"]
-        if box_data_br and len(box_data_br) > 0:
-            x_range_br = box_data_br[0].get("x", [])
-            if len(x_range_br) == 2:
-                new_br_start = min(x_range_br)
-                new_br_end = max(x_range_br)
-                if (
-                    new_br_start != st.session_state.br_start_sec
-                    or new_br_end != st.session_state.br_end_sec
-                ):
-                    st.session_state.br_start_sec = new_br_start
-                    st.session_state.br_end_sec = new_br_end
-                    st.rerun()
+    _handle_box_selection(selected_br, "br_start_sec", "br_end_sec")
+
+
+def _compute_tv_stats(
+    interval_data: "pd.DataFrame",
+) -> tuple[float, float, float, float, float, str, "pd.DataFrame"]:
+    """Compute tidal volume statistics and trend.
+
+    Returns (avg_tv, min_tv, max_tv, slope, intercept, trend_desc, tv_valid).
+    """
+    tv_clean = (
+        interval_data["tidal_volume"].replace([float("inf"), float("-inf")], float("nan")).dropna()
+    )
+    if len(tv_clean) > 0:
+        avg_tv = tv_clean.mean()
+        min_tv = tv_clean.min()
+        max_tv = tv_clean.max()
+    else:
+        avg_tv = min_tv = max_tv = 0.0
+
+    tv_valid = interval_data[["time", "tidal_volume"]].dropna()
+    tv_valid = tv_valid[~tv_valid["tidal_volume"].isin([float("inf"), float("-inf")])]
+
+    if len(tv_valid) > 1:
+        slope, intercept, _, _, _ = stats.linregress(tv_valid["time"], tv_valid["tidal_volume"])
+        trend_desc = f"{slope:.5f} L/s"
+    else:
+        slope = 0.0
+        intercept = 0.0
+        trend_desc = "N/A"
+
+    return avg_tv, min_tv, max_tv, slope, intercept, trend_desc, tv_valid
+
+
+def _render_tv_metrics(
+    interval_data: "pd.DataFrame",
+    startsec: float,
+    endsec: float,
+    avg_tv: float,
+    min_tv: float,
+    max_tv: float,
+    slope_tv: float,
+    trend_tv_desc: str,
+) -> None:
+    """Render tidal volume metric cards."""
+    duration_sec = int(endsec - startsec)
+    avg_pace_tv = interval_data["pace"].mean() if "pace" in interval_data.columns else 0
+    avg_pace_tv_min = avg_pace_tv / 60.0 if avg_pace_tv > 0 else 0
+
+    st.markdown(
+        f"##### METRYKI VT: {_format_time(startsec)} - {_format_time(endsec)} ({duration_sec}s)"
+    )
+    tv_m1, tv_m2, tv_m3, tv_m4, tv_m5 = st.columns(5)
+    tv_m1.metric("Śr. VT", f"{avg_tv:.2f} L")
+    tv_m2.metric("Min VT", f"{min_tv:.2f} L")
+    tv_m3.metric("Max VT", f"{max_tv:.2f} L")
+    tv_m4.metric("Śr. Tempo", f"{avg_pace_tv_min:.2f} min/km")
+    trend_color_tv = "inverse" if slope_tv < -0.0001 else "normal"
+    tv_m5.metric("Trend VT (Slope)", trend_tv_desc, delta=trend_tv_desc, delta_color=trend_color_tv)
+
+
+def _build_tv_figure(
+    target_df: "pd.DataFrame",
+    tv_valid: "pd.DataFrame",
+    startsec: float,
+    endsec: float,
+    slope_tv: float,
+    intercept_tv: float,
+) -> go.Figure:
+    """Build the Tidal Volume chart figure with traces and layout."""
+    fig_tv = go.Figure()
+
+    fig_tv.add_trace(
+        go.Scatter(
+            x=target_df["time"],
+            y=target_df["tv_smooth"],
+            customdata=target_df["time_str"],
+            mode="lines",
+            name="VT (L)",
+            line=dict(color="#ab63fa", width=2),
+            hovertemplate="<b>Czas:</b> %{customdata}<br><b>VT:</b> %{y:.2f} L<extra></extra>",
+        )
+    )
+
+    if "pace_smooth" in target_df.columns:
+        pace_min_tv = target_df["pace_smooth"] / 60.0
+        pace_tv_formatted = pace_min_tv.apply(
+            lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--"
+        )
+        fig_tv.add_trace(
+            go.Scatter(
+                x=target_df["time"],
+                y=pace_min_tv,
+                customdata=np.stack([target_df["time_str"], pace_tv_formatted], axis=-1),
+                mode="lines",
+                name="Tempo",
+                line=dict(color="#00BCD4", width=1),
+                yaxis="y2",
+                opacity=0.3,
+                hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
+            )
+        )
+
+    fig_tv.add_vrect(
+        x0=startsec,
+        x1=endsec,
+        fillcolor="purple",
+        opacity=0.1,
+        layer="below",
+        line_width=0,
+        annotation_text="VT",
+        annotation_position="top left",
+    )
+
+    if len(tv_valid) > 1:
+        trend_line_tv = intercept_tv + slope_tv * tv_valid["time"]
+        fig_tv.add_trace(
+            go.Scatter(
+                x=tv_valid["time"],
+                y=trend_line_tv,
+                mode="lines",
+                name="Trend VT",
+                line=dict(color="white", width=2, dash="dash"),
+                hovertemplate="<b>Trend:</b> %{y:.3f} L<extra></extra>",
+            )
+        )
+
+    fig_tv.update_layout(
+        title="Dynamika Objętości Oddechowej vs Tempo",
+        xaxis_title="Czas",
+        yaxis=dict(title=dict(text="VT (L)", font=dict(color="#ab63fa"))),
+        yaxis2=dict(
+            title=dict(text="Tempo (min/km)", font=dict(color="#00BCD4")),
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            autorange="reversed",
+        ),
+        legend=dict(x=0.01, y=0.99),
+        height=450,
+        margin=dict(l=20, r=20, t=40, b=20),
+        hovermode="x unified",
+    )
+    return fig_tv
 
 
 def _render_tidal_volume_section(target_df):
@@ -315,118 +503,15 @@ def _render_tidal_volume_section(target_df):
     if tv_interval_data.empty or tv_endsec <= tv_startsec:
         return
 
-    tv_duration_sec = int(tv_endsec - tv_startsec)
-
-    tv_clean = (
-        tv_interval_data["tidal_volume"]
-        .replace([float("inf"), float("-inf")], float("nan"))
-        .dropna()
-    )
-    if len(tv_clean) > 0:
-        avg_tv = tv_clean.mean()
-        min_tv = tv_clean.min()
-        max_tv = tv_clean.max()
-    else:
-        avg_tv = min_tv = max_tv = 0
-    avg_pace_tv = tv_interval_data["pace"].mean() if "pace" in tv_interval_data.columns else 0
-    avg_pace_tv_min = avg_pace_tv / 60.0 if avg_pace_tv > 0 else 0
-
-    tv_valid = tv_interval_data[["time", "tidal_volume"]].dropna()
-    tv_valid = tv_valid[~tv_valid["tidal_volume"].isin([float("inf"), float("-inf")])]
-    if len(tv_valid) > 1:
-        slope_tv, intercept_tv, _, _, _ = stats.linregress(
-            tv_valid["time"], tv_valid["tidal_volume"]
-        )
-        trend_tv_desc = f"{slope_tv:.5f} L/s"
-    else:
-        slope_tv = 0
-        intercept_tv = 0
-        trend_tv_desc = "N/A"
-
-    st.markdown(
-        f"##### METRYKI VT: {_format_time(tv_startsec)} - {_format_time(tv_endsec)} ({tv_duration_sec}s)"
-    )
-    tv_m1, tv_m2, tv_m3, tv_m4, tv_m5 = st.columns(5)
-    tv_m1.metric("Śr. VT", f"{avg_tv:.2f} L")
-    tv_m2.metric("Min VT", f"{min_tv:.2f} L")
-    tv_m3.metric("Max VT", f"{max_tv:.2f} L")
-    tv_m4.metric("Śr. Tempo", f"{avg_pace_tv_min:.2f} min/km")
-    trend_color_tv = "inverse" if slope_tv < -0.0001 else "normal"
-    tv_m5.metric("Trend VT (Slope)", trend_tv_desc, delta=trend_tv_desc, delta_color=trend_color_tv)
-
-    fig_tv = go.Figure()
-
-    fig_tv.add_trace(
-        go.Scatter(
-            x=target_df["time"],
-            y=target_df["tv_smooth"],
-            customdata=target_df["time_str"],
-            mode="lines",
-            name="VT (L)",
-            line=dict(color="#ab63fa", width=2),
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>VT:</b> %{y:.2f} L<extra></extra>",
-        )
+    avg_tv, min_tv, max_tv, slope_tv, intercept_tv, trend_tv_desc, tv_valid = _compute_tv_stats(
+        tv_interval_data
     )
 
-    if "pace_smooth" in target_df.columns:
-        pace_min_tv = target_df["pace_smooth"] / 60.0
-        pace_tv_formatted = pace_min_tv.apply(
-            lambda x: f"{int(x):d}:{int((x % 1) * 60):02d}" if x > 0 else "--:--"
-        )
-        fig_tv.add_trace(
-            go.Scatter(
-                x=target_df["time"],
-                y=pace_min_tv,
-                customdata=np.stack([target_df["time_str"], pace_tv_formatted], axis=-1),
-                mode="lines",
-                name="Tempo",
-                line=dict(color="#00BCD4", width=1),
-                yaxis="y2",
-                opacity=0.3,
-                hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
-            )
-        )
-
-    fig_tv.add_vrect(
-        x0=tv_startsec,
-        x1=tv_endsec,
-        fillcolor="purple",
-        opacity=0.1,
-        layer="below",
-        line_width=0,
-        annotation_text="VT",
-        annotation_position="top left",
+    _render_tv_metrics(
+        tv_interval_data, tv_startsec, tv_endsec, avg_tv, min_tv, max_tv, slope_tv, trend_tv_desc
     )
 
-    if len(tv_valid) > 1:
-        trend_line_tv = intercept_tv + slope_tv * tv_valid["time"]
-        fig_tv.add_trace(
-            go.Scatter(
-                x=tv_valid["time"],
-                y=trend_line_tv,
-                mode="lines",
-                name="Trend VT",
-                line=dict(color="white", width=2, dash="dash"),
-                hovertemplate="<b>Trend:</b> %{y:.3f} L<extra></extra>",
-            )
-        )
-
-    fig_tv.update_layout(
-        title="Dynamika Objętości Oddechowej vs Tempo",
-        xaxis_title="Czas",
-        yaxis=dict(title=dict(text="VT (L)", font=dict(color="#ab63fa"))),
-        yaxis2=dict(
-            title=dict(text="Tempo (min/km)", font=dict(color="#00BCD4")),
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            autorange="reversed",
-        ),
-        legend=dict(x=0.01, y=0.99),
-        height=450,
-        margin=dict(l=20, r=20, t=40, b=20),
-        hovermode="x unified",
-    )
+    fig_tv = _build_tv_figure(target_df, tv_valid, tv_startsec, tv_endsec, slope_tv, intercept_tv)
 
     selected_tv = st.plotly_chart(
         fig_tv,
@@ -436,17 +521,4 @@ def _render_tidal_volume_section(target_df):
         selection_mode="box",
     )
 
-    if selected_tv and "selection" in selected_tv and "box" in selected_tv["selection"]:
-        box_data_tv = selected_tv["selection"]["box"]
-        if box_data_tv and len(box_data_tv) > 0:
-            x_range_tv = box_data_tv[0].get("x", [])
-            if len(x_range_tv) == 2:
-                new_tv_start = min(x_range_tv)
-                new_tv_end = max(x_range_tv)
-                if (
-                    new_tv_start != st.session_state.tv_start_sec
-                    or new_tv_end != st.session_state.tv_end_sec
-                ):
-                    st.session_state.tv_start_sec = new_tv_start
-                    st.session_state.tv_end_sec = new_tv_end
-                    st.rerun()
+    _handle_box_selection(selected_tv, "tv_start_sec", "tv_end_sec")

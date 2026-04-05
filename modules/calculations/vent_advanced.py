@@ -159,6 +159,27 @@ def calculate_ve_rr_ratio(ve_avg: float, rr_avg: float) -> float:
     return 0.0
 
 
+def _compute_local_slopes(
+    power: np.ndarray, ve_smooth: np.ndarray, segment_len: int = 20, step: int = 10
+) -> List[Tuple[float, float]]:
+    """Compute local VE slopes over sliding windows.
+
+    Returns list of (power_midpoint, slope) tuples.
+    """
+    n = len(ve_smooth)
+    slopes: List[Tuple[float, float]] = []
+    for i in range(0, n - segment_len, step):
+        segment_power = power[i : i + segment_len]
+        segment_ve = ve_smooth[i : i + segment_len]
+        if len(segment_power) > 5 and np.unique(segment_power).size > 1:
+            try:
+                s, _, _, _, _ = stats.linregress(segment_power, segment_ve)
+                slopes.append((power[i + segment_len // 2], s))
+            except (ValueError, TypeError) as e:
+                logger.debug(f"Linregress failed in segment: {e}")
+    return slopes
+
+
 def find_ve_breakpoint(
     df: pd.DataFrame, ve_col: str = "ve", power_col: str = "watts", window: int = 30
 ) -> Optional[float]:
@@ -189,19 +210,8 @@ def find_ve_breakpoint(
     # Smooth
     ve_smooth = pd.Series(ve).rolling(window=window, min_periods=1).mean().values
 
-    # Calculate local slope in windows
-    n = len(ve_smooth)
-    slopes = []
-    for i in range(0, n - 20, 10):
-        segment_power = power[i : i + 20]
-        segment_ve = ve_smooth[i : i + 20]
-        if len(segment_power) > 5 and np.unique(segment_power).size > 1:
-            try:
-                s, _, _, _, _ = stats.linregress(segment_power, segment_ve)
-                slopes.append((power[i + 10], s))
-            except (ValueError, TypeError) as e:
-                logger.debug(f"Linregress failed in segment: {e}")
-                pass
+    # Calculate local slopes via helper
+    slopes = _compute_local_slopes(power, ve_smooth)
 
     if len(slopes) < 3:
         return None

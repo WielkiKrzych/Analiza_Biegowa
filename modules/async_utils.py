@@ -130,4 +130,4 @@ class AsyncProgressTracker:
 
 def shutdown_executor():
     """Shutdown the global thread pool executor. Call on app exit."""
-    _executor.shutdown(wait=True)
+    get_executor().shutdown(wait=True)

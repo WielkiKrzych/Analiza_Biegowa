@@ -263,6 +263,10 @@ def calculate_time_in_hr_zones(
     return results
 
 
+def _boundaries_as_int(boundaries: Dict[str, tuple]) -> Dict[str, tuple]:
+    return {z: (int(lo), int(hi)) for z, (lo, hi) in boundaries.items()}
+
+
 def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, tuple]:
     """Get HR boundaries for each zone in bpm.
 
@@ -275,35 +279,10 @@ def get_zone_boundaries(config: HRZoneConfig, model: str = "auto") -> Dict[str, 
     Returns:
         Dict mapping zone names to (low_bpm, high_bpm) tuples
     """
-    if model == "auto":
-        if config.lthr and config.lthr > 0:
-            model = "lthr"
-        elif config.resting_hr and config.resting_hr > 0:
-            model = "karvonen"
-        else:
-            model = "hrmax"
-
-    boundaries = {}
-    hrr = config.max_hr - config.resting_hr
-
-    if model == "hrmax":
-        for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
-            boundaries[zone_name] = (int(config.max_hr * low_pct), int(config.max_hr * high_pct))
-    elif model == "karvonen":
-        for zone_name, (low_pct, high_pct) in ZONES_KARVONEN.items():
-            boundaries[zone_name] = (
-                int(config.resting_hr + hrr * low_pct),
-                int(config.resting_hr + hrr * high_pct),
-            )
-    elif model == "lthr" and config.lthr:
-        for zone_name, (low_pct, high_pct) in ZONES_LTHR.items():
-            boundaries[zone_name] = (int(config.lthr * low_pct), int(config.lthr * high_pct))
-    else:
-        # Fallback to hrmax
-        for zone_name, (low_pct, high_pct) in ZONES_HRMAX.items():
-            boundaries[zone_name] = (int(config.max_hr * low_pct), int(config.max_hr * high_pct))
-
-    return boundaries
+    resolved_model = _resolve_model(config, model)
+    zone_defs = _get_zone_definitions(resolved_model)
+    boundaries = _get_absolute_boundaries(config, resolved_model, zone_defs)
+    return _boundaries_as_int(boundaries)
 
 
 def estimate_lthr_from_threshold_pace(threshold_pace: float, max_hr: float) -> float:

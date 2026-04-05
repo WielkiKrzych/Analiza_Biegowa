@@ -384,106 +384,161 @@ def build_page_thresholds(
     return elements
 
 
-def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
-    """Build SmO2 analysis page - PREMIUM MUSCLE OXYGENATION DIAGNOSTIC."""
-    from reportlab.lib.colors import HexColor
+# ============================================================================
+# SmO2 PAGE HELPERS
+# ============================================================================
 
-    elements = []
-    smo2_advanced = smo2_data.get("advanced_metrics", {})
 
-    # ==========================================================================
-    # HEADER
-    # ==========================================================================
-    elements.append(
-        Paragraph("<font size='14'>3.3 OKSYGENACJA MIĘŚNIOWA (SmO₂)</font>", styles["center"])
-    )
-    elements.append(
-        Paragraph(
-            "<font size='10' color='#7F8C8D'>Kliniczna analiza dostawy i wykorzystania tlenu</font>",
-            styles["center"],
+def _classify_smo2_slope(slope: float) -> tuple:
+    """Classify SmO2 desaturation slope rate.
+
+    Returns:
+        Tuple of (color_hex, label).
+    """
+    if slope < -6:
+        return ("#E74C3C", "Szybka desaturacja")
+    if slope < -3:
+        return ("#F39C12", "Umiarkowana")
+    return ("#2ECC71", "Stabilna")
+
+
+def _classify_smo2_halftime(halftime: float) -> tuple:
+    """Classify SmO2 reoxygenation half-time.
+
+    Returns:
+        Tuple of (color_hex, label).
+    """
+    if halftime > 60:
+        return ("#E74C3C", "Wolna reoksygenacja")
+    if halftime > 30:
+        return ("#F39C12", "Umiarkowana")
+    return ("#2ECC71", "Szybka")
+
+
+def _classify_smo2_coupling(coupling: float) -> tuple:
+    """Classify HR-SmO2 coupling strength.
+
+    Returns:
+        Tuple of (color_hex, label).
+    """
+    abs_c = abs(coupling)
+    if abs_c > 0.6:
+        return ("#3498DB", "Silna (centralna)")
+    if abs_c > 0.3:
+        return ("#F39C12", "Umiarkowana")
+    return ("#2ECC71", "Słaba (lokalna)")
+
+
+def _classify_smo2_data_quality(quality: str) -> tuple:
+    """Classify SmO2 data quality.
+
+    Returns:
+        Tuple of (color_hex, label).
+    """
+    if quality == "good":
+        return ("#2ECC71", "Wysoka")
+    if quality == "low":
+        return ("#F39C12", "Niska")
+    return ("#7F8C8D", "Brak danych")
+
+
+def _classify_smo2_slope_benchmark(slope: float) -> str:
+    """Classify SmO2 slope for benchmark interpretation."""
+    if slope < -4:
+        return "Typowe dla limitu centralnego"
+    if slope < -2:
+        return "Umiarkowane - balans C/P"
+    return "Stabilne - limit lokalny"
+
+
+def _classify_smo2_halftime_benchmark(halftime: Optional[float]) -> str:
+    """Classify SmO2 halftime for benchmark interpretation."""
+    if halftime is None:
+        return "Brak danych"
+    if halftime < 25:
+        return "Elite (<25s)"
+    if halftime < 50:
+        return "OK ale nie elite"
+    return "Wolna - priorytet interwały"
+
+
+def _classify_smo2_coupling_benchmark(coupling: float) -> str:
+    """Classify HR-SmO2 coupling for benchmark interpretation."""
+    abs_c = abs(coupling)
+    if abs_c > 0.6:
+        return "Silna dominacja serca (centralny)"
+    if abs_c > 0.3:
+        return "Zrównoważona"
+    return "Dominacja obwodowa (lokalna)"
+
+
+def _build_smo2_metric_card(
+    title: str, value: str, unit: str, interpretation: str, color: str, styles: Dict
+) -> Table:
+    """Build a single metric card for SmO2 analysis."""
+    card_content = [
+        Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
+        Paragraph(f"<font size='16' color='{color}'><b>{value}</b></font>", styles["center"]),
+        Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
+        Spacer(1, 1 * mm),
+        Paragraph(f"<font size='8'>{interpretation}</font>", styles["center"]),
+    ]
+    card_table = Table([[card_content]], colWidths=[55 * mm])
+    card_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), HexColor("#F8F9FA")),
+                ("BOX", (0, 0), (-1, -1), 1, HexColor(color)),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
         )
     )
-    elements.append(Spacer(1, 6 * mm))
+    return card_table
 
-    # ==========================================================================
-    # 1. METRIC CARDS ROW
-    # ==========================================================================
 
-    slope = smo2_advanced.get("slope_per_100w", 0) if smo2_advanced else 0
-    halftime = smo2_advanced.get("halftime_reoxy_sec") if smo2_advanced else None
-    coupling = smo2_advanced.get("hr_coupling_r", 0) if smo2_advanced else 0
-    data_quality = smo2_advanced.get("data_quality", "unknown") if smo2_advanced else "unknown"
+def _build_smo2_metric_cards(smo2_advanced: Dict[str, Any], styles: Dict) -> List:
+    """Build metric cards row for SmO2 analysis page."""
+    safe = smo2_advanced or {}
+    slope = safe.get("slope_per_100w", 0)
+    halftime = safe.get("halftime_reoxy_sec")
+    coupling = safe.get("hr_coupling_r", 0)
 
-    def build_metric_card(title, value, unit, interpretation, color):
-        card_content = [
-            Paragraph(f"<font size='8' color='#7F8C8D'>{title}</font>", styles["center"]),
-            Paragraph(f"<font size='16' color='{color}'><b>{value}</b></font>", styles["center"]),
-            Paragraph(f"<font size='9'>{unit}</font>", styles["center"]),
-            Spacer(1, 1 * mm),
-            Paragraph(f"<font size='8'>{interpretation}</font>", styles["center"]),
-        ]
-        card_table = Table([[card_content]], colWidths=[55 * mm])
-        card_table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, -1), HexColor("#F8F9FA")),
-                    ("BOX", (0, 0), (-1, -1), 1, HexColor(color)),
-                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("TOPPADDING", (0, 0), (-1, -1), 8),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ]
-            )
-        )
-        return card_table
-
-    slope_color = "#E74C3C" if slope < -6 else ("#F39C12" if slope < -3 else "#2ECC71")
-    slope_interp = (
-        "Szybka desaturacja" if slope < -6 else ("Umiarkowana" if slope < -3 else "Stabilna")
-    )
-    card1 = build_metric_card(
-        "DESATURATION RATE", f"{slope:.1f}", "%/100W", slope_interp, slope_color
+    slope_color, slope_interp = _classify_smo2_slope(slope)
+    card1 = _build_smo2_metric_card(
+        "DESATURATION RATE", f"{slope:.1f}", "%/100W", slope_interp, slope_color, styles
     )
 
     if halftime:
-        ht_color = "#E74C3C" if halftime > 60 else ("#F39C12" if halftime > 30 else "#2ECC71")
-        ht_interp = (
-            "Wolna reoksygenacja"
-            if halftime > 60
-            else ("Umiarkowana" if halftime > 30 else "Szybka")
-        )
-        card2 = build_metric_card(
-            "REOXY HALF-TIME", f"{halftime:.0f}", "sekund", ht_interp, ht_color
+        ht_color, ht_interp = _classify_smo2_halftime(halftime)
+        card2 = _build_smo2_metric_card(
+            "REOXY HALF-TIME", f"{halftime:.0f}", "sekund", ht_interp, ht_color, styles
         )
     else:
-        card2 = build_metric_card("REOXY HALF-TIME", "---", "sekund", "Brak danych", "#7F8C8D")
+        card2 = _build_smo2_metric_card(
+            "REOXY HALF-TIME", "---", "sekund", "Brak danych", "#7F8C8D", styles
+        )
 
-    coup_color = (
-        "#3498DB" if abs(coupling) > 0.6 else ("#F39C12" if abs(coupling) > 0.3 else "#2ECC71")
-    )
-    coup_interp = (
-        "Silna (centralna)"
-        if abs(coupling) > 0.6
-        else ("Umiarkowana" if abs(coupling) > 0.3 else "Słaba (lokalna)")
-    )
-    card3 = build_metric_card(
-        "HR COUPLING", f"{coupling:.2f}", "r-Pearson", coup_interp, coup_color
+    coup_color, coup_interp = _classify_smo2_coupling(coupling)
+    card3 = _build_smo2_metric_card(
+        "HR COUPLING", f"{coupling:.2f}", "r-Pearson", coup_interp, coup_color, styles
     )
 
     cards_row = Table([[card1, card2, card3]], colWidths=[58 * mm, 58 * mm, 58 * mm])
     cards_row.setStyle(
         TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "TOP")])
     )
-    elements.append(cards_row)
-    elements.append(Spacer(1, 6 * mm))
+    return [cards_row, Spacer(1, 6 * mm)]
 
-    # ==========================================================================
-    # 2. OXYGEN DELIVERY MECHANISM PANEL
-    # ==========================================================================
 
-    limiter_type = smo2_advanced.get("limiter_type", "unknown") if smo2_advanced else "unknown"
-    limiter_conf = smo2_advanced.get("limiter_confidence", 0) if smo2_advanced else 0
-    interpretation_adv = smo2_advanced.get("interpretation", "") if smo2_advanced else ""
+def _build_smo2_mechanism_panel(smo2_advanced: Dict[str, Any], styles: Dict) -> List:
+    """Build oxygen delivery mechanism panel for SmO2 page."""
+    safe = smo2_advanced or {}
+    limiter_type = safe.get("limiter_type", "unknown")
+    limiter_conf = safe.get("limiter_confidence", 0)
+    interpretation_adv = safe.get("interpretation", "")
 
     mechanism_colors = {
         "local": "#3498DB",
@@ -503,6 +558,7 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
     mech_name = mechanism_names.get(limiter_type, "UNDEFINED")
     mech_icon = mechanism_icons.get(limiter_type, "❓")
 
+    elements: List = []
     elements.append(Paragraph("<b>DOMINANT OXYGEN DELIVERY MECHANISM</b>", styles["subheading"]))
     elements.append(Spacer(1, 2 * mm))
 
@@ -532,16 +588,13 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
             elements.append(Paragraph(line, styles["body"]))
     elements.append(Spacer(1, 6 * mm))
 
-    # ==========================================================================
-    # 3. SmO2 THRESHOLDS (compact cards)
-    # ==========================================================================
+    return elements
 
-    lt1 = smo2_manual.get("lt1_watts", "---")
-    lt2 = smo2_manual.get("lt2_watts", "---")
-    lt1_hr = smo2_manual.get("lt1_hr", "---")
-    lt2_hr = smo2_manual.get("lt2_hr", "---")
 
-    def fmt(val):
+def _build_smo2_threshold_cards(smo2_manual: Dict[str, Any], styles: Dict) -> List:
+    """Build SmO2 threshold cards (LT1/LT2)."""
+
+    def fmt(val: Any) -> str:
         if val in ("brak danych", None, "---"):
             return "---"
         try:
@@ -549,6 +602,12 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
         except (ValueError, TypeError):
             return str(val)
 
+    lt1 = smo2_manual.get("lt1_watts", "---")
+    lt2 = smo2_manual.get("lt2_watts", "---")
+    lt1_hr = smo2_manual.get("lt1_hr", "---")
+    lt2_hr = smo2_manual.get("lt2_hr", "---")
+
+    elements: List = []
     elements.append(Paragraph("<b>PROGI OKSYGENACJI MIĘŚNIOWEJ</b>", styles["subheading"]))
     elements.append(Spacer(1, 2 * mm))
 
@@ -589,109 +648,84 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
     thresh_row = Table([[lt1_table, lt2_table]], colWidths=[88 * mm, 88 * mm])
     elements.append(thresh_row)
     elements.append(Spacer(1, 6 * mm))
+    return elements
 
-    # ==========================================================================
-    # 4. TRAINING DECISION CARDS
-    # ==========================================================================
 
-    recommendations = smo2_advanced.get("recommendations", []) if smo2_advanced else []
-    if recommendations:
-        elements.append(
-            Paragraph("<b>DECYZJE TRENINGOWE NA PODSTAWIE KINETYKI O₂</b>", styles["subheading"])
-        )
-        elements.append(Spacer(1, 3 * mm))
+def _build_smo2_recommendation_cards(
+    smo2_advanced: Dict[str, Any], limiter_type: str, styles: Dict
+) -> List:
+    """Build training decision cards for SmO2 page."""
+    safe = smo2_advanced or {}
+    recommendations = safe.get("recommendations", [])
 
-        expected = {
-            "local": ["Wzrost bazowego SmO₂ o 2-4%", "Szybsza reoksygenacja", "Zmniejszenie slope"],
-            "central": [
-                "Wyższe SmO₂ przy tym samym HR",
-                "Lepsza korelacja",
-                "Stabilniejsza saturacja",
-            ],
-            "metabolic": ["Późniejszy drop point", "Mniejszy slope", "Lepsza tolerancja kwasu"],
-        }
-        exp_list = expected.get(
-            limiter_type, ["Poprawa ogólna", "Stabilniejsza saturacja", "Lepszy klirens"]
-        )
+    if not recommendations:
+        return []
 
-        for i, rec in enumerate(recommendations[:3]):
-            exp_resp = exp_list[i] if i < len(exp_list) else "Poprawa wydolności"
-            card_content = [
-                Paragraph(f"<font size='10'><b>{i + 1}. {rec}</b></font>", styles["body"]),
-                Paragraph(
-                    f"<font size='8' color='#27AE60'>Spodziewany efekt: {exp_resp}</font>",
-                    styles["body"],
-                ),
-            ]
-            card_table = Table([[card_content]], colWidths=[170 * mm])
-            card_table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, -1), COLORS["background"]),
-                        ("BOX", (0, 0), (-1, -1), 0.5, COLORS["border"]),
-                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                        ("TOPPADDING", (0, 0), (-1, -1), 6),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                    ]
-                )
-            )
-            elements.append(card_table)
-            elements.append(Spacer(1, 2 * mm))
-
-    # Chart
-    if figure_paths and "smo2_power" in figure_paths:
-        elements.append(Spacer(1, 4 * mm))
-        elements.extend(_build_chart(figure_paths["smo2_power"], "SmO₂ vs Power Profile", styles))
-
-    # Data quality
-    quality_color = (
-        "#2ECC71" if data_quality == "good" else ("#F39C12" if data_quality == "low" else "#7F8C8D")
-    )
-    quality_label = (
-        "Wysoka"
-        if data_quality == "good"
-        else ("Niska" if data_quality == "low" else "Brak danych")
-    )
-    elements.append(Spacer(1, 4 * mm))
+    elements: List = []
     elements.append(
-        Paragraph(
-            f"<font size='8' color='#7F8C8D'>Data Quality: </font><font size='8' color='{quality_color}'><b>{quality_label}</b></font>",
-            styles["body"],
-        )
+        Paragraph("<b>DECYZJE TRENINGOWE NA PODSTAWIE KINETYKI O₂</b>", styles["subheading"])
+    )
+    elements.append(Spacer(1, 3 * mm))
+
+    expected = {
+        "local": ["Wzrost bazowego SmO₂ o 2-4%", "Szybsza reoksygenacja", "Zmniejszenie slope"],
+        "central": [
+            "Wyższe SmO₂ przy tym samym HR",
+            "Lepsza korelacja",
+            "Stabilniejsza saturacja",
+        ],
+        "metabolic": ["Późniejszy drop point", "Mniejszy slope", "Lepsza tolerancja kwasu"],
+    }
+    exp_list = expected.get(
+        limiter_type, ["Poprawa ogólna", "Stabilniejsza saturacja", "Lepszy klirens"]
     )
 
-    # ==========================================================================
-    # 5. REFERENCE BENCHMARK TABLE (MINI-BENCHMARK)
-    # ==========================================================================
+    for i, rec in enumerate(recommendations[:3]):
+        exp_resp = exp_list[i] if i < len(exp_list) else "Poprawa wydolności"
+        card_content = [
+            Paragraph(f"<font size='10'><b>{i + 1}. {rec}</b></font>", styles["body"]),
+            Paragraph(
+                f"<font size='8' color='#27AE60'>Spodziewany efekt: {exp_resp}</font>",
+                styles["body"],
+            ),
+        ]
+        card_table = Table([[card_content]], colWidths=[170 * mm])
+        card_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), COLORS["background"]),
+                    ("BOX", (0, 0), (-1, -1), 0.5, COLORS["border"]),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        elements.append(card_table)
+        elements.append(Spacer(1, 2 * mm))
+
+    return elements
+
+
+def _build_smo2_benchmark_table(
+    slope: float, halftime: Optional[float], coupling: float, styles: Dict
+) -> List:
+    """Build reference benchmark table for SmO2 page."""
+    slope_interp = _classify_smo2_slope_benchmark(slope)
+    ht_interp = _classify_smo2_halftime_benchmark(halftime)
+    coup_interp = _classify_smo2_coupling_benchmark(coupling)
+
+    elements: List = []
     elements.append(Spacer(1, 6 * mm))
     elements.append(Paragraph("<b>REFERENCE BENCHMARK</b>", styles["subheading"]))
     elements.append(Spacer(1, 2 * mm))
 
-    # Interpret metrics for benchmark
-    slope_interp_full = (
-        "Typowe dla limitu centralnego"
-        if slope < -4
-        else ("Umiarkowane - balans C/P" if slope < -2 else "Stabilne - limit lokalny")
-    )
-    if halftime:
-        ht_interp_full = (
-            "Elite (<25s)"
-            if halftime < 25
-            else ("OK ale nie elite" if halftime < 50 else "Wolna - priorytet interwały")
-        )
-    else:
-        ht_interp_full = "Brak danych"
-    coup_interp_full = (
-        "Silna dominacja serca (centralny)"
-        if abs(coupling) > 0.6
-        else ("Zrównoważona" if abs(coupling) > 0.3 else "Dominacja obwodowa (lokalna)")
-    )
-
+    ht_value = f"{halftime:.0f} s" if halftime else "---"
     bench_data = [
         ["Metryka", "Twoja wartość", "Interpretacja kliniczna"],
-        ["SmO2 slope", f"{slope:.1f} %/100W", slope_interp_full],
-        ["Reoxy half-time", f"{halftime:.0f} s" if halftime else "---", ht_interp_full],
-        ["HR-SmO2 r", f"{coupling:.2f}", coup_interp_full],
+        ["SmO2 slope", f"{slope:.1f} %/100W", slope_interp],
+        ["Reoxy half-time", ht_value, ht_interp],
+        ["HR-SmO2 r", f"{coupling:.2f}", coup_interp],
     ]
 
     bench_table = Table(bench_data, colWidths=[40 * mm, 40 * mm, 85 * mm])
@@ -719,12 +753,11 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
     )
     elements.append(bench_table)
     elements.append(Spacer(1, 6 * mm))
+    return elements
 
-    # ==========================================================================
-    # 6. CONCLUSIVE STATEMENT (Links SmO2 with Biomechanics)
-    # ==========================================================================
 
-    # Generate conclusive statement based on limiter type
+def _build_smo2_conclusion_box(limiter_type: str, styles: Dict) -> List:
+    """Build conclusive statement box for SmO2 page."""
     if limiter_type == "central":
         conclusion = (
             "<b>WNIOSEK:</b> Poprawa VO2max da realny wzrost mocy tylko jeśli utrzymasz "
@@ -760,7 +793,52 @@ def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
             ]
         )
     )
-    elements.append(conclusion_box)
+    return [conclusion_box]
+
+
+def build_page_smo2(smo2_data, smo2_manual, figure_paths, styles):
+    """Build SmO2 analysis page - PREMIUM MUSCLE OXYGENATION DIAGNOSTIC."""
+    elements: List = []
+    smo2_advanced = smo2_data.get("advanced_metrics", {}) or {}
+
+    elements.append(
+        Paragraph("<font size='14'>3.3 OKSYGENACJA MIĘŚNIOWA (SmO₂)</font>", styles["center"])
+    )
+    elements.append(
+        Paragraph(
+            "<font size='10' color='#7F8C8D'>Kliniczna analiza dostawy i wykorzystania tlenu</font>",
+            styles["center"],
+        )
+    )
+    elements.append(Spacer(1, 6 * mm))
+
+    elements.extend(_build_smo2_metric_cards(smo2_advanced, styles))
+    elements.extend(_build_smo2_mechanism_panel(smo2_advanced, styles))
+    elements.extend(_build_smo2_threshold_cards(smo2_manual, styles))
+
+    limiter_type = smo2_advanced.get("limiter_type", "unknown")
+    elements.extend(_build_smo2_recommendation_cards(smo2_advanced, limiter_type, styles))
+
+    if figure_paths and "smo2_power" in figure_paths:
+        elements.append(Spacer(1, 4 * mm))
+        elements.extend(_build_chart(figure_paths["smo2_power"], "SmO₂ vs Power Profile", styles))
+
+    data_quality = smo2_advanced.get("data_quality", "unknown")
+    quality_color, quality_label = _classify_smo2_data_quality(data_quality)
+    elements.append(Spacer(1, 4 * mm))
+    elements.append(
+        Paragraph(
+            f"<font size='8' color='#7F8C8D'>Data Quality: </font>"
+            f"<font size='8' color='{quality_color}'><b>{quality_label}</b></font>",
+            styles["body"],
+        )
+    )
+
+    slope = smo2_advanced.get("slope_per_100w", 0)
+    halftime = smo2_advanced.get("halftime_reoxy_sec")
+    coupling = smo2_advanced.get("hr_coupling_r", 0)
+    elements.extend(_build_smo2_benchmark_table(slope, halftime, coupling, styles))
+    elements.extend(_build_smo2_conclusion_box(limiter_type, styles))
 
     return elements
 

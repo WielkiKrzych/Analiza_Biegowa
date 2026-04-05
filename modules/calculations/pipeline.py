@@ -64,7 +64,7 @@ def validate_test(
         TestValidity with validity level and issues
     """
     result = TestValidity(validity=ValidityLevel.VALID)
-    issues = []
+    issues: List[str] = []
 
     # Check required columns - work on renamed copy to avoid mutating caller's DataFrame
     cols_lower = {c: c.lower().strip() for c in df.columns}
@@ -79,10 +79,41 @@ def validate_test(
         result.issues = issues
         return result
 
-    # Calculate ramp duration - use the renamed copy
+    # Ramp duration
     time_range = df_work[time_column].max() - df_work[time_column].min()
     result.ramp_duration_sec = int(time_range)
+    _validate_ramp_duration(result, issues, time_range, min_ramp_duration_sec)
 
+    # Power range
+    power_range = df_work[power_column].max() - df_work[power_column].min()
+    result.power_range_watts = float(power_range)
+    _validate_power_range(result, issues, power_range, min_power_range_watts)
+
+    # Signal quality
+    result.signal_qualities = {}
+
+    power_quality = _check_signal_quality(df, power_column, time_column, "Power")
+    result.signal_qualities["Power"] = power_quality
+    if not power_quality.is_usable:
+        result.validity = ValidityLevel.INVALID
+        issues.append(f"Jakość Power: {power_quality.get_grade()}")
+
+    if has_hr:
+        hr_quality = _check_signal_quality(df, hr_column, time_column, "HR")
+        result.signal_qualities["HR"] = hr_quality
+        _assess_hr_quality(result, issues, hr_quality)
+
+    result.issues = issues
+    return result
+
+
+def _validate_ramp_duration(
+    result: TestValidity,
+    issues: List[str],
+    time_range: float,
+    min_ramp_duration_sec: int,
+) -> None:
+    """Classify ramp duration as VALID / CONDITIONAL / INVALID."""
     if time_range < 360:  # < 6 min = INVALID
         result.validity = ValidityLevel.INVALID
         issues.append(f"Rampa za krótka: {int(time_range / 60)} min (minimum: 6 min)")
@@ -93,10 +124,14 @@ def validate_test(
         issues.append(f"Rampa krótka: {int(time_range / 60)} min (zalecane: ≥8 min)")
         result.ramp_duration_sufficient = False
 
-    # Calculate power range - use the renamed copy
-    power_range = df_work[power_column].max() - df_work[power_column].min()
-    result.power_range_watts = float(power_range)
 
+def _validate_power_range(
+    result: TestValidity,
+    issues: List[str],
+    power_range: float,
+    min_power_range_watts: float,
+) -> None:
+    """Downgrade validity when power range is insufficient."""
     if power_range < min_power_range_watts:
         if result.validity == ValidityLevel.VALID:
             result.validity = ValidityLevel.CONDITIONAL
@@ -105,30 +140,20 @@ def validate_test(
         )
         result.power_range_sufficient = False
 
-    # Check signal quality
-    result.signal_qualities = {}
 
-    # Power quality
-    power_quality = _check_signal_quality(df, power_column, time_column, "Power")
-    result.signal_qualities["Power"] = power_quality
-    if not power_quality.is_usable:
+def _assess_hr_quality(
+    result: TestValidity,
+    issues: List[str],
+    hr_quality: SignalQuality,
+) -> None:
+    """Grade HR signal artifact ratio — INVALID >20 %, CONDITIONAL 5-20 %."""
+    if hr_quality.artifact_ratio > 0.20:  # >20% artifacts = INVALID
         result.validity = ValidityLevel.INVALID
-        issues.append(f"Jakość Power: {power_quality.get_grade()}")
-
-    # HR quality (if available)
-    if has_hr:
-        hr_quality = _check_signal_quality(df, hr_column, time_column, "HR")
-        result.signal_qualities["HR"] = hr_quality
-        if hr_quality.artifact_ratio > 0.20:  # >20% artifacts = INVALID
-            result.validity = ValidityLevel.INVALID
-            issues.append(f"Za dużo artefaktów HR: {hr_quality.artifact_ratio:.0%}")
-        elif hr_quality.artifact_ratio > 0.05:  # 5-20% = CONDITIONAL
-            if result.validity == ValidityLevel.VALID:
-                result.validity = ValidityLevel.CONDITIONAL
-            issues.append(f"Artefakty HR: {hr_quality.artifact_ratio:.0%}")
-
-    result.issues = issues
-    return result
+        issues.append(f"Za dużo artefaktów HR: {hr_quality.artifact_ratio:.0%}")
+    elif hr_quality.artifact_ratio > 0.05:  # 5-20% = CONDITIONAL
+        if result.validity == ValidityLevel.VALID:
+            result.validity = ValidityLevel.CONDITIONAL
+        issues.append(f"Artefakty HR: {hr_quality.artifact_ratio:.0%}")
 
 
 def _check_signal_quality(
@@ -546,50 +571,67 @@ def build_result(
         max_hr=max_hr,
     )
 
-    # Add SmO2 context (LOCAL signal - for information only, not as threshold)
-    # SmO₂ already modulated VT in integrate_signals()
-    if analysis.smo2_result:
-        smo2 = analysis.smo2_result
-        # Store SmO₂ drop info for reference (NOT as independent threshold)
-        if smo2.smo2_1_zone:
-            result.smo2_lt1 = ThresholdRange(
-                lower_watts=smo2.smo2_1_zone.range_watts[0],
-                upper_watts=smo2.smo2_1_zone.range_watts[1],
-                midpoint_watts=smo2.smo2_1_zone.midpoint_watts,
-                confidence=smo2.smo2_1_zone.confidence,
-                sources=["SmO2 (LOCAL)"],
-                method="local_signal_reference",  # NOT a threshold
-            )
-        if smo2.smo2_2_zone:
-            result.smo2_lt2 = ThresholdRange(
-                lower_watts=smo2.smo2_2_zone.range_watts[0],
-                upper_watts=smo2.smo2_2_zone.range_watts[1],
-                midpoint_watts=smo2.smo2_2_zone.midpoint_watts,
-                confidence=smo2.smo2_2_zone.confidence,
-                sources=["SmO2 (LOCAL)"],
-                method="local_signal_reference",
-            )
-        result.smo2_deviation_from_vt = integration.smo2_deviation_vt1
+    _attach_smo2_context(result, analysis.smo2_result, integration.smo2_deviation_vt1)
+    result.overall_confidence = _calculate_overall_confidence(validity, result.vt1, integration)
+    result.analysis_notes = (
+        preprocessed.preprocessing_notes + analysis.analysis_notes + integration.integration_notes
+    )
+    result.warnings = validity.issues.copy()
 
-        # Interpretation explicitly marks LOCAL signal role
-        if integration.smo2_deviation_vt1 is not None:
-            if abs(integration.smo2_deviation_vt1) <= 10:
-                result.smo2_interpretation = "SmO₂ (LOCAL) potwierdza VT → confidence zwiększone"
-            elif abs(integration.smo2_deviation_vt1) <= 20:
-                result.smo2_interpretation = "SmO₂ (LOCAL) bliski VT → niewielka korekta"
-            elif integration.smo2_deviation_vt1 < 0:
-                result.smo2_interpretation = (
-                    "SmO₂ (LOCAL) reaguje wcześniej niż VT → lokalna odpowiedź"
-                )
-            else:
-                result.smo2_interpretation = (
-                    "SmO₂ (LOCAL) reaguje później niż VT → dobra rezerwa lokalna"
-                )
+    return result
 
-    # Calculate overall confidence
-    confidence_factors = []
 
-    # Test validity factor
+def _build_smo2_threshold_range(zone: object) -> ThresholdRange:
+    """Build a ThresholdRange from an SmO2 zone (local-signal reference, not a threshold)."""
+    return ThresholdRange(
+        lower_watts=zone.range_watts[0],
+        upper_watts=zone.range_watts[1],
+        midpoint_watts=zone.midpoint_watts,
+        confidence=zone.confidence,
+        sources=["SmO2 (LOCAL)"],
+        method="local_signal_reference",
+    )
+
+
+def _get_smo2_interpretation(deviation: float) -> str:
+    """Return a human-readable SmO2-vs-VT interpretation based on deviation magnitude."""
+    abs_dev = abs(deviation)
+    if abs_dev <= 10:
+        return "SmO₂ (LOCAL) potwierdza VT → confidence zwiększone"
+    if abs_dev <= 20:
+        return "SmO₂ (LOCAL) bliski VT → niewielka korekta"
+    if deviation < 0:
+        return "SmO₂ (LOCAL) reaguje wcześniej niż VT → lokalna odpowiedź"
+    return "SmO₂ (LOCAL) reaguje później niż VT → dobra rezerwa lokalna"
+
+
+def _attach_smo2_context(
+    result: RampTestResult,
+    smo2_result: Optional[StepSmO2Result],
+    smo2_deviation_vt1: Optional[float],
+) -> None:
+    """Populate SmO2 (LOCAL) reference ranges and interpretation on *result*."""
+    if not smo2_result:
+        return
+
+    if smo2_result.smo2_1_zone:
+        result.smo2_lt1 = _build_smo2_threshold_range(smo2_result.smo2_1_zone)
+    if smo2_result.smo2_2_zone:
+        result.smo2_lt2 = _build_smo2_threshold_range(smo2_result.smo2_2_zone)
+    result.smo2_deviation_from_vt = smo2_deviation_vt1
+
+    if smo2_deviation_vt1 is not None:
+        result.smo2_interpretation = _get_smo2_interpretation(smo2_deviation_vt1)
+
+
+def _calculate_overall_confidence(
+    validity: TestValidity,
+    vt1: Optional[ThresholdRange],
+    integration: IntegrationResult,
+) -> float:
+    """Compute the mean of validity, VT1-confidence, and agreement-score factors."""
+    confidence_factors: List[float] = []
+
     if validity.validity == ValidityLevel.VALID:
         confidence_factors.append(1.0)
     elif validity.validity == ValidityLevel.CONDITIONAL:
@@ -597,28 +639,14 @@ def build_result(
     else:
         confidence_factors.append(0.3)
 
-    # VT1 confidence
-    if result.vt1:
-        confidence_factors.append(result.vt1.confidence)
+    if vt1:
+        confidence_factors.append(vt1.confidence)
 
-    # Agreement score
     confidence_factors.append(integration.conflicts.agreement_score)
 
-    # Calculate overall
     if confidence_factors:
-        result.overall_confidence = sum(confidence_factors) / len(confidence_factors)
-    else:
-        result.overall_confidence = 0.0
-
-    # Collect notes
-    result.analysis_notes = (
-        preprocessed.preprocessing_notes + analysis.analysis_notes + integration.integration_notes
-    )
-
-    # Add warnings from validity
-    result.warnings = validity.issues.copy()
-
-    return result
+        return sum(confidence_factors) / len(confidence_factors)
+    return 0.0
 
 
 # ============================================================

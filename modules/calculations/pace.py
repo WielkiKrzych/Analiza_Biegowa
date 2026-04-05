@@ -161,6 +161,52 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
     return results
 
 
+def _compute_phenotype_scores(
+    p60s: Optional[float],
+    p5min: Optional[float],
+    p10min: Optional[float],
+    p20min: Optional[float],
+    p60min: Optional[float],
+    pace_drop_5_10: float,
+    pace_drop_short_mid: Optional[float],
+) -> Dict[str, int]:
+    """Score each phenotype based on pace drop patterns and available durations."""
+    scores: Dict[str, int] = {
+        "sprinter": 0,
+        "middle_distance": 0,
+        "marathoner": 0,
+        "ultra_runner": 0,
+        "all_rounder": 0,
+    }
+
+    # Sprinter: High drop from short to mid effort (fast short, slow long)
+    if pace_drop_short_mid and pace_drop_short_mid > 0.15:
+        scores["sprinter"] += 2
+
+    # Marathoner: Small drop from 5min to 10min, has long effort data
+    if pace_drop_5_10 < 0.05:
+        scores["marathoner"] += 2
+    if p60min:
+        scores["marathoner"] += 1
+
+    # Ultra runner: Has 20min and 60min data, very small drop
+    if p20min and p60min:
+        pace_drop_20_60 = (p60min - p20min) / p20min if p20min > 0 else 1
+        if pace_drop_20_60 < 0.10:
+            scores["ultra_runner"] += 2
+
+    # Middle distance: Balanced 5-10min, moderate drop
+    if 0.03 <= pace_drop_5_10 <= 0.08:
+        scores["middle_distance"] += 2
+
+    # All-rounder: Has data across multiple durations, balanced
+    available_durations = sum(1 for p in [p60s, p5min, p10min, p20min, p60min] if p is not None)
+    if available_durations >= 3 and max(scores.values()) <= 2:
+        scores["all_rounder"] += 2
+
+    return scores
+
+
 def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     """
     Classify runner phenotype based on Pace Duration Curve.
@@ -206,39 +252,9 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     if p60s:
         pace_drop_short_mid = (p5min - p60s) / p60s if p60s > 0 else 0
 
-    # Phenotype scoring
-    scores = {
-        "sprinter": 0,
-        "middle_distance": 0,
-        "marathoner": 0,
-        "ultra_runner": 0,
-        "all_rounder": 0,
-    }
-
-    # Sprinter: High drop from short to mid effort (fast short, slow long)
-    if pace_drop_short_mid and pace_drop_short_mid > 0.15:
-        scores["sprinter"] += 2
-
-    # Marathoner: Small drop from 5min to 10min, has long effort data
-    if pace_drop_5_10 < 0.05:
-        scores["marathoner"] += 2
-    if p60min:
-        scores["marathoner"] += 1
-
-    # Ultra runner: Has 20min and 60min data, very small drop
-    if p20min and p60min:
-        pace_drop_20_60 = (p60min - p20min) / p20min if p20min > 0 else 1
-        if pace_drop_20_60 < 0.10:
-            scores["ultra_runner"] += 2
-
-    # Middle distance: Balanced 5-10min, moderate drop
-    if 0.03 <= pace_drop_5_10 <= 0.08:
-        scores["middle_distance"] += 2
-
-    # All-rounder: Has data across multiple durations, balanced
-    available_durations = sum(1 for p in [p60s, p5min, p10min, p20min, p60min] if p is not None)
-    if available_durations >= 3 and max(scores.values()) <= 2:
-        scores["all_rounder"] += 2
+    scores = _compute_phenotype_scores(
+        p60s, p5min, p10min, p20min, p60min, pace_drop_5_10, pace_drop_short_mid
+    )
 
     # Find highest scoring phenotype
     phenotype = max(scores, key=scores.get)

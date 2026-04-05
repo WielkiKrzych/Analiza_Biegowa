@@ -127,30 +127,88 @@ def analyze_cardiac_drift(
 
     # === EF vs TEMPERATURE SLOPE ===
     if core_temp is not None:
-        temp_valid = core_temp[mask]
-        temp_mask = (~np.isnan(temp_valid)) & (temp_valid > 35) & (temp_valid < 42)
-
-        if np.sum(temp_mask) > 30:
-            ef_for_temp = ef[temp_mask]
-            temp_for_ef = temp_valid[temp_mask]
-
-            # Only use valid EF values
-            valid_mask = ~np.isnan(ef_for_temp)
-            if np.sum(valid_mask) > 20 and np.unique(temp_for_ef[valid_mask]).size > 1:
-                try:
-                    slope, intercept, r, p, se = stats.linregress(
-                        temp_for_ef[valid_mask], ef_for_temp[valid_mask]
-                    )
-                    profile.ef_vs_temp_slope = float(slope)
-
-                    # Calculate temp at 10% EF drop
-                    if slope < 0 and profile.ef_start > 0:
-                        target_ef = profile.ef_start * 0.9
-                        profile.temp_at_10pct_drop = float((target_ef - intercept) / slope)
-                except (ValueError, TypeError) as e:
-                    logger.debug(f"EF vs temp regression failed: {e}")
+        slope, temp_at_10pct = _compute_ef_vs_temp_slope(ef, core_temp, mask, profile.ef_start)
+        profile.ef_vs_temp_slope = slope
+        profile.temp_at_10pct_drop = temp_at_10pct
 
     # === KEY SIGNALS ===
+    _compute_key_signals(profile, mask, smo2, hsi, start_window, end_window)
+
+    # HR drift
+    hr_start = np.nanmean(hr_valid[:start_window])
+    hr_end = np.nanmean(hr_valid[-end_window:])
+    if hr_start > 0:
+        profile.hr_drift_pct = ((hr_end - hr_start) / hr_start) * 100
+
+    # === CLASSIFICATION ===
+    profile.drift_classification, profile.classification_color = _classify_drift_level(
+        profile.delta_ef_pct
+    )
+
+    # === DRIFT TYPE ===
+    profile.drift_type = _classify_drift_type(profile, core_temp)
+
+    # === INTERPRETATION ===
+    profile.mechanism_description = _generate_drift_mechanism(profile)
+    profile.key_signals_summary = _generate_key_signals_summary(profile)
+    profile.training_implications = _generate_training_implications(profile)
+
+    # Confidence
+    profile.confidence = min(1.0, profile.data_points / 500)
+
+    return profile
+
+
+def _compute_ef_vs_temp_slope(
+    ef: np.ndarray,
+    core_temp: np.ndarray,
+    mask: np.ndarray,
+    ef_start: float,
+) -> tuple[float, Optional[float]]:
+    """
+    Compute EF vs core temperature linear regression slope.
+
+    Returns:
+        (ef_vs_temp_slope, temp_at_10pct_drop)
+    """
+    temp_valid = core_temp[mask]
+    temp_mask = (~np.isnan(temp_valid)) & (temp_valid > 35) & (temp_valid < 42)
+
+    if np.sum(temp_mask) <= 30:
+        return 0.0, None
+
+    ef_for_temp = ef[temp_mask]
+    temp_for_ef = temp_valid[temp_mask]
+
+    valid_mask = ~np.isnan(ef_for_temp)
+    if np.sum(valid_mask) <= 20 or np.unique(temp_for_ef[valid_mask]).size <= 1:
+        return 0.0, None
+
+    try:
+        slope, intercept, _r, _p, _se = stats.linregress(
+            temp_for_ef[valid_mask], ef_for_temp[valid_mask]
+        )
+        temp_at_10pct: Optional[float] = None
+        if slope < 0 and ef_start > 0:
+            target_ef = ef_start * 0.9
+            temp_at_10pct = float((target_ef - intercept) / slope)
+        return float(slope), temp_at_10pct
+    except (ValueError, TypeError) as e:
+        logger.debug(f"EF vs temp regression failed: {e}")
+        return 0.0, None
+
+
+def _compute_key_signals(
+    profile: CardiacDriftProfile,
+    mask: np.ndarray,
+    smo2: Optional[np.ndarray],
+    hsi: Optional[np.ndarray],
+    start_window: int,
+    end_window: int,
+) -> None:
+    """
+    Compute HSI peak, SmO2 drift %, and HR drift % — mutates profile in place.
+    """
     if hsi is not None:
         hsi_valid = hsi[~np.isnan(hsi)]
         if len(hsi_valid) > 0:
@@ -165,36 +223,19 @@ def analyze_cardiac_drift(
             if smo2_start > 0:
                 profile.smo2_drift_pct = ((smo2_end - smo2_start) / smo2_start) * 100
 
-    # HR drift
-    hr_start = np.nanmean(hr_valid[:start_window])
-    hr_end = np.nanmean(hr_valid[-end_window:])
-    if hr_start > 0:
-        profile.hr_drift_pct = ((hr_end - hr_start) / hr_start) * 100
 
-    # === CLASSIFICATION ===
-    abs_delta = abs(profile.delta_ef_pct)
+def _classify_drift_level(delta_ef_pct: float) -> tuple[str, str]:
+    """
+    Classify drift severity and return (classification, color).
+
+    Thresholds: minimal <5%, moderate 5-10%, high >10%.
+    """
+    abs_delta = abs(delta_ef_pct)
     if abs_delta < 5:
-        profile.drift_classification = "minimal"
-        profile.classification_color = "#27AE60"  # Green
-    elif abs_delta < 10:
-        profile.drift_classification = "moderate"
-        profile.classification_color = "#F39C12"  # Orange
-    else:
-        profile.drift_classification = "high"
-        profile.classification_color = "#E74C3C"  # Red
-
-    # === DRIFT TYPE ===
-    profile.drift_type = _classify_drift_type(profile, core_temp)
-
-    # === INTERPRETATION ===
-    profile.mechanism_description = _generate_drift_mechanism(profile)
-    profile.key_signals_summary = _generate_key_signals_summary(profile)
-    profile.training_implications = _generate_training_implications(profile)
-
-    # Confidence
-    profile.confidence = min(1.0, profile.data_points / 500)
-
-    return profile
+        return "minimal", "#27AE60"
+    if abs_delta < 10:
+        return "moderate", "#F39C12"
+    return "high", "#E74C3C"
 
 
 def _classify_drift_type(profile: CardiacDriftProfile, core_temp: Optional[np.ndarray]) -> str:

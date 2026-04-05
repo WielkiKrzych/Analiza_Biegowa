@@ -1,14 +1,19 @@
+import hashlib
+import importlib
 import logging
 import os
+import sqlite3
 
-import numpy as np  # FIX: Added for distance calculation
+import numpy as np
 import streamlit as st
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-logger = logging.getLogger(__name__)
-
-# --- FRONTEND IMPORTS ---
+from modules.calculations.dual_mode import (
+    calculate_normalized_pace,
+    calculate_running_stress_score,
+)
+from modules.calculations.pace_utils import format_pace
 from modules.db import SessionRecord, SessionStore
+from modules.domain import SessionType, classify_ramp_test, classify_session_type
 from modules.frontend.components import UIComponents
 from modules.frontend.layout import AppLayout
 from modules.frontend.state import StateManager
@@ -16,12 +21,12 @@ from modules.frontend.theme import ThemeManager
 from modules.ml_logic import MLX_AVAILABLE, MODEL_FILE, predict_only
 from modules.notes import TrainingNotes
 from modules.reporting.persistence import check_git_tracking
-
-# --- MODULE IMPORTS ---
-from modules.utils import load_data
-
-# --- SERVICES IMPORTS ---
+from modules.utils import load_data, validate_data_completeness
 from services import prepare_session_record, prepare_sticky_header_data
+from services.session_orchestrator import process_uploaded_session
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logger = logging.getLogger(__name__)
 
 
 # --- TAB REGISTRY (OCP) ---
@@ -55,8 +60,6 @@ class TabRegistry:
 
         Includes error boundary - tabs fail gracefully without crashing app.
         """
-        import logging
-
         logger = logging.getLogger(__name__)
 
         if tab_name not in cls._tabs:
@@ -65,8 +68,6 @@ class TabRegistry:
 
         module_path, func_name = cls._tabs[tab_name]
         try:
-            import importlib
-
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
             return func(*args, **kwargs)
@@ -124,10 +125,6 @@ if uploaded_file is not None:
             df_raw = load_data(uploaded_file)
 
             # --- SESSION TYPE CLASSIFICATION (MUST run first) ---
-            import hashlib
-
-            from modules.domain import SessionType, classify_ramp_test, classify_session_type
-
             # FIX: Use MD5 hash of file content instead of name+size to avoid collisions
             uploaded_file.seek(0)
             file_content = uploaded_file.read()
@@ -154,15 +151,11 @@ if uploaded_file is not None:
                 ramp_classification = st.session_state.get("ramp_classification")
 
             # --- DATA QUALITY VALIDATION ---
-            from modules.utils import validate_data_completeness
-
             quality_report = validate_data_completeness(df_raw)
             st.session_state["data_quality_report"] = quality_report
             st.session_state["sport_type"] = quality_report.sport_type
 
             # --- PROCESSING PIPELINE (SRP/DIP) ---
-            from services.session_orchestrator import process_uploaded_session
-
             df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
                 df_raw, rider_weight=runner_weight, vt1_watts=0, vt2_watts=0
             )
@@ -199,8 +192,6 @@ if uploaded_file is not None:
     # --- RENDER DASHBOARD ---
 
     # 1. Header Metrics — Running only
-    from modules.calculations.dual_mode import calculate_normalized_pace
-
     np_header = calculate_normalized_pace(df_plot)
     if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
     tss_header = 0.0
@@ -219,9 +210,6 @@ if uploaded_file is not None:
     UIComponents.render_sticky_header(header_data)
 
     # Calculate running metrics
-    from modules.calculations.dual_mode import calculate_running_stress_score
-    from modules.calculations.pace_utils import format_pace
-
     # FIX: Calculate duration from time column, not len(df_plot) which assumes 1Hz
     if "time" in df_plot.columns:
         duration_sec = float(df_plot["time"].max() - df_plot["time"].min())
@@ -258,8 +246,6 @@ if uploaded_file is not None:
     ramp_classification = st.session_state.get("ramp_classification")
 
     if session_type:
-        from modules.domain import SessionType
-
         # Build display message based on session type
         if session_type == SessionType.RAMP_TEST and ramp_classification:
             confidence = ramp_classification.confidence

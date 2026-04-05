@@ -35,6 +35,68 @@ def detect_vt_vslope_savgol(
     )
 
 
+def _normalize_column_units(
+    data: pd.DataFrame,
+    cols: dict,
+    has_vo2: bool,
+    has_vco2: bool,
+) -> None:
+    """Normalize VE/VO2/VCO2 units in-place (L/s→L/min, ml/min→L/min)."""
+    ve_max = data[cols["ve"]].max()
+    data["ve_lmin"] = data[cols["ve"]] * 60 if ve_max < 8.0 else data[cols["ve"]]
+
+    if has_vo2:
+        data["vo2_lmin"] = (
+            data[cols["vo2"]] / 1000 if data[cols["vo2"]].mean() > 100 else data[cols["vo2"]]
+        )
+    if has_vco2:
+        data["vco2_lmin"] = (
+            data[cols["vco2"]] / 1000 if data[cols["vco2"]].mean() > 100 else data[cols["vco2"]]
+        )
+
+
+def _apply_signal_smoothing(
+    data: pd.DataFrame,
+    has_vo2: bool,
+    has_vco2: bool,
+    smoothing_window_sec: int,
+) -> None:
+    """Apply rolling mean smoothing to VE/VO2/VCO2 signals in-place."""
+    window = max(3, min(smoothing_window_sec, len(data) // 4))
+    data["ve_smooth"] = data["ve_lmin"].rolling(window, center=True, min_periods=1).mean()
+    if has_vo2:
+        data["vo2_smooth"] = data["vo2_lmin"].rolling(window, center=True, min_periods=1).mean()
+    if has_vco2:
+        data["vco2_smooth"] = data["vco2_lmin"].rolling(window, center=True, min_periods=1).mean()
+
+
+def _remove_respiratory_artifacts(
+    data: pd.DataFrame,
+    has_vo2: bool,
+    has_vco2: bool,
+    notes: List[str],
+) -> None:
+    """Remove VE spikes without matching VO2/VCO2 change in-place."""
+    if not (has_vo2 and has_vco2):
+        return
+
+    ve_diff = data["ve_smooth"].diff().abs()
+    vo2_diff = data["vo2_smooth"].diff().abs()
+    vco2_diff = data["vco2_smooth"].diff().abs()
+
+    ve_threshold = ve_diff.std() * 3
+    gas_threshold = max(vo2_diff.std(), vco2_diff.std())
+
+    artifact_mask = (ve_diff > ve_threshold) & (
+        (vo2_diff < gas_threshold) & (vco2_diff < gas_threshold)
+    )
+    artifact_count = artifact_mask.sum()
+    if artifact_count > 0:
+        notes.append(f"Removed {artifact_count} respiratory artifacts")
+        data.loc[artifact_mask, "ve_smooth"] = np.nan
+        data["ve_smooth"] = data["ve_smooth"].interpolate(method="linear")
+
+
 def _preprocess_ventilation_data(
     df: pd.DataFrame,
     power_column: str,
@@ -54,7 +116,6 @@ def _preprocess_ventilation_data(
     data = df.copy()
     data.columns = data.columns.str.lower().str.strip()
 
-    # Normalize column names mapping
     cols = {
         "power": power_column.lower(),
         "ve": ve_column.lower(),
@@ -64,10 +125,8 @@ def _preprocess_ventilation_data(
         "hr": hr_column.lower(),
     }
 
-    # Initialize result with notes
     preprocess_result = {"analysis_notes": [], "has_gas_exchange": False, "error": None}
 
-    # Check required columns
     if cols["power"] not in data.columns:
         preprocess_result["error"] = f"Missing {power_column}"
         return data, cols, {}, preprocess_result
@@ -75,70 +134,16 @@ def _preprocess_ventilation_data(
         preprocess_result["error"] = f"Missing {ve_column}"
         return data, cols, {}, preprocess_result
 
-    # Check for gas exchange data
     has_vo2 = cols["vo2"] in data.columns and data[cols["vo2"]].notna().sum() > 10
     has_vco2 = cols["vco2"] in data.columns and data[cols["vco2"]].notna().sum() > 10
     has_hr = cols["hr"] in data.columns and data[cols["hr"]].notna().sum() > 10
     preprocess_result["has_gas_exchange"] = has_vo2 and has_vco2
 
-    # Unit normalization: VE L/s → L/min
-    ve_max = data[cols["ve"]].max()
-    if ve_max < 8.0:
-        data["ve_lmin"] = data[cols["ve"]] * 60
-    else:
-        data["ve_lmin"] = data[cols["ve"]]
+    _normalize_column_units(data, cols, has_vo2, has_vco2)
+    _apply_signal_smoothing(data, has_vo2, has_vco2, smoothing_window_sec)
+    _remove_respiratory_artifacts(data, has_vo2, has_vco2, preprocess_result["analysis_notes"])
 
-    # VO2/VCO2: ml/min → L/min
-    if has_vo2:
-        if data[cols["vo2"]].mean() > 100:
-            data["vo2_lmin"] = data[cols["vo2"]] / 1000
-        else:
-            data["vo2_lmin"] = data[cols["vo2"]]
-
-    if has_vco2:
-        if data[cols["vco2"]].mean() > 100:
-            data["vco2_lmin"] = data[cols["vco2"]] / 1000
-        else:
-            data["vco2_lmin"] = data[cols["vco2"]]
-
-    # Smoothing
-    window = min(smoothing_window_sec, len(data) // 4)
-    if window < 3:
-        window = 3
-
-    data["ve_smooth"] = data["ve_lmin"].rolling(window, center=True, min_periods=1).mean()
-
-    if has_vo2:
-        data["vo2_smooth"] = data["vo2_lmin"].rolling(window, center=True, min_periods=1).mean()
-    if has_vco2:
-        data["vco2_smooth"] = data["vco2_lmin"].rolling(window, center=True, min_periods=1).mean()
-
-    # Artifact detection: Remove spikes in VE without matching VO2/VCO2 change
-    if has_vo2 and has_vco2:
-        ve_diff = data["ve_smooth"].diff().abs()
-        vo2_diff = data["vo2_smooth"].diff().abs()
-        vco2_diff = data["vco2_smooth"].diff().abs()
-
-        ve_threshold = ve_diff.std() * 3
-        gas_threshold = max(vo2_diff.std(), vco2_diff.std())
-
-        artifact_mask = (ve_diff > ve_threshold) & (
-            (vo2_diff < gas_threshold) & (vco2_diff < gas_threshold)
-        )
-        artifact_count = artifact_mask.sum()
-        if artifact_count > 0:
-            preprocess_result["analysis_notes"].append(
-                f"Removed {artifact_count} respiratory artifacts"
-            )
-            data.loc[artifact_mask, "ve_smooth"] = np.nan
-            data["ve_smooth"] = data["ve_smooth"].interpolate(method="linear")
-
-    flags = {
-        "has_vo2": has_vo2,
-        "has_vco2": has_vco2,
-        "has_hr": has_hr,
-    }
-
+    flags = {"has_vo2": has_vo2, "has_vco2": has_vco2, "has_hr": has_hr}
     return data, cols, flags, preprocess_result
 
 
@@ -205,6 +210,26 @@ def _detect_vt1_cpet(
     return result, vt1_idx
 
 
+def _store_vt2_point_data(
+    df_steps: pd.DataFrame,
+    vt2_idx: int,
+    vo2max: Optional[float],
+    result: dict,
+) -> None:
+    """Store common VT2 point data (watts, ve, step, optional hr/br) into result."""
+    result["vt2_watts"] = int(df_steps.loc[vt2_idx, "power"])
+    result["vt2_ve"] = round(df_steps.loc[vt2_idx, "ve"], 1)
+    result["vt2_step"] = int(df_steps.loc[vt2_idx, "step"])
+    if "hr" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "hr"]):
+        result["vt2_hr"] = int(df_steps.loc[vt2_idx, "hr"])
+    if "br" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "br"]):
+        result["vt2_br"] = int(df_steps.loc[vt2_idx, "br"])
+    if "vo2" in df_steps.columns:
+        result["vt2_vo2"] = round(df_steps.loc[vt2_idx, "vo2"], 2)
+        if vo2max and vo2max > 0:
+            result["vt2_pct_vo2max"] = round(df_steps.loc[vt2_idx, "vo2"] / vo2max * 100, 1)
+
+
 def _detect_vt2_cpet(
     df_steps: pd.DataFrame,
     has_gas_exchange: bool,
@@ -229,14 +254,10 @@ def _detect_vt2_cpet(
     vo2max = df_steps["vo2"].max() if "vo2" in df_steps.columns else None
 
     search_start = vt1_idx + 1 if vt1_idx else 3
-
-    # Guard: ensure search_start is within bounds
     if search_start >= len(df_steps) - 4:
         search_start = max(3, len(df_steps) // 2)
 
-    # Only search if we have enough data points remaining
-    remaining_points = len(df_steps) - search_start
-    if remaining_points < 4:
+    if len(df_steps) - search_start < 4:
         return result
 
     vt2_idx = _find_breakpoint_segmented(
@@ -245,78 +266,32 @@ def _detect_vt2_cpet(
         min_segment_size=2,
     )
 
-    if vt2_idx is not None:
-        vt2_idx += search_start  # Adjust for subset
+    if vt2_idx is None:
+        return result
 
-        if vt2_idx < len(df_steps):
-            # Validate: RER should be near 1.0
-            rer_at_vt2 = df_steps.loc[vt2_idx, "rer"]
+    vt2_idx += search_start
+    if vt2_idx >= len(df_steps):
+        return result
 
-            if pd.notna(rer_at_vt2) and 0.95 <= rer_at_vt2 <= 1.15:
-                result["vt2_watts"] = int(df_steps.loc[vt2_idx, "power"])
-                result["vt2_ve"] = round(df_steps.loc[vt2_idx, "ve"], 1)
-                result["vt2_vo2"] = (
-                    round(df_steps.loc[vt2_idx, "vo2"], 2) if "vo2" in df_steps.columns else None
-                )
-                result["vt2_step"] = int(df_steps.loc[vt2_idx, "step"])
-                result["vt2_pct_vo2max"] = (
-                    round(df_steps.loc[vt2_idx, "vo2"] / vo2max * 100, 1)
-                    if vo2max and vo2max > 0 and "vo2" in df_steps.columns
-                    else None
-                )
-                if "hr" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "hr"]):
-                    result["vt2_hr"] = int(df_steps.loc[vt2_idx, "hr"])
-                if "br" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "br"]):
-                    result["vt2_br"] = int(df_steps.loc[vt2_idx, "br"])
-                result["analysis_notes"].append(
-                    f"VT2 detected at step {result['vt2_step']} (RER={rer_at_vt2:.2f})"
-                )
-            else:
-                # Accept but note RER discrepancy
-                result["vt2_watts"] = int(df_steps.loc[vt2_idx, "power"])
-                result["vt2_ve"] = round(df_steps.loc[vt2_idx, "ve"], 1)
-                result["vt2_step"] = int(df_steps.loc[vt2_idx, "step"])
-                if "hr" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "hr"]):
-                    result["vt2_hr"] = int(df_steps.loc[vt2_idx, "hr"])
-                if "br" in df_steps.columns and pd.notna(df_steps.loc[vt2_idx, "br"]):
-                    result["vt2_br"] = int(df_steps.loc[vt2_idx, "br"])
-                rer_str = f"{rer_at_vt2:.2f}" if pd.notna(rer_at_vt2) else "N/A"
-                result["analysis_notes"].append(f"VT2 detected but RER={rer_str} (expected ~1.0)")
+    _store_vt2_point_data(df_steps, vt2_idx, vo2max, result)
+
+    rer_at_vt2 = df_steps.loc[vt2_idx, "rer"]
+    rer_str = f"{rer_at_vt2:.2f}" if pd.notna(rer_at_vt2) else "N/A"
+
+    if pd.notna(rer_at_vt2) and 0.95 <= rer_at_vt2 <= 1.15:
+        result["analysis_notes"].append(
+            f"VT2 detected at step {result['vt2_step']} (RER={rer_str})"
+        )
+    else:
+        result["analysis_notes"].append(f"VT2 detected but RER={rer_str} (expected ~1.0)")
 
     return result
 
 
-def _run_ve_only_mode(
-    df_steps: pd.DataFrame,
-    data: pd.DataFrame,
-    cols: dict,
-    flags: dict,
-    result: dict,
-) -> dict:
-    """
-    VE-only 4-point CPET detection for TymeWear data.
-
-    Detects: VT1_onset, VT1_steady, RCP_onset, RCP_steady
-    Builds: 4 metabolic domains (Pure Aerobic, Upper Aerobic, Heavy, Severe)
-
-    Args:
-        df_steps: DataFrame with aggregated step data
-        data: Original preprocessed data
-        cols: Column name mapping
-        flags: Flags dict with has_hr, has_br, etc.
-        result: Result dict to update
-
-    Returns:
-        Updated result dict with VE-only detection
-    """
+def _ve_smooth_signals(df_steps: pd.DataFrame) -> None:
+    """Apply Savitzky-Golay smoothing to VE signal (mutates df_steps in place)."""
     from scipy.signal import savgol_filter
 
-    result["analysis_notes"].append("VE-only mode: 4-point CPET detection")
-    result["method"] = "ve_only_4point_cpet"
-
-    # =====================================================================
-    # 1. PREPROCESSING
-    # =====================================================================
     try:
         window = min(5, len(df_steps) if len(df_steps) % 2 == 1 else len(df_steps) - 1)
         if window < 3:
@@ -327,19 +302,20 @@ def _run_ve_only_mode(
     except (ValueError, TypeError):
         df_steps["ve_smooth"] = df_steps["ve"].rolling(3, center=True, min_periods=1).mean()
 
-    has_hr = "hr" in df_steps.columns and df_steps["hr"].notna().sum() > 3
-    has_br = "br" in df_steps.columns and df_steps["br"].notna().sum() > 3
 
+def _ve_compute_derivatives(
+    df_steps: pd.DataFrame,
+    has_br: bool,
+    has_hr: bool,
+) -> None:
+    """Calculate VE, BR, VT, and HR derivatives (mutates df_steps in place)."""
     # Smooth BR if available
     if has_br:
         df_steps["br_smooth"] = df_steps["br"].rolling(3, center=True, min_periods=1).mean()
-        # Tidal Volume = VE / BR
         df_steps["vt_calc"] = df_steps["ve_smooth"] / df_steps["br_smooth"].replace(0, np.nan)
         df_steps["vt_smooth"] = df_steps["vt_calc"].rolling(3, center=True, min_periods=1).mean()
 
-    # =====================================================================
-    # 2. CALCULATE DERIVATIVES
-    # =====================================================================
+    # VE derivatives
     ve_slope = np.gradient(df_steps["ve_smooth"].values, df_steps["power"].values)
     df_steps["ve_slope"] = ve_slope
 
@@ -355,7 +331,6 @@ def _run_ve_only_mode(
             df_steps["br_slope"].rolling(3, center=True, min_periods=1).mean()
         )
 
-        # VT (tidal volume) derivatives
         vt_slope = np.gradient(df_steps["vt_smooth"].ffill().values, df_steps["power"].values)
         df_steps["vt_slope"] = vt_slope
         df_steps["vt_slope_smooth"] = (
@@ -372,23 +347,15 @@ def _run_ve_only_mode(
         else:
             df_steps["hr_drift"] = np.ones(len(hr_slope))
 
-    # =====================================================================
-    # 3. DETECT 4 PHYSIOLOGICAL POINTS
-    # =====================================================================
-    baseline_ve_slope = np.mean(df_steps["ve_slope"].iloc[: min(4, len(df_steps))])
-    baseline_ve_accel = np.mean(df_steps["ve_accel_smooth"].iloc[: min(4, len(df_steps))])
-    baseline_br_slope = 0
-    if has_br:
-        baseline_br_slope = np.mean(df_steps["br_slope_smooth"].iloc[: min(4, len(df_steps))])
 
-    vt1_onset_idx = None
-    vt1_steady_idx = None
-    rcp_onset_idx = None
-    rcp_steady_idx = None
-
-    # ---------------------------------------------------------------------
-    # A. VT1_ONSET (GET / LT1 Onset)
-    # ---------------------------------------------------------------------
+def _detect_vt1_onset(
+    df_steps: pd.DataFrame,
+    baseline_ve_slope: float,
+    baseline_ve_accel: float,
+    baseline_br_slope: float,
+    has_br: bool,
+) -> Optional[int]:
+    """Detect VT1 onset (GET / LT1) from VE acceleration sign-change."""
     for i in range(3, len(df_steps) - 4):
         accel_prev = df_steps["ve_accel_smooth"].iloc[i - 1]
         accel_curr = df_steps["ve_accel_smooth"].iloc[i]
@@ -405,229 +372,345 @@ def _run_ve_only_mode(
 
         if (sign_change or slope_rising) and br_not_spiking:
             if df_steps["ve_slope"].iloc[i + 2] > baseline_ve_slope * 1.05:
-                vt1_onset_idx = i
-                break
+                return i
+    return None
 
-    # ---------------------------------------------------------------------
-    # B. VT1_STEADY (LT1 Steady / Upper Aerobic Ceiling)
-    # ---------------------------------------------------------------------
-    vt1_steady_is_real = False
 
-    if vt1_onset_idx is not None:
-        for i in range(vt1_onset_idx + 2, len(df_steps) - 3):
-            curr_slope = df_steps["ve_slope"].iloc[i]
-            next_slope = df_steps["ve_slope"].iloc[i + 1]
-            next2_slope = df_steps["ve_slope"].iloc[i + 2]
+def _detect_vt1_steady(
+    df_steps: pd.DataFrame,
+    vt1_onset_idx: Optional[int],
+    baseline_ve_slope: float,
+    baseline_ve_accel: float,
+    baseline_br_slope: float,
+    has_br: bool,
+) -> Optional[int]:
+    """Detect VT1 steady plateau (LT1 Steady / Upper Aerobic Ceiling)."""
+    if vt1_onset_idx is None:
+        return None
 
-            elevated = curr_slope > baseline_ve_slope * 1.15
+    for i in range(vt1_onset_idx + 2, len(df_steps) - 3):
+        curr_slope = df_steps["ve_slope"].iloc[i]
+        next_slope = df_steps["ve_slope"].iloc[i + 1]
+        next2_slope = df_steps["ve_slope"].iloc[i + 2]
 
-            delta_1 = abs(next_slope - curr_slope) / max(abs(curr_slope), 0.01)
-            delta_2 = abs(next2_slope - curr_slope) / max(abs(curr_slope), 0.01)
-            slope_stable = delta_1 < 0.12 and delta_2 < 0.15
+        elevated = curr_slope > baseline_ve_slope * 1.15
 
-            br_ok = True
-            if has_br and baseline_br_slope > 0:
-                br_at_i = df_steps["br_slope_smooth"].iloc[i]
-                br_ok = br_at_i < baseline_br_slope * 1.5
+        delta_1 = abs(next_slope - curr_slope) / max(abs(curr_slope), 0.01)
+        delta_2 = abs(next2_slope - curr_slope) / max(abs(curr_slope), 0.01)
+        slope_stable = delta_1 < 0.12 and delta_2 < 0.15
 
-            ve_accel_at_i = df_steps["ve_accel_smooth"].iloc[i]
-            no_exponential = ve_accel_at_i < baseline_ve_accel * 2.5
+        br_ok = True
+        if has_br and baseline_br_slope > 0:
+            br_at_i = df_steps["br_slope_smooth"].iloc[i]
+            br_ok = br_at_i < baseline_br_slope * 1.5
 
-            if elevated and slope_stable and br_ok and no_exponential:
-                vt1_steady_idx = i
-                vt1_steady_is_real = True
-                break
+        ve_accel_at_i = df_steps["ve_accel_smooth"].iloc[i]
+        no_exponential = ve_accel_at_i < baseline_ve_accel * 2.5
 
-    result["vt1_steady_is_real"] = vt1_steady_is_real
+        if elevated and slope_stable and br_ok and no_exponential:
+            return i
+    return None
 
-    # ---------------------------------------------------------------------
-    # C. RCP_ONSET (VT2 / LT2 Onset - Respiratory Compensation Point)
-    # ---------------------------------------------------------------------
-    search_start = vt1_steady_idx if vt1_steady_idx else (vt1_onset_idx + 2 if vt1_onset_idx else 4)
 
-    if search_start and search_start < len(df_steps) - 3:
-        search_df = df_steps.iloc[search_start:]
+def _detect_rcp_onset(
+    df_steps: pd.DataFrame,
+    vt1_onset_idx: Optional[int],
+    vt1_steady_idx: Optional[int],
+    baseline_br_slope: float,
+    has_br: bool,
+) -> Optional[int]:
+    """Detect RCP onset (VT2 / LT2 - Respiratory Compensation Point)."""
+    search_start = (
+        vt1_steady_idx
+        if vt1_steady_idx
+        else (vt1_onset_idx + 2 if vt1_onset_idx is not None else 4)
+    )
+    if search_start is None or search_start >= len(df_steps) - 3:
+        return None
 
-        if len(search_df) >= 3:
-            max_accel_idx = search_df["ve_accel_smooth"].idxmax()
-            max_accel_val = df_steps.loc[max_accel_idx, "ve_accel_smooth"]
+    search_df = df_steps.iloc[search_start:]
+    if len(search_df) < 3:
+        return None
 
-            rcp_candidates = []
+    max_accel_idx = search_df["ve_accel_smooth"].idxmax()
+    max_accel_val = df_steps.loc[max_accel_idx, "ve_accel_smooth"]
 
-            for idx in search_df.index:
-                ve_accel_high = df_steps.loc[idx, "ve_accel_smooth"] > max_accel_val * 0.6
+    rcp_candidates: list = []
+    for idx in search_df.index:
+        ve_accel_high = df_steps.loc[idx, "ve_accel_smooth"] > max_accel_val * 0.6
 
-                br_spike = True
-                vt_plateau = True
+        br_spike = True
+        vt_plateau = True
 
-                if has_br:
-                    br_slope_val = df_steps.loc[idx, "br_slope_smooth"]
-                    br_spike = (
-                        br_slope_val > baseline_br_slope * 2.0
-                        if baseline_br_slope > 0
-                        else br_slope_val > 0.1
-                    )
+        if has_br:
+            br_slope_val = df_steps.loc[idx, "br_slope_smooth"]
+            br_spike = (
+                br_slope_val > baseline_br_slope * 2.0
+                if baseline_br_slope > 0
+                else br_slope_val > 0.1
+            )
 
-                    vt_slope_val = abs(df_steps.loc[idx, "vt_slope_smooth"])
-                    baseline_vt_slope = abs(
-                        np.mean(df_steps["vt_slope_smooth"].iloc[: min(4, len(df_steps))])
-                    )
-                    vt_plateau = (
-                        vt_slope_val < baseline_vt_slope * 0.7 if baseline_vt_slope > 0 else True
-                    )
+            vt_slope_val = abs(df_steps.loc[idx, "vt_slope_smooth"])
+            baseline_vt_slope = abs(
+                np.mean(df_steps["vt_slope_smooth"].iloc[: min(4, len(df_steps))])
+            )
+            vt_plateau = vt_slope_val < baseline_vt_slope * 0.7 if baseline_vt_slope > 0 else True
 
-                if ve_accel_high and br_spike and vt_plateau:
-                    rcp_candidates.append((idx, df_steps.loc[idx, "ve_accel_smooth"]))
+        if ve_accel_high and br_spike and vt_plateau:
+            rcp_candidates.append((idx, df_steps.loc[idx, "ve_accel_smooth"]))
 
-            if rcp_candidates:
-                rcp_onset_idx = max(rcp_candidates, key=lambda x: x[1])[0]
-            else:
-                rcp_onset_idx = max_accel_idx
+    if rcp_candidates:
+        return max(rcp_candidates, key=lambda x: x[1])[0]
+    return max_accel_idx
 
-    # ---------------------------------------------------------------------
-    # D. RCP_STEADY (Full RCP / Severe Domain Entry)
-    # ---------------------------------------------------------------------
-    if rcp_onset_idx is not None:
-        rcp_onset_loc = df_steps.index.get_loc(rcp_onset_idx)
 
-        for i in range(rcp_onset_loc + 1, len(df_steps) - 1):
-            idx = df_steps.index[i]
+def _detect_rcp_steady(
+    df_steps: pd.DataFrame,
+    rcp_onset_idx: Optional[int],
+    baseline_ve_accel: float,
+    has_br: bool,
+    has_hr: bool,
+) -> Optional[int]:
+    """Detect RCP steady (Full RCP / Severe Domain Entry)."""
+    if rcp_onset_idx is None:
+        return None
 
-            ve_accel_high = df_steps.loc[idx, "ve_accel_smooth"] > baseline_ve_accel * 3
+    rcp_onset_loc = df_steps.index.get_loc(rcp_onset_idx)
 
-            br_dominates = True
-            if has_br:
-                br_slope_val = df_steps.loc[idx, "br_slope_smooth"]
-                vt_slope_val = df_steps.loc[idx, "vt_slope_smooth"]
-                br_dominates = (
-                    abs(br_slope_val) > abs(vt_slope_val) * 1.5 if vt_slope_val != 0 else True
-                )
+    for i in range(rcp_onset_loc + 1, len(df_steps) - 1):
+        idx = df_steps.index[i]
 
-            hr_drift_strong = True
-            if has_hr:
-                hr_drift_strong = df_steps.loc[idx, "hr_drift"] > 1.5
+        ve_accel_high = df_steps.loc[idx, "ve_accel_smooth"] > baseline_ve_accel * 3
 
-            if ve_accel_high and br_dominates and hr_drift_strong:
-                rcp_steady_idx = idx
-                break
+        br_dominates = True
+        if has_br:
+            br_slope_val = df_steps.loc[idx, "br_slope_smooth"]
+            vt_slope_val = df_steps.loc[idx, "vt_slope_smooth"]
+            br_dominates = (
+                abs(br_slope_val) > abs(vt_slope_val) * 1.5 if vt_slope_val != 0 else True
+            )
 
-        if rcp_steady_idx is None and rcp_onset_loc + 1 < len(df_steps):
-            rcp_steady_idx = df_steps.index[min(rcp_onset_loc + 1, len(df_steps) - 1)]
+        hr_drift_strong = True
+        if has_hr:
+            hr_drift_strong = df_steps.loc[idx, "hr_drift"] > 1.5
 
-    # =====================================================================
-    # 4. STORE RESULTS
-    # =====================================================================
-    def get_point_data(idx, point_name):
-        if idx is None:
-            return None
-        row = (
-            df_steps.loc[idx]
-            if isinstance(idx, (int, np.integer)) and idx in df_steps.index
-            else df_steps.iloc[idx]
-        )
-        data = {
-            "watts": int(row["power"]),
-            "ve": round(row["ve"], 1),
-            "step": int(row["step"]),
-            "time": row.get("time", 0),
-        }
-        if "hr" in row and pd.notna(row["hr"]):
-            data["hr"] = int(row["hr"])
-        if "br" in row and pd.notna(row["br"]):
-            data["br"] = int(row["br"])
-        if "vt_smooth" in row and pd.notna(row["vt_smooth"]):
-            data["vt"] = round(row["vt_smooth"], 2)
-        return data
+        if ve_accel_high and br_dominates and hr_drift_strong:
+            return idx
 
+    if rcp_onset_loc + 1 < len(df_steps):
+        return df_steps.index[min(rcp_onset_loc + 1, len(df_steps) - 1)]
+    return None
+
+
+def _get_point_data(
+    df_steps: pd.DataFrame,
+    idx: Optional[int],
+) -> Optional[dict]:
+    """Extract physiological data at a given step index."""
+    if idx is None:
+        return None
+    row = (
+        df_steps.loc[idx]
+        if isinstance(idx, (int, np.integer)) and idx in df_steps.index
+        else df_steps.iloc[idx]
+    )
+    pt: dict = {
+        "watts": int(row["power"]),
+        "ve": round(row["ve"], 1),
+        "step": int(row["step"]),
+        "time": row.get("time", 0),
+    }
+    if "hr" in row and pd.notna(row["hr"]):
+        pt["hr"] = int(row["hr"])
+    if "br" in row and pd.notna(row["br"]):
+        pt["br"] = int(row["br"])
+    if "vt_smooth" in row and pd.notna(row["vt_smooth"]):
+        pt["vt"] = round(row["vt_smooth"], 2)
+    return pt
+
+
+def _store_detection_results(
+    df_steps: pd.DataFrame,
+    result: dict,
+    vt1_onset_idx: Optional[int],
+    vt1_steady_idx: Optional[int],
+    rcp_onset_idx: Optional[int],
+    rcp_steady_idx: Optional[int],
+) -> None:
+    """Store detected physiological points into result dict (mutates result)."""
     # VT1 Onset
     if vt1_onset_idx is not None:
-        pt = get_point_data(vt1_onset_idx, "vt1_onset")
-        result["vt1_onset_watts"] = pt["watts"]
-        result["vt1_watts"] = pt["watts"]
-        result["vt1_ve"] = pt["ve"]
-        result["vt1_step"] = pt["step"]
-        result["vt1_hr"] = pt.get("hr")
-        result["vt1_br"] = pt.get("br")
-        result["vt1_vt"] = pt.get("vt")
-        result["vt1_onset_time"] = pt.get("time")
-        result["analysis_notes"].append(f"VT1_onset (GET/LT1): {pt['watts']}W @ step {pt['step']}")
+        pt = _get_point_data(df_steps, vt1_onset_idx)
+        if pt is not None:
+            result["vt1_onset_watts"] = pt["watts"]
+            result["vt1_watts"] = pt["watts"]
+            result["vt1_ve"] = pt["ve"]
+            result["vt1_step"] = pt["step"]
+            result["vt1_hr"] = pt.get("hr")
+            result["vt1_br"] = pt.get("br")
+            result["vt1_vt"] = pt.get("vt")
+            result["vt1_onset_time"] = pt.get("time")
+            result["analysis_notes"].append(
+                f"VT1_onset (GET/LT1): {pt['watts']}W @ step {pt['step']}"
+            )
 
     # VT1 Steady (or Virtual if no plateau)
-    if vt1_steady_idx is not None and result.get("vt1_steady_is_real", False):
-        pt = get_point_data(vt1_steady_idx, "vt1_steady")
-        result["vt1_steady_watts"] = pt["watts"]
-        result["vt1_steady_ve"] = pt["ve"]
-        result["vt1_steady_hr"] = pt.get("hr")
-        result["vt1_steady_br"] = pt.get("br")
-        result["vt1_steady_vt"] = pt.get("vt")
-        result["vt1_steady_time"] = pt.get("time")
-        result["vt1_steady_is_interpolated"] = False
-        result["analysis_notes"].append(
-            f"VT1_steady (LT1 steady): {pt['watts']}W @ step {pt['step']} \u2713plateau"
-        )
-    elif result.get("vt1_onset_watts") and result.get("rcp_onset_watts"):
-        # NO REAL PLATEAU - create VIRTUAL interpolated point
-        vt1_onset_w = result["vt1_onset_watts"]
-        rcp_onset_w = result["rcp_onset_watts"]
-
-        vt1_steady_virtual_w = int((vt1_onset_w + rcp_onset_w) / 2)
-
-        virtual_mask = (df_steps["power"] >= vt1_steady_virtual_w - 15) & (
-            df_steps["power"] <= vt1_steady_virtual_w + 15
-        )
-        if virtual_mask.any():
-            closest_idx = (
-                df_steps.loc[virtual_mask, "power"].sub(vt1_steady_virtual_w).abs().idxmin()
+    vt1_steady_is_real = result.get("vt1_steady_is_real", False)
+    if vt1_steady_idx is not None and vt1_steady_is_real:
+        pt = _get_point_data(df_steps, vt1_steady_idx)
+        if pt is not None:
+            result["vt1_steady_watts"] = pt["watts"]
+            result["vt1_steady_ve"] = pt["ve"]
+            result["vt1_steady_hr"] = pt.get("hr")
+            result["vt1_steady_br"] = pt.get("br")
+            result["vt1_steady_vt"] = pt.get("vt")
+            result["vt1_steady_time"] = pt.get("time")
+            result["vt1_steady_is_interpolated"] = False
+            result["analysis_notes"].append(
+                f"VT1_steady (LT1 steady): {pt['watts']}W @ step {pt['step']} \u2713plateau"
             )
-            pt = get_point_data(closest_idx, "vt1_steady_virtual")
+    elif result.get("vt1_onset_watts") and result.get("rcp_onset_watts"):
+        _store_virtual_vt1_steady(df_steps, result)
+
+    # RCP Onset (VT2)
+    if rcp_onset_idx is not None:
+        pt = _get_point_data(df_steps, rcp_onset_idx)
+        if pt is not None:
+            result["rcp_onset_watts"] = pt["watts"]
+            result["vt2_watts"] = pt["watts"]
+            result["vt2_ve"] = pt["ve"]
+            result["vt2_step"] = pt["step"]
+            result["vt2_hr"] = pt.get("hr")
+            result["vt2_br"] = pt.get("br")
+            result["rcp_onset_vt"] = pt.get("vt")
+            result["rcp_onset_time"] = pt.get("time")
+            result["analysis_notes"].append(
+                f"RCP_onset (VT2/LT2): {pt['watts']}W @ step {pt['step']}"
+            )
+
+    # RCP Steady
+    if rcp_steady_idx is not None:
+        pt = _get_point_data(df_steps, rcp_steady_idx)
+        if pt is not None:
+            result["rcp_steady_watts"] = pt["watts"]
+            result["rcp_steady_ve"] = pt["ve"]
+            result["rcp_steady_hr"] = pt.get("hr")
+            result["rcp_steady_br"] = pt.get("br")
+            result["rcp_steady_vt"] = pt.get("vt")
+            result["rcp_steady_time"] = pt.get("time")
+            result["analysis_notes"].append(f"RCP_steady (Full RCP): {pt['watts']}W")
+
+
+def _store_virtual_vt1_steady(
+    df_steps: pd.DataFrame,
+    result: dict,
+) -> None:
+    """Create virtual interpolated VT1_steady when no real plateau exists."""
+    vt1_onset_w = result["vt1_onset_watts"]
+    rcp_onset_w = result["rcp_onset_watts"]
+
+    vt1_steady_virtual_w = int((vt1_onset_w + rcp_onset_w) / 2)
+
+    virtual_mask = (df_steps["power"] >= vt1_steady_virtual_w - 15) & (
+        df_steps["power"] <= vt1_steady_virtual_w + 15
+    )
+    if virtual_mask.any():
+        closest_idx = df_steps.loc[virtual_mask, "power"].sub(vt1_steady_virtual_w).abs().idxmin()
+        pt = _get_point_data(df_steps, closest_idx)
+        if pt is not None:
             result["vt1_steady_watts"] = pt["watts"]
             result["vt1_steady_ve"] = pt["ve"]
             result["vt1_steady_hr"] = pt.get("hr")
             result["vt1_steady_br"] = pt.get("br")
             result["vt1_steady_time"] = pt.get("time")
-        else:
-            result["vt1_steady_watts"] = vt1_steady_virtual_w
+    else:
+        result["vt1_steady_watts"] = vt1_steady_virtual_w
 
-        result["vt1_steady_is_interpolated"] = True
+    result["vt1_steady_is_interpolated"] = True
+    result["analysis_notes"].append(
+        f"VT1_steady (interpolated): {result['vt1_steady_watts']}W - no physiological plateau detected"
+    )
+    result["no_steady_state_interpretation"] = (
+        "Pomi\u0119dzy VT1_onset a RCP_onset nie wyst\u0119puje stabilny stan ustalony wentylacji. "
+        "Krzywa VE wykazuje ci\u0105g\u0142e przyspieszanie, co wskazuje na: "
+        "w\u0105sk\u0105 stref\u0119 przej\u015bciow\u0105, szybkie narastanie buforowania H\u207a, "
+        "wczesne wej\u015bcie w domen\u0119 heavy. "
+        "Profil typowy dla sportowca o wysokiej pojemno\u015bci tlenowej i stromym przej\u015bciu do kompensacji oddechowej."
+    )
+
+
+def _enforce_monotonic_boundaries(
+    result: dict,
+    vt1_onset_w: int,
+    vt1_steady_w: int,
+    rcp_onset_w: int,
+    rcp_steady_w: int,
+    max_power: int,
+) -> Tuple[int, int, int, int]:
+    """Enforce monotonic ordering of zone boundaries and return corrected values."""
+    result["analysis_notes"].append("\u26a0\ufe0f Korekta granic: wymuszenie monotoniczno\u015bci")
+
+    if vt1_steady_w <= vt1_onset_w:
+        vt1_steady_w = vt1_onset_w + int((rcp_onset_w - vt1_onset_w) * 0.4)
+        result["vt1_steady_watts"] = vt1_steady_w
+
+    if rcp_onset_w <= vt1_steady_w:
+        rcp_onset_w = vt1_steady_w + int((max_power - vt1_steady_w) * 0.5)
+        result["rcp_onset_watts"] = rcp_onset_w
+        result["vt2_watts"] = rcp_onset_w
+
+    if rcp_steady_w <= rcp_onset_w:
+        rcp_steady_w = rcp_onset_w + 15
+        result["rcp_steady_watts"] = rcp_steady_w
+
+    return vt1_onset_w, vt1_steady_w, rcp_onset_w, rcp_steady_w
+
+
+def _validate_percentile_boundaries(
+    df_steps: pd.DataFrame,
+    data: pd.DataFrame,
+    cols: dict,
+    result: dict,
+    vt1_onset_w: int,
+    vt1_steady_w: int,
+    rcp_onset_w: int,
+) -> Tuple[int, int, int]:
+    """Apply percentile-based validation and correction to boundary watts."""
+    raw_power = data[data[cols["power"]] >= 100][cols["power"]].values
+    power_60th_raw = int(np.percentile(raw_power, 60))
+    power_80th_raw = int(np.percentile(raw_power, 80))
+
+    if vt1_onset_w < power_60th_raw:
         result["analysis_notes"].append(
-            f"VT1_steady (interpolated): {result['vt1_steady_watts']}W - no physiological plateau detected"
+            f"\u26a0\ufe0f VT1_onset ({vt1_onset_w}W) poni\u017cej 60 percentyla ({power_60th_raw}W) - korekta"
         )
+        vt1_onset_w = power_60th_raw
+        result["vt1_onset_watts"] = vt1_onset_w
+        result["vt1_watts"] = vt1_onset_w
 
-        result["no_steady_state_interpretation"] = (
-            "Pomi\u0119dzy VT1_onset a RCP_onset nie wyst\u0119puje stabilny stan ustalony wentylacji. "
-            "Krzywa VE wykazuje ci\u0105g\u0142e przyspieszanie, co wskazuje na: "
-            "w\u0105sk\u0105 stref\u0119 przej\u015bciow\u0105, szybkie narastanie buforowania H\u207a, "
-            "wczesne wej\u015bcie w domen\u0119 heavy. "
-            "Profil typowy dla sportowca o wysokiej pojemno\u015bci tlenowej i stromym przej\u015bciu do kompensacji oddechowej."
+    if rcp_onset_w < power_80th_raw:
+        result["analysis_notes"].append(
+            f"\u26a0\ufe0f RCP_onset ({rcp_onset_w}W) poni\u017cej 80 percentyla ({power_80th_raw}W) - korekta"
         )
+        rcp_onset_w = power_80th_raw
+        result["rcp_onset_watts"] = rcp_onset_w
+        result["vt2_watts"] = rcp_onset_w
 
-    # RCP Onset (VT2)
-    if rcp_onset_idx is not None:
-        pt = get_point_data(rcp_onset_idx, "rcp_onset")
-        result["rcp_onset_watts"] = pt["watts"]
-        result["vt2_watts"] = pt["watts"]
-        result["vt2_ve"] = pt["ve"]
-        result["vt2_step"] = pt["step"]
-        result["vt2_hr"] = pt.get("hr")
-        result["vt2_br"] = pt.get("br")
-        result["rcp_onset_vt"] = pt.get("vt")
-        result["rcp_onset_time"] = pt.get("time")
-        result["analysis_notes"].append(f"RCP_onset (VT2/LT2): {pt['watts']}W @ step {pt['step']}")
+    if vt1_steady_w <= vt1_onset_w:
+        vt1_steady_w = int((vt1_onset_w + rcp_onset_w) / 2)
+        result["vt1_steady_watts"] = vt1_steady_w
+        result["vt1_steady_is_interpolated"] = True
 
-    # RCP Steady
-    if rcp_steady_idx is not None:
-        pt = get_point_data(rcp_steady_idx, "rcp_steady")
-        result["rcp_steady_watts"] = pt["watts"]
-        result["rcp_steady_ve"] = pt["ve"]
-        result["rcp_steady_hr"] = pt.get("hr")
-        result["rcp_steady_br"] = pt.get("br")
-        result["rcp_steady_vt"] = pt.get("vt")
-        result["rcp_steady_time"] = pt.get("time")
-        result["analysis_notes"].append(f"RCP_steady (Full RCP): {pt['watts']}W")
+    return vt1_onset_w, vt1_steady_w, rcp_onset_w
 
-    # =====================================================================
-    # 5. BUILD METABOLIC ZONES
-    # =====================================================================
+
+def _build_metabolic_zones(
+    result: dict,
+    data: pd.DataFrame,
+    cols: dict,
+    df_steps: pd.DataFrame,
+) -> None:
+    """Apply fallbacks, validate boundaries, and build 4 metabolic zones."""
     max_power = int(df_steps["power"].max())
 
     vt1_onset_w = result.get("vt1_onset_watts")
@@ -679,53 +762,49 @@ def _run_ve_only_mode(
     boundaries_valid = vt1_onset_w < vt1_steady_w < rcp_onset_w < rcp_steady_w <= max_power
 
     if not boundaries_valid:
-        result["analysis_notes"].append(
-            "\u26a0\ufe0f Korekta granic: wymuszenie monotoniczno\u015bci"
+        vt1_onset_w, vt1_steady_w, rcp_onset_w, rcp_steady_w = _enforce_monotonic_boundaries(
+            result, vt1_onset_w, vt1_steady_w, rcp_onset_w, rcp_steady_w, max_power
         )
-
-        if vt1_steady_w <= vt1_onset_w:
-            vt1_steady_w = vt1_onset_w + int((rcp_onset_w - vt1_onset_w) * 0.4)
-            result["vt1_steady_watts"] = vt1_steady_w
-
-        if rcp_onset_w <= vt1_steady_w:
-            rcp_onset_w = vt1_steady_w + int((max_power - vt1_steady_w) * 0.5)
-            result["rcp_onset_watts"] = rcp_onset_w
-            result["vt2_watts"] = rcp_onset_w
-
-        if rcp_steady_w <= rcp_onset_w:
-            rcp_steady_w = rcp_onset_w + 15
-            result["rcp_steady_watts"] = rcp_steady_w
 
     result["boundaries_valid"] = vt1_onset_w < vt1_steady_w < rcp_onset_w < rcp_steady_w
 
     # PERCENTILE VALIDATION
-    raw_power = data[data[cols["power"]] >= 100][cols["power"]].values
-    power_60th_raw = int(np.percentile(raw_power, 60))
-    power_80th_raw = int(np.percentile(raw_power, 80))
-
-    if vt1_onset_w < power_60th_raw:
-        result["analysis_notes"].append(
-            f"\u26a0\ufe0f VT1_onset ({vt1_onset_w}W) poni\u017cej 60 percentyla ({power_60th_raw}W) - korekta"
-        )
-        vt1_onset_w = power_60th_raw
-        result["vt1_onset_watts"] = vt1_onset_w
-        result["vt1_watts"] = vt1_onset_w
-
-    if rcp_onset_w < power_80th_raw:
-        result["analysis_notes"].append(
-            f"\u26a0\ufe0f RCP_onset ({rcp_onset_w}W) poni\u017cej 80 percentyla ({power_80th_raw}W) - korekta"
-        )
-        rcp_onset_w = power_80th_raw
-        result["rcp_onset_watts"] = rcp_onset_w
-        result["vt2_watts"] = rcp_onset_w
-
-    if vt1_steady_w <= vt1_onset_w:
-        vt1_steady_w = int((vt1_onset_w + rcp_onset_w) / 2)
-        result["vt1_steady_watts"] = vt1_steady_w
-        result["vt1_steady_is_interpolated"] = True
+    vt1_onset_w, vt1_steady_w, rcp_onset_w = _validate_percentile_boundaries(
+        df_steps, data, cols, result, vt1_onset_w, vt1_steady_w, rcp_onset_w
+    )
 
     # BUILD 4 ZONES (MANDATORY)
-    zones = []
+    zones = _create_four_zones(
+        result,
+        vt1_onset_w,
+        vt1_steady_w,
+        rcp_onset_w,
+        rcp_steady_w,
+        max_power,
+        is_vt1_steady_interpolated,
+    )
+
+    if len(zones) != 4:
+        result["analysis_notes"].append(
+            f"\u274c B\u0141\u0104D: Wygenerowano {len(zones)} stref zamiast 4!"
+        )
+    else:
+        result["analysis_notes"].append("\u2713 4 strefy wygenerowane poprawnie")
+
+    result["metabolic_zones"] = zones
+
+
+def _create_four_zones(
+    result: dict,
+    vt1_onset_w: int,
+    vt1_steady_w: int,
+    rcp_onset_w: int,
+    rcp_steady_w: int,
+    max_power: int,
+    is_vt1_steady_interpolated: bool,
+) -> list:
+    """Build the 4 mandatory metabolic zones."""
+    zones: list = []
 
     # Zone 1: Pure Aerobic (< VT1_onset)
     zones.append(
@@ -808,16 +887,220 @@ def _run_ve_only_mode(
         }
     )
 
-    if len(zones) != 4:
-        result["analysis_notes"].append(
-            f"\u274c B\u0141\u0104D: Wygenerowano {len(zones)} stref zamiast 4!"
-        )
-    else:
-        result["analysis_notes"].append("\u2713 4 strefy wygenerowane poprawnie")
+    return zones
 
-    result["metabolic_zones"] = zones
+
+def _run_ve_only_mode(
+    df_steps: pd.DataFrame,
+    data: pd.DataFrame,
+    cols: dict,
+    flags: dict,
+    result: dict,
+) -> dict:
+    """
+    VE-only 4-point CPET detection for TymeWear data.
+
+    Detects: VT1_onset, VT1_steady, RCP_onset, RCP_steady
+    Builds: 4 metabolic domains (Pure Aerobic, Upper Aerobic, Heavy, Severe)
+
+    Args:
+        df_steps: DataFrame with aggregated step data
+        data: Original preprocessed data
+        cols: Column name mapping
+        flags: Flags dict with has_hr, has_br, etc.
+        result: Result dict to update
+
+    Returns:
+        Updated result dict with VE-only detection
+    """
+    result["analysis_notes"].append("VE-only mode: 4-point CPET detection")
+    result["method"] = "ve_only_4point_cpet"
+
+    # 1. PREPROCESSING
+    _ve_smooth_signals(df_steps)
+
+    has_hr = "hr" in df_steps.columns and df_steps["hr"].notna().sum() > 3
+    has_br = "br" in df_steps.columns and df_steps["br"].notna().sum() > 3
+
+    _ve_compute_derivatives(df_steps, has_br, has_hr)
+
+    # 2. COMPUTE BASELINES
+    baseline_ve_slope = np.mean(df_steps["ve_slope"].iloc[: min(4, len(df_steps))])
+    baseline_ve_accel = np.mean(df_steps["ve_accel_smooth"].iloc[: min(4, len(df_steps))])
+    baseline_br_slope = 0
+    if has_br:
+        baseline_br_slope = np.mean(df_steps["br_slope_smooth"].iloc[: min(4, len(df_steps))])
+
+    # 3. DETECT 4 PHYSIOLOGICAL POINTS
+    vt1_onset_idx = _detect_vt1_onset(
+        df_steps, baseline_ve_slope, baseline_ve_accel, baseline_br_slope, has_br
+    )
+    vt1_steady_idx = _detect_vt1_steady(
+        df_steps, vt1_onset_idx, baseline_ve_slope, baseline_ve_accel, baseline_br_slope, has_br
+    )
+
+    result["vt1_steady_is_real"] = vt1_steady_idx is not None
+
+    rcp_onset_idx = _detect_rcp_onset(
+        df_steps, vt1_onset_idx, vt1_steady_idx, baseline_br_slope, has_br
+    )
+    rcp_steady_idx = _detect_rcp_steady(df_steps, rcp_onset_idx, baseline_ve_accel, has_br, has_hr)
+
+    # 4. STORE RESULTS
+    _store_detection_results(
+        df_steps, result, vt1_onset_idx, vt1_steady_idx, rcp_onset_idx, rcp_steady_idx
+    )
+
+    # 5. BUILD METABOLIC ZONES
+    _build_metabolic_zones(result, data, cols, df_steps)
 
     return result
+
+
+def _find_br_col(data: pd.DataFrame) -> Optional[str]:
+    """Detect the breathing rate column name from known aliases."""
+    for col in ["tymebreathrate", "br", "resprate", "breathing_rate", "rf", "rr"]:
+        if col in data.columns:
+            return col
+    return None
+
+
+def _append_optional_metrics(
+    row: dict,
+    ss_df: pd.DataFrame,
+    cols: dict,
+    br_col: Optional[str],
+) -> None:
+    """Add optional physiological metrics (VO2, VCO2, HR, BR) to a step row in-place."""
+    if "vo2_smooth" in ss_df.columns:
+        row["vo2"] = ss_df["vo2_smooth"].mean()
+    if "vco2_smooth" in ss_df.columns:
+        row["vco2"] = ss_df["vco2_smooth"].mean()
+    if cols["hr"] in ss_df.columns:
+        row["hr"] = ss_df[cols["hr"]].mean()
+    if br_col and br_col in ss_df.columns:
+        row["br"] = ss_df[br_col].mean()
+
+
+def _compute_ss_from_bin(group: pd.DataFrame, cols: dict) -> pd.DataFrame:
+    """Compute the steady-state window from a power-binned group."""
+    if cols["time"] not in group.columns:
+        if len(group) > 90:
+            return group.iloc[-60:]
+        return group.iloc[30:] if len(group) > 30 else group
+
+    step_start_time = group[cols["time"]].min()
+    step_end_time = group[cols["time"]].max()
+
+    kinetics_cutoff = step_start_time + 30
+    steady_group = group[group[cols["time"]] >= kinetics_cutoff]
+
+    if len(steady_group) > 0:
+        ss_start_time = step_end_time - 60
+        return steady_group[steady_group[cols["time"]] >= ss_start_time]
+    return group.iloc[-60:]
+
+
+def _find_ramp_start(
+    raw_steps: List[dict],
+    min_power_watts: Optional[int],
+) -> int:
+    """Find the ramp protocol start index from sorted raw steps."""
+    if min_power_watts is not None and min_power_watts > 0:
+        for i, step in enumerate(raw_steps):
+            if step["power"] >= min_power_watts:
+                return i
+        return 0
+
+    min_step_duration = 120
+    power_increment_range = (15, 40)
+
+    for i in range(len(raw_steps) - 2):
+        step1, step2, step3 = raw_steps[i], raw_steps[i + 1], raw_steps[i + 2]
+        dur_ok = all(s["duration"] >= min_step_duration for s in [step1, step2, step3])
+
+        inc1 = step2["power"] - step1["power"]
+        inc2 = step3["power"] - step2["power"]
+        inc_ok = (
+            power_increment_range[0] <= inc1 <= power_increment_range[1]
+            and power_increment_range[0] <= inc2 <= power_increment_range[1]
+        )
+
+        if dur_ok and inc_ok:
+            return i
+
+    return 0
+
+
+def _aggregate_from_step_range(
+    data: pd.DataFrame,
+    cols: dict,
+    br_col: Optional[str],
+    step_range: Any,
+) -> List[dict]:
+    """Aggregate data using explicit step range objects."""
+    step_data: List[dict] = []
+    for i, step in enumerate(step_range.steps):
+        mask = (data[cols["time"]] >= step.start_time) & (data[cols["time"]] <= step.end_time)
+        step_df = data[mask]
+
+        if len(step_df) < 30:
+            continue
+
+        step_duration = step.end_time - step.start_time
+        ss_start_ratio = max(0.5, 1 - (90 / step_duration)) if step_duration > 90 else 0.5
+        cutoff = int(len(step_df) * ss_start_ratio)
+        ss_df = step_df.iloc[cutoff:]
+
+        row: dict = {
+            "step": i + 1,
+            "power": step.avg_power,
+            "ve": ss_df["ve_smooth"].mean(),
+            "time": step.start_time,
+            "duration": step_duration,
+        }
+        _append_optional_metrics(row, ss_df, cols, br_col)
+        step_data.append(row)
+    return step_data
+
+
+def _aggregate_from_bins(
+    data: pd.DataFrame,
+    cols: dict,
+    br_col: Optional[str],
+    min_power_watts: Optional[int],
+) -> List[dict]:
+    """Aggregate data using automatic 20W power binning."""
+    data["power_bin"] = (data[cols["power"]] // 20) * 20
+    raw_steps: List[dict] = []
+
+    for power_bin, group in data.groupby("power_bin"):
+        if len(group) < 30:
+            continue
+
+        duration = (
+            group[cols["time"]].max() - group[cols["time"]].min()
+            if cols["time"] in group.columns
+            else len(group)
+        )
+
+        ss_df = _compute_ss_from_bin(group, cols)
+
+        row: dict = {
+            "power": power_bin,
+            "ve": ss_df["ve_smooth"].mean(),
+            "time": group[cols["time"]].iloc[0] if cols["time"] in group.columns else 0,
+            "duration": duration,
+        }
+        _append_optional_metrics(row, ss_df, cols, br_col)
+        raw_steps.append(row)
+
+    raw_steps = sorted(raw_steps, key=lambda x: x["power"])
+    ramp_start_idx = _find_ramp_start(raw_steps, min_power_watts)
+
+    for i, step in enumerate(raw_steps[ramp_start_idx:]):
+        step["step"] = i + 1
+    return raw_steps[ramp_start_idx:]
 
 
 def _aggregate_steps(
@@ -838,129 +1121,12 @@ def _aggregate_steps(
     Returns:
         Tuple of (df_steps, step_data_list)
     """
-    step_data = []
-    br_col = None
-    for col in ["tymebreathrate", "br", "resprate", "breathing_rate", "rf", "rr"]:
-        if col in data.columns:
-            br_col = col
-            break
+    br_col = _find_br_col(data)
 
     if step_range and hasattr(step_range, "steps") and step_range.steps:
-        for i, step in enumerate(step_range.steps):
-            mask = (data[cols["time"]] >= step.start_time) & (data[cols["time"]] <= step.end_time)
-            step_df = data[mask]
-
-            if len(step_df) < 30:
-                continue
-
-            step_duration = step.end_time - step.start_time
-            ss_start_ratio = max(0.5, 1 - (90 / step_duration)) if step_duration > 90 else 0.5
-            cutoff = int(len(step_df) * ss_start_ratio)
-            ss_df = step_df.iloc[cutoff:]
-
-            row = {
-                "step": i + 1,
-                "power": step.avg_power,
-                "ve": ss_df["ve_smooth"].mean(),
-                "time": step.start_time,
-                "duration": step_duration,
-            }
-
-            if "vo2_smooth" in ss_df.columns:
-                row["vo2"] = ss_df["vo2_smooth"].mean()
-            if "vco2_smooth" in ss_df.columns:
-                row["vco2"] = ss_df["vco2_smooth"].mean()
-            if cols["hr"] in ss_df.columns:
-                row["hr"] = ss_df[cols["hr"]].mean()
-            if br_col and br_col in ss_df.columns:
-                row["br"] = ss_df[br_col].mean()
-
-            step_data.append(row)
+        step_data = _aggregate_from_step_range(data, cols, br_col, step_range)
     else:
-        data["power_bin"] = (data[cols["power"]] // 20) * 20
-        raw_steps = []
-        for power_bin, group in data.groupby("power_bin"):
-            if len(group) < 30:
-                continue
-
-            if cols["time"] in group.columns:
-                duration = group[cols["time"]].max() - group[cols["time"]].min()
-            else:
-                duration = len(group)
-
-            if cols["time"] in group.columns:
-                step_start_time = group[cols["time"]].min()
-                step_end_time = group[cols["time"]].max()
-
-                kinetics_cutoff = step_start_time + 30
-                steady_group = group[group[cols["time"]] >= kinetics_cutoff]
-
-                if len(steady_group) > 0:
-                    ss_start_time = step_end_time - 60
-                    ss_df = steady_group[steady_group[cols["time"]] >= ss_start_time]
-                else:
-                    ss_df = group.iloc[-60:]
-            else:
-                if len(group) > 90:
-                    ss_df = group.iloc[-60:]
-                else:
-                    ss_df = group.iloc[30:] if len(group) > 30 else group
-
-            row = {
-                "power": power_bin,
-                "ve": ss_df["ve_smooth"].mean(),
-                "time": group[cols["time"]].iloc[0] if cols["time"] in group.columns else 0,
-                "duration": duration,
-            }
-
-            if "vo2_smooth" in ss_df.columns:
-                row["vo2"] = ss_df["vo2_smooth"].mean()
-            if "vco2_smooth" in ss_df.columns:
-                row["vco2"] = ss_df["vco2_smooth"].mean()
-            if cols["hr"] in ss_df.columns:
-                row["hr"] = ss_df[cols["hr"]].mean()
-            if br_col and br_col in ss_df.columns:
-                row["br"] = ss_df[br_col].mean()
-
-            raw_steps.append(row)
-
-        raw_steps = sorted(raw_steps, key=lambda x: x["power"])
-
-        ramp_start_idx = 0
-
-        if min_power_watts is not None and min_power_watts > 0:
-            for i, step in enumerate(raw_steps):
-                if step["power"] >= min_power_watts:
-                    ramp_start_idx = i
-                    break
-        else:
-            min_step_duration = 120
-            power_increment_range = (15, 40)
-
-            for i in range(len(raw_steps) - 2):
-                step1 = raw_steps[i]
-                step2 = raw_steps[i + 1]
-                step3 = raw_steps[i + 2]
-
-                dur_ok = all(s["duration"] >= min_step_duration for s in [step1, step2, step3])
-
-                inc1 = step2["power"] - step1["power"]
-                inc2 = step3["power"] - step2["power"]
-                inc_ok = (
-                    power_increment_range[0] <= inc1 <= power_increment_range[1]
-                    and power_increment_range[0] <= inc2 <= power_increment_range[1]
-                )
-
-                if dur_ok and inc_ok:
-                    ramp_start_idx = i
-                    break
-
-        if ramp_start_idx > 0:
-            pass
-
-        for i, step in enumerate(raw_steps[ramp_start_idx:]):
-            step["step"] = i + 1
-            step_data.append(step)
+        step_data = _aggregate_from_bins(data, cols, br_col, min_power_watts)
 
     return pd.DataFrame(step_data).sort_values("power").reset_index(drop=True), step_data
 

@@ -193,21 +193,13 @@ class FitExporter:
         has_speed = "velocity_smooth" in df.columns or "speed" in df.columns
 
         # Create definition based on available fields
-        fields = [
-            (253, FIT_UINT32, 1),  # timestamp
-        ]
-
-        if has_power:
-            fields.append((7, FIT_UINT16, 1))  # power
-        if has_hr:
-            fields.append((3, FIT_UINT8, 1))  # heart_rate
-        if has_cadence:
-            fields.append((4, FIT_UINT8, 1))  # cadence
-        if has_speed:
-            fields.append((6, FIT_UINT16, 1))  # speed (m/s * 1000)
-
+        fields = self._build_record_fields(has_power, has_hr, has_cadence, has_speed)
         definition = self._create_definition(MSG_RECORD, fields)
         self._write_message(definition)
+
+        speed_col: str | None = None
+        if has_speed:
+            speed_col = "velocity_smooth" if "velocity_smooth" in df.columns else "speed"
 
         # Write each record
         time_col = "time" if "time" in df.columns else None
@@ -222,27 +214,58 @@ class FitExporter:
                 (start_time + timedelta(seconds=elapsed) - self.FIT_EPOCH).total_seconds()
             )
 
-            # Build data based on available fields
-            data_parts = [struct.pack("<I", timestamp)]
+            data = self._pack_record_data(
+                row, timestamp, speed_col, has_power, has_hr, has_cadence, has_speed
+            )
+            self._write_data(MSG_RECORD, data)
 
-            if has_power:
-                power = int(row.get("watts", 0))
-                data_parts.append(struct.pack("<H", max(0, min(65535, power))))
+    def _build_record_fields(
+        self, has_power: bool, has_hr: bool, has_cadence: bool, has_speed: bool
+    ) -> List[tuple]:
+        """Build field definition list based on available data columns."""
+        fields = [
+            (253, FIT_UINT32, 1),  # timestamp
+        ]
+        if has_power:
+            fields.append((7, FIT_UINT16, 1))  # power
+        if has_hr:
+            fields.append((3, FIT_UINT8, 1))  # heart_rate
+        if has_cadence:
+            fields.append((4, FIT_UINT8, 1))  # cadence
+        if has_speed:
+            fields.append((6, FIT_UINT16, 1))  # speed (m/s * 1000)
+        return fields
 
-            if has_hr:
-                hr = int(row.get("heartrate", 0))
-                data_parts.append(struct.pack("<B", max(0, min(255, hr))))
+    def _pack_record_data(
+        self,
+        row: pd.Series,
+        timestamp: int,
+        speed_col: str | None,
+        has_power: bool,
+        has_hr: bool,
+        has_cadence: bool,
+        has_speed: bool,
+    ) -> bytes:
+        """Pack a single record row into FIT binary data."""
+        data_parts = [struct.pack("<I", timestamp)]
 
-            if has_cadence:
-                cadence = int(row.get("cadence", 0))
-                data_parts.append(struct.pack("<B", max(0, min(255, cadence))))
+        if has_power:
+            power = int(row.get("watts", 0))
+            data_parts.append(struct.pack("<H", max(0, min(65535, power))))
 
-            if has_speed:
-                speed_col = "velocity_smooth" if "velocity_smooth" in df.columns else "speed"
-                speed = row.get(speed_col, 0) * 1000  # Convert m/s to mm/s
-                data_parts.append(struct.pack("<H", max(0, min(65535, int(speed)))))
+        if has_hr:
+            hr = int(row.get("heartrate", 0))
+            data_parts.append(struct.pack("<B", max(0, min(255, hr))))
 
-            self._write_data(MSG_RECORD, b"".join(data_parts))
+        if has_cadence:
+            cadence = int(row.get("cadence", 0))
+            data_parts.append(struct.pack("<B", max(0, min(255, cadence))))
+
+        if has_speed and speed_col is not None:
+            speed = row.get(speed_col, 0) * 1000  # Convert m/s to mm/s
+            data_parts.append(struct.pack("<H", max(0, min(65535, int(speed)))))
+
+        return b"".join(data_parts)
 
     def _write_session(self, df: pd.DataFrame, metrics: dict, start_time: datetime, sport: str):
         """Write session summary message."""

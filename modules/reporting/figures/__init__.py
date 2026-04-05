@@ -25,7 +25,7 @@ def generate_all_ramp_figures(
     report_data: Dict[str, Any],
     output_dir: str,
     config: Optional[Any] = None,
-    source_df: Optional["pd.DataFrame"] = None,
+    source_df: Optional[Any] = None,
     manual_overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
     """Generate all ramp test figures and save to directory.
