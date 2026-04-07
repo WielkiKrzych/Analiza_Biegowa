@@ -485,6 +485,44 @@ PRZED:                    PO:
 | **O2Hb** | 🔴 | Oksyhemoglobina | a.u. |
 | **HHb** | 🔵 | Deoksyhemoglobina | a.u. |
 
+### 🏷️ Ikony w Tooltipach Wykresów
+
+Wszystkie wykresy w aplikacji używają spójnych ikon emoji w tooltipach (po najechaniu kursorem):
+
+| Ikona | Metryka | Pliki UI |
+|-------|---------|----------|
+| ⏱️ | Tempo / Pace | `summary_timeline`, `summary_charts`, `kpi`, `model`, `summary` |
+| ❤️ | HR (Tętno) | `summary_timeline`, `summary_charts`, `kpi`, `heart_rate` |
+| 🩸 | SmO₂ / THb | `summary_timeline`, `summary_charts`, `hemo`, `kpi` |
+| 🫁 | VE / VT (Wentylacja) | `summary_timeline`, `vent_charts`, `kpi`, `summary` |
+| 🌬️ | BR (Częstość oddechów) | `vent_charts`, `kpi`, `summary` |
+| 🦶 | GCT (Kontakt z podłożem) | `biomech`, `summary_charts` |
+| 👟 | Cadence (Kadencja) | `biomech`, `summary_charts` |
+| ⚖️ | Balance (Balans) | `biomech`, `summary_charts` |
+| 📐 | VR (Vertical Ratio) | `biomech` |
+| 📊 | VO (Oscylacja pionowa) | `biomech`, `summary_charts` |
+| 📏 | Step Length (Długość kroku) | `biomech` |
+| 💪 | RE (Running Effectiveness) | `biomech` |
+| 🔴 | O2Hb (Oksyhemoglobina) | `summary_charts` |
+| 🔵 | HHb (Deoksyhemoglobina) | `summary_charts` |
+| 💓 | HRV / RMSSD | `summary_charts`, `hrv` |
+| 🌡️ | Temperature (Temperatura) | `thermal`, `summary_analysis` |
+| 🕐 | Czas (Time) | `vent_charts`, `hemo`, `heart_rate`, `nutrition` |
+| 📦 | Zapas (Reserve) | `nutrition` |
+| 🔥 | Spalanie (Burn rate) | `nutrition` |
+| 📈 | Trend | `vent_charts`, `kpi` |
+| 🏷️ | Zone (Strefa) | `threshold_analysis_ui` |
+
+**Przebieg Treningu** — ujednolicony tooltip (`hovermode="x unified"`):
+
+```
+🕐 00:25:30
+⏱️ Tempo: 4:15
+❤️ HR: 162 bpm
+🩸 SmO₂: 68.5%
+🫁 VE: 58.2 L/min
+```
+
 ---
 
 ## 🎨 Wykresy Fizjologiczne (vs Tempo)
