@@ -108,7 +108,7 @@ def _render_dfa_chart(df_dfa: Any) -> None:
             name="Indeks HRV",
             mode="lines",
             line=dict(color="#00cc96", width=2),
-            hovertemplate="Indeks: %{y:.2f}<extra></extra>",
+            hovertemplate="💓 Indeks: %{y:.2f}<extra></extra>",
         )
     )
 
@@ -183,7 +183,7 @@ def _render_rmssd_chart(df_dfa: Any) -> None:
             name="RMSSD",
             mode="lines",
             line=dict(color="#636efa", width=2),
-            hovertemplate="RMSSD: %{y:.1f} ms<extra></extra>",
+            hovertemplate="💓 RMSSD: %{y:.1f} ms<extra></extra>",
         )
     )
     fig_rmssd.add_trace(
@@ -263,7 +263,7 @@ def _render_poincare_plot(df_clean: Any) -> None:
             mode="markers",
             name="Interwały R-R",
             marker=dict(size=3, color="rgba(0, 204, 150, 0.5)", line=dict(width=0)),
-            hovertemplate="RR(n): %{x:.0f} ms<br>RR(n+1): %{y:.0f} ms<extra></extra>",
+            hovertemplate="💓 RR(n): %{x:.0f} ms<br>💓 RR(n+1): %{y:.0f} ms<extra></extra>",
         )
     )
 
@@ -315,20 +315,62 @@ def _render_ddfa_and_thresholds(df_dfa: Any) -> None:
         return
 
     ddfa_result = calculate_ddfa(df_dfa["alpha1"])
+
+    # Compute linear trend from DDFA alpha1 series
+    alpha1_series = ddfa_result.get("alpha1_series", np.array([]))
+    time_indices = ddfa_result.get("time_indices", np.array([]))
+
+    ddfa_slope = np.nan
+    r_squared = np.nan
+    classification = "Brak danych"
+
+    if len(alpha1_series) > 2 and len(time_indices) > 2:
+        # Fit linear regression: alpha1 vs time_index
+        valid_mask = ~np.isnan(alpha1_series)
+        if valid_mask.sum() > 2:
+            x = time_indices[valid_mask].astype(float)
+            y = alpha1_series[valid_mask]
+            # Convert beat indices to approximate minutes (assume ~1 beat/sec for HR data)
+            # Use simple linear regression
+            n_pts = len(x)
+            x_mean = x.mean()
+            y_mean = y.mean()
+            ss_xy = np.sum((x - x_mean) * (y - y_mean))
+            ss_xx = np.sum((x - x_mean) ** 2)
+            ss_yy = np.sum((y - y_mean) ** 2)
+            if ss_xx > 0:
+                slope_per_beat = ss_xy / ss_xx
+                # Approximate conversion: ~1 beat per second → slope per minute
+                slope_per_min = slope_per_beat * 60.0
+                ddfa_slope = slope_per_min
+                if ss_yy > 0:
+                    r_squared = (ss_xy**2) / (ss_xx * ss_yy)
+
+        # Classification based on slope
+        if not np.isnan(ddfa_slope):
+            if ddfa_slope < -0.05:
+                classification = "Spadek α1 — narastające zmęczenie centralne"
+            elif ddfa_slope < -0.01:
+                classification = "Lekki spadek α1 — umiarkowane zmęczenie"
+            elif ddfa_slope < 0.01:
+                classification = "Stabilny α1 — brak narastającego zmęczenia"
+            else:
+                classification = "Wzrost α1 — poprawa stabilności autonomicznej"
+
     col_dd1, col_dd2, col_dd3 = st.columns(3)
     col_dd1.metric(
         "DDFA (Trend α1)",
-        f"{ddfa_result['ddfa_slope']:.4f}/min",
+        f"{ddfa_slope:.4f}/min" if not np.isnan(ddfa_slope) else "N/A",
         help="Tempo spadku DFA α1 w czasie. Ujemne = narastające zmęczenie centralne",
     )
     col_dd2.metric(
         "R²",
-        f"{ddfa_result['r_squared']:.2f}",
+        f"{r_squared:.2f}" if not np.isnan(r_squared) else "N/A",
         help="Jakość dopasowania trendu liniowego",
     )
     col_dd3.metric(
         "Interpretacja",
-        ddfa_result["classification"],
+        classification,
     )
 
     _render_hrv_thresholds(df_dfa)

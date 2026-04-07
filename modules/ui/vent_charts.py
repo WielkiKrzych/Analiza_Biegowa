@@ -23,7 +23,7 @@ def _render_ve_section(target_df, startsec, endsec, interval_data, slope_ve, int
             mode="lines",
             name="VE (L/min)",
             line=dict(color="#ffa15a", width=2),
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>VE:</b> %{y:.1f} L/min<extra></extra>",
+            hovertemplate="<b>🕐 Czas:</b> %{customdata}<br><b>🫁 VE:</b> %{y:.1f} L/min<extra></extra>",
         )
     )
 
@@ -42,7 +42,7 @@ def _render_ve_section(target_df, startsec, endsec, interval_data, slope_ve, int
                 line=dict(color="#00BCD4", width=1),
                 yaxis="y2",
                 opacity=0.3,
-                hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
+                hovertemplate="<b>🕐 Czas:</b> %{customdata[0]}<br><b>⏱️ Tempo:</b> %{customdata[1]} min/km<extra></extra>",
             )
         )
 
@@ -66,7 +66,7 @@ def _render_ve_section(target_df, startsec, endsec, interval_data, slope_ve, int
                 mode="lines",
                 name="Trend VE (Man)",
                 line=dict(color="white", width=2, dash="dash"),
-                hovertemplate="<b>Trend:</b> %{y:.2f} L/min<extra></extra>",
+                hovertemplate="📈 <b>Trend:</b> %{y:.2f} L/min<extra></extra>",
             )
         )
 
@@ -192,7 +192,7 @@ def _build_br_figure(
             mode="lines",
             name="BR (/min)",
             line=dict(color="#00cc96", width=2),
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>BR:</b> %{y:.1f} /min<extra></extra>",
+            hovertemplate="<b>🕐 Czas:</b> %{customdata}<br><b>🌬️ BR:</b> %{y:.1f} /min<extra></extra>",
         )
     )
 
@@ -211,7 +211,7 @@ def _build_br_figure(
                 line=dict(color="#00BCD4", width=1),
                 yaxis="y2",
                 opacity=0.3,
-                hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
+                hovertemplate="<b>🕐 Czas:</b> %{customdata[0]}<br><b>⏱️ Tempo:</b> %{customdata[1]} min/km<extra></extra>",
             )
         )
 
@@ -235,7 +235,7 @@ def _build_br_figure(
                 mode="lines",
                 name="Trend BR",
                 line=dict(color="white", width=2, dash="dash"),
-                hovertemplate="<b>Trend:</b> %{y:.2f} /min<extra></extra>",
+                hovertemplate="📈 <b>Trend:</b> %{y:.2f} /min<extra></extra>",
             )
         )
 
@@ -397,7 +397,7 @@ def _build_tv_figure(
             mode="lines",
             name="VT (L)",
             line=dict(color="#ab63fa", width=2),
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>VT:</b> %{y:.2f} L<extra></extra>",
+            hovertemplate="<b>🕐 Czas:</b> %{customdata}<br><b>🫁 VT:</b> %{y:.2f} L<extra></extra>",
         )
     )
 
@@ -416,7 +416,7 @@ def _build_tv_figure(
                 line=dict(color="#00BCD4", width=1),
                 yaxis="y2",
                 opacity=0.3,
-                hovertemplate="<b>Czas:</b> %{customdata[0]}<br><b>Tempo:</b> %{customdata[1]} min/km<extra></extra>",
+                hovertemplate="<b>🕐 Czas:</b> %{customdata[0]}<br><b>⏱️ Tempo:</b> %{customdata[1]} min/km<extra></extra>",
             )
         )
 
@@ -440,7 +440,7 @@ def _build_tv_figure(
                 mode="lines",
                 name="Trend VT",
                 line=dict(color="white", width=2, dash="dash"),
-                hovertemplate="<b>Trend:</b> %{y:.3f} L<extra></extra>",
+                hovertemplate="📈 <b>Trend:</b> %{y:.3f} L<extra></extra>",
             )
         )
 

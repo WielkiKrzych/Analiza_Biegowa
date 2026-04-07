@@ -128,7 +128,7 @@ def render_model_tab(df_plot, cp_input, w_prime_input):
             mode="markers",
             name="PDC (Plik)",
             marker=dict(color="#00cc96", size=8),
-            hovertemplate="%{y:.0f} s/km",
+            hovertemplate="⏱️ %{y:.0f} s/km",
         )
     )
 
@@ -139,7 +139,7 @@ def render_model_tab(df_plot, cp_input, w_prime_input):
             mode="lines",
             name=f"Model: {format_pace(cs_pace)}/km",
             line=dict(color="#ef553b", dash="dash"),
-            hovertemplate="%{y:.0f} s/km",
+            hovertemplate="⏱️ %{y:.0f} s/km",
         )
     )
 

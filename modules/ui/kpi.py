@@ -30,7 +30,7 @@ def _build_drift_chart(
             y=pace_display,
             name="Tempo",
             line=dict(color=Config.COLOR_POWER, width=1.5),
-            hovertemplate="Tempo: %{customdata} min/km<extra></extra>",
+            hovertemplate="⏱️ Tempo: %{customdata} min/km<extra></extra>",
             customdata=[pace_customdata],
         )
     )
@@ -43,7 +43,7 @@ def _build_drift_chart(
                 name="HR",
                 yaxis="y2",
                 line=dict(color=Config.COLOR_HR, width=1.5),
-                hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+                hovertemplate="❤️ HR: %{y:.0f} BPM<extra></extra>",
             )
         )
     if "smo2_smooth" in df_plot_resampled.columns:
@@ -54,9 +54,10 @@ def _build_drift_chart(
                 name="SmO2",
                 yaxis="y3",
                 line=dict(color=Config.COLOR_SMO2, dash="dot", width=1.5),
-                hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
+                hovertemplate="🩸 SmO₂: %{y:.1f}%<extra></extra>",
             )
         )
+    )
 
     time_vals = (
         df_plot_resampled["time_min"].values
@@ -109,7 +110,7 @@ def _render_smo2_panel(df_plot: object, df_plot_resampled: object, tick_step: in
             y=df_plot_resampled[col_smo2],
             name="SmO2",
             line=dict(color="#ab63fa", width=2),
-            hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
+            hovertemplate="🩸 SmO₂: %{y:.1f}%<extra></extra>",
         )
     )
 
@@ -123,7 +124,7 @@ def _render_smo2_panel(df_plot: object, df_plot_resampled: object, tick_step: in
                 y=trend_y,
                 name="Trend",
                 line=dict(color="white", dash="dash", width=1.5),
-                hovertemplate="Trend: %{y:.1f}%<extra></extra>",
+                hovertemplate="📈 Trend: %{y:.1f}%<extra></extra>",
             )
         )
 
@@ -173,7 +174,7 @@ def _render_hr_panel(df_plot_resampled: object, tick_step: int = 5) -> None:
                 name="HR",
                 fill="tozeroy",
                 line=dict(color="#ef553b", width=2),
-                hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
+                hovertemplate="❤️ HR: %{y:.0f} BPM<extra></extra>",
             )
         )
     else:
@@ -228,7 +229,7 @@ def _render_ventilation_chart(
                 y=df_plot_resampled["tymeventilation_smooth"],
                 name="VE",
                 line=dict(color="#ffa15a", width=2),
-                hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
+                hovertemplate="🫁 VE: %{y:.1f} L/min<extra></extra>",
             )
         )
         trend_ve = calculate_trend(
@@ -241,7 +242,7 @@ def _render_ventilation_chart(
                     y=trend_ve,
                     name="Trend VE",
                     line=dict(color="#ffa15a", dash="dash", width=1.5),
-                    hovertemplate="Trend: %{y:.1f} L/min<extra></extra>",
+                    hovertemplate="📈 Trend: %{y:.1f} L/min<extra></extra>",
                 )
             )
 
@@ -253,7 +254,7 @@ def _render_ventilation_chart(
                 name="RR",
                 yaxis="y2",
                 line=dict(color="#19d3f3", dash="dot", width=2),
-                hovertemplate="RR: %{y:.1f} /min<extra></extra>",
+                hovertemplate="🌬️ RR: %{y:.1f} /min<extra></extra>",
             )
         )
 

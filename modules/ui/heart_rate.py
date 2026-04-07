@@ -103,7 +103,7 @@ def _render_hr_chart(df_segment: pd.DataFrame, avg_hr: float) -> None:
             line=dict(color="#d62728", width=2),
             customdata=df_segment["time_str"],
             hovertemplate=(
-                "<b>Czas:</b> %{customdata} (%{x}s)<br><b>HR (10s):</b> %{y:.1f} bpm<extra></extra>"
+                "<b>🕐 Czas:</b> %{customdata} (%{x}s)<br><b>❤️ HR (10s):</b> %{y:.1f} bpm<extra></extra>"
             ),
         )
     )

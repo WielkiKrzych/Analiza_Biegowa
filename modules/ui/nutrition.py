@@ -168,7 +168,7 @@ def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
                 name="Zapas Glikogenu",
                 fill="tozeroy",
                 line=dict(color=line_color, width=2),
-                hovertemplate="<b>Czas: %{x:.0f} min</b><br>Zapas: %{y:.0f} g<extra></extra>",
+                hovertemplate="<b>🕐 Czas: %{x:.0f} min</b><br>📦 Zapas: %{y:.0f} g<extra></extra>",
             )
         )
 
@@ -208,7 +208,7 @@ def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
                 name="Spalanie",
                 line=dict(color="#ff7f0e", width=2),
                 fill="tozeroy",
-                hovertemplate="<b>Czas: %{x:.0f} min</b><br>Spalanie: %{y:.0f} g/h<extra></extra>",
+                hovertemplate="<b>🕐 Czas: %{x:.0f} min</b><br>🔥 Spalanie: %{y:.0f} g/h<extra></extra>",
             )
         )
 
@@ -397,7 +397,7 @@ def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
                 name="Zapas Glikogenu",
                 fill="tozeroy",
                 line=dict(color=line_color, width=2),
-                hovertemplate="<b>Czas: %{x:.0f} min</b><br>Zapas: %{y:.0f} g<extra></extra>",
+                hovertemplate="<b>🕐 Czas: %{x:.0f} min</b><br>📦 Zapas: %{y:.0f} g<extra></extra>",
             )
         )
 
@@ -435,7 +435,7 @@ def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
                 name="Spalanie",
                 line=dict(color="#ff7f0e", width=2),
                 fill="tozeroy",
-                hovertemplate="<b>Czas: %{x:.0f} min</b><br>Spalanie: %{y:.0f} g/h<extra></extra>",
+                hovertemplate="<b>🕐 Czas: %{x:.0f} min</b><br>🔥 Spalanie: %{y:.0f} g/h<extra></extra>",
             )
         )
 

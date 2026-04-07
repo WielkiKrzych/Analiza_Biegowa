@@ -288,7 +288,7 @@ def _render_thermal_analysis_section(df_plot):
                 y=core_smooth,
                 name="Core Temp",
                 line=dict(color="#E74C3C", width=2),
-                hovertemplate="Core: %{y:.1f} °C<extra></extra>",
+                hovertemplate="🌡️ Core: %{y:.1f} °C<extra></extra>",
             )
         )
 

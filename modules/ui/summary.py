@@ -109,7 +109,7 @@ def _add_ve_trace(
             y=ve_data,
             name="VE (L/min)",
             line=dict(color="#ffa15a", width=2),
-            hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
+            hovertemplate="🫁 VE: %{y:.1f} L/min<extra></extra>",
         ),
         secondary_y=False,
     )
@@ -128,7 +128,7 @@ def _add_br_trace(
             y=br_data,
             name="BR (oddech/min)",
             line=dict(color="#00cc96", width=2),
-            hovertemplate="BR: %{y:.0f} /min<extra></extra>",
+            hovertemplate="🌬️ BR: %{y:.0f} /min<extra></extra>",
         ),
         secondary_y=secondary,
     )
@@ -152,7 +152,7 @@ def _add_pace_trace(
             y=pace_data,
             name="Tempo (min/km)",
             line=dict(color="#00d4aa", width=2, dash="dot"),
-            hovertemplate="Tempo: %{customdata}<extra></extra>",
+            hovertemplate="⏱️ Tempo: %{customdata}<extra></extra>",
             customdata=pace_hover,
         ),
         secondary_y=True,

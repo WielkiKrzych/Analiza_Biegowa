@@ -122,7 +122,7 @@ def render_hemo_tab(target_df):
                 customdata=time_str_trend,
                 name="SmO2",
                 line=dict(color="#ab63fa", width=2),
-                hovertemplate="<b>Czas:</b> %{customdata}<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
+                hovertemplate="<b>🕐 Czas:</b> %{customdata}<br><b>🩸 SmO₂:</b> %{y:.1f}%<extra></extra>",
             )
         )
 
@@ -135,7 +135,7 @@ def render_hemo_tab(target_df):
                 name="THb",
                 line=dict(color="#ffa15a", width=2),
                 yaxis="y2",
-                hovertemplate="<b>Czas:</b> %{customdata}<br><b>THb:</b> %{y:.2f} g/dL<extra></extra>",
+                hovertemplate="<b>🕐 Czas:</b> %{customdata}<br><b>🩸 THb:</b> %{y:.2f} g/dL<extra></extra>",
             )
         )
 

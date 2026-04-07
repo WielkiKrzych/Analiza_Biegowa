@@ -434,7 +434,7 @@ def _render_zones_bar(power_zones: dict):
                 marker_color=colors[i],
                 text=f"{zone.split('_')[0]}<br>{low}-{high}W",
                 textposition="inside",
-                hovertemplate=f"<b>{zone.replace('_', ' ')}</b><br>{low}-{high}W<extra></extra>",
+                hovertemplate=f"🏷️ <b>{zone.replace('_', ' ')}</b><br>{low}-{high}W<extra></extra>",
             )
         )
 

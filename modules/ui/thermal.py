@@ -34,7 +34,7 @@ def _build_thermal_chart(df_plot) -> Optional[go.Figure]:
                 y=df_plot["core_temperature_smooth"],
                 name="Core Temp",
                 line=dict(color="#ff7f0e", width=2),
-                hovertemplate="Temp: %{y:.2f}°C<extra></extra>",
+                hovertemplate="🌡️ Temp: %{y:.2f}°C<extra></extra>",
             )
         )
 
@@ -47,7 +47,7 @@ def _build_thermal_chart(df_plot) -> Optional[go.Figure]:
                 name="HSI",
                 yaxis="y2",
                 line=dict(color="#d62728", width=2, dash="dot"),
-                hovertemplate="HSI: %{y:.1f}<extra></extra>",
+                hovertemplate="🌡️ HSI: %{y:.1f}<extra></extra>",
             )
         )
 

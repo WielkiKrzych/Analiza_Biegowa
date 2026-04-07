@@ -139,7 +139,7 @@ def _render_cadence_section(df_plot: pd.DataFrame) -> None:
                 y=cad_smooth,
                 name="Kadencja",
                 line=dict(color="#00D4FF", width=2),
-                hovertemplate="Kadencja: %{y:.0f} SPM<extra></extra>",
+                hovertemplate="👟 Kadencja: %{y:.0f} SPM<extra></extra>",
             )
         )
 
@@ -227,7 +227,7 @@ def _render_gct_section(df_plot: pd.DataFrame) -> None:
                 y=gct_smooth,
                 name="GCT",
                 line=dict(color="#FF6B6B", width=2),
-                hovertemplate="GCT: %{y:.0f} ms<extra></extra>",
+                hovertemplate="🦶 GCT: %{y:.0f} ms<extra></extra>",
             )
         )
 
@@ -304,7 +304,7 @@ def _render_stance_balance_section(df_plot: pd.DataFrame) -> None:
                 y=bal_smooth,
                 name="Balans L/P",
                 line=dict(color="#1ABC9C", width=2),
-                hovertemplate="Balans: %{y:.1f}%<extra></extra>",
+                hovertemplate="⚖️ Balans: %{y:.1f}%<extra></extra>",
             )
         )
         fig_bal.add_hline(
@@ -379,7 +379,7 @@ def _render_vertical_ratio_section(df_plot: pd.DataFrame) -> None:
                 y=vr_smooth,
                 name="Vertical Ratio",
                 line=dict(color="#E67E22", width=2),
-                hovertemplate="VR: %{y:.1f}%<extra></extra>",
+                hovertemplate="📐 VR: %{y:.1f}%<extra></extra>",
             )
         )
         fig_vr.add_hrect(y0=0, y1=6, fillcolor="green", opacity=0.08, line_width=0)
@@ -473,7 +473,7 @@ def _render_stride_length_section(
             y=stride_smooth,
             name="Długość kroku",
             line=dict(color="#9B59B6", width=2),
-            hovertemplate="Krok: %{y:.2f} m<extra></extra>",
+            hovertemplate="📏 Krok: %{y:.2f} m<extra></extra>",
         )
     )
 
@@ -563,7 +563,7 @@ def _render_running_effectiveness_section(
                 y=re_smooth,
                 name="RE",
                 line=dict(color="#F39C12", width=2),
-                hovertemplate="RE: %{y:.3f}<extra></extra>",
+                hovertemplate="💪 RE: %{y:.3f}<extra></extra>",
             )
         )
 
@@ -678,7 +678,7 @@ def _render_vertical_oscillation_section(
                 y=vo_smooth,
                 name="VO",
                 line=dict(color="#ff6b6b", width=2),
-                hovertemplate="VO: %{y:.1f} cm<extra></extra>",
+                hovertemplate="📊 VO: %{y:.1f} cm<extra></extra>",
             )
         )
 
@@ -754,7 +754,7 @@ def _render_vo_cadence_scatter(
             mode="markers",
             marker=dict(size=4, opacity=0.5, color="#ff6b6b"),
             name="VO vs Cadence",
-            hovertemplate="Cadence: %{x:.0f} SPM<br>VO: %{y:.1f} cm<extra></extra>",
+            hovertemplate="👟 Cadence: %{x:.0f} SPM<br>📊 VO: %{y:.1f} cm<extra></extra>",
         )
     )
     fig_scatter.update_layout(
