@@ -614,6 +614,7 @@ def _render_durability_simple(df_plot: pd.DataFrame) -> None:
 def _render_phenotype(
     pdc: dict[int, float | None] | None,
     runner_weight: float,
+    df_plot: pd.DataFrame | None = None,
 ) -> None:
     """Render Section 6: Runner phenotype classification with VO2max estimation."""
     st.subheader("🧬 Profil Biegacza (Fenotyp)")
@@ -638,15 +639,20 @@ def _render_phenotype(
         unsafe_allow_html=True,
     )
 
-    best_pace_5min = pdc.get(300)
-    if best_pace_5min:
-        vo2max_est = estimate_vo2max_from_pace(best_pace_5min, runner_weight)
-        if vo2max_est > 0:
-            st.metric(
-                "Est. VO2max",
-                f"{vo2max_est:.1f} ml/kg/min",
-                help="Szacowane na podstawie najlepszego tempa 5-minutowego (formuła Danielsa)",
-            )
+    # VO2max — Sitko et al. 2021 (power-based) for consistency across all tabs
+    from modules.calculations.canonical_physio import calculate_vo2max_acsm
+
+    if df_plot is not None and "watts" in df_plot.columns and runner_weight > 0:
+        rolling_5min = df_plot["watts"].rolling(window=300, min_periods=300).mean()
+        mmp_5min = rolling_5min.max()
+        if not pd.isna(mmp_5min):
+            vo2max_est = calculate_vo2max_acsm(mmp_5min, runner_weight)
+            if vo2max_est > 0:
+                st.metric(
+                    "Est. VO2max",
+                    f"{vo2max_est:.1f} ml/kg/min",
+                    help="Estymacja modelowa (Sitko et al. 2021): VO2max = 16.61 + 8.87 × 5' max power (W/kg)",
+                )
 
     with st.expander("📚 Jak interpretować fenotyp biegacza?"):
         st.markdown("""
@@ -713,4 +719,4 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
     st.divider()
 
     # 6. Phenotype
-    _render_phenotype(pdc, runner_weight)
+    _render_phenotype(pdc, runner_weight, df_plot)

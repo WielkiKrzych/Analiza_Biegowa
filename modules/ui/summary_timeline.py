@@ -216,6 +216,7 @@ def _render_core_metrics(
     df_plot: pd.DataFrame,
     metrics: dict,
     duration_min: float,
+    rider_weight: float = 75.0,
 ) -> None:
     total_distance_km = _compute_distance_km(df_plot)
     avg_pace_str = _compute_avg_pace_str(df_plot)
@@ -232,7 +233,15 @@ def _render_core_metrics(
     avg_core = _col_mean(df_plot, "core_temperature")
     max_core = _col_max(df_plot, "core_temperature")
 
-    est_vo2max = metrics.get("vo2_max_est", 0) if metrics else 0
+    # VO2max: always use Sitko et al. 2021 (power-based) for consistency
+    from modules.calculations.canonical_physio import calculate_vo2max_acsm
+
+    if "watts" in df_plot.columns and rider_weight > 0:
+        rolling_5min = df_plot["watts"].rolling(window=300, min_periods=300).mean()
+        mmp_5min = rolling_5min.max()
+        est_vo2max = calculate_vo2max_acsm(mmp_5min, rider_weight) if not pd.isna(mmp_5min) else 0
+    else:
+        est_vo2max = 0
     est_vlamax = metrics.get("vlamax_est", 0) if metrics else 0
     est_cp, est_w_prime = _estimate_cp_wprime(df_plot)
 
@@ -377,6 +386,6 @@ def _render_extra_fit_data(df_plot: pd.DataFrame) -> None:
 def _render_metrics_panel(df_plot, metrics, cp_input, w_prime_input, rider_weight):
     duration_min = len(df_plot) / 60 if len(df_plot) > 0 else 0
 
-    _render_core_metrics(df_plot, metrics, duration_min)
+    _render_core_metrics(df_plot, metrics, duration_min, rider_weight)
     _render_running_dynamics(df_plot)
     _render_extra_fit_data(df_plot)
