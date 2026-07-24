@@ -387,7 +387,7 @@ if uploaded_file is not None:
         with t7:
             render_tab_content("durability", df_plot, df_plot_resampled, metrics)
         with t8:
-            render_tab_content("tte", df_plot, 0.0, uploaded_file.name)
+            render_tab_content("tte", df_plot, 0.0, threshold_pace_input, uploaded_file.name)
 
     with tab_intelligence:
         UIComponents.show_breadcrumb("🧠 Intelligence")
