@@ -156,8 +156,8 @@ def _build_matrix_texts(bottleneck: str, metrics: Dict[str, Any]) -> Tuple[str, 
         return (
             f"Kompresja naczyniowa przy momencie >{metrics['torque_20'] or 0:.0f} Nm "
             "ogranicza perfuzję mięśniową mimo dostępnego O₂ systemowego.",
-            "Szybszy spadek SmO₂, wcześniejsze zmęczenie nóg, utrata reaktywności na ataki.",
-            "Zwiększ kadencję do 95-105 rpm. Trenuj wysoko-kadencyjnie. Sprawdź ustawienie siodła.",
+            "Szybszy spadek SmO₂, wcześniejsze zmęczenie nóg, utrata reaktywności na przyspieszenia.",
+            "Zwiększ kadencję do 175-185 spm. Skróć kontakt z podłożem, unikaj overstridingu.",
         )
     if "THERMAL" in bottleneck:
         return (
@@ -170,13 +170,13 @@ def _build_matrix_texts(bottleneck: str, metrics: Dict[str, Any]) -> Tuple[str, 
         return (
             f"Układ krążenia przy {metrics['vo2max'] or 0:.0f} ml/kg/min dyktuje limit – mięśnie mają rezerwę.",
             "Limit tętna osiągany przed zmęczeniem mięśni. Płaski profil SmO₂ przy wysokim HR.",
-            "Interwały VO₂max (5×5 min @ 106-120% FTP). Z2 dla podniesienia SV. Hill repeats.",
+            "Interwały VO₂max (5×5 min @ 106-120% CP). Z2 dla podniesienia SV. Hill repeats.",
         )
     if "PERIPHERAL" in bottleneck:
         return (
             "Ekstrakcja O₂ w mięśniu jest limitem – niska kapilaryzacja lub wysoka glikoliza.",
             "SmO₂ spada szybko przy submaksymalnych wysiłkach. Szybka lokalna kwasica.",
-            "Sweet spot + threshold work. Siła na rowerze. Trening low-cadence.",
+            "Sweet spot + threshold. Podbiegi siłowe (hill reps). Drills biegowe.",
         )
     return (
         "Brak jednoznacznego limitera – wydolność zbalansowana między systemami.",
@@ -445,14 +445,14 @@ def _build_priorities(metrics: Dict[str, Any], styles: Dict) -> List:
         priorities.append(
             {
                 "name": "Redukcja okluzji (kadencja, SmO₂)",
-                "example": "Treningi @ 95–105 rpm, unikaj momentów >50 Nm, monitoruj SmO₂ w czasie rzeczywistym",
+                "example": "Treningi @ 175–185 spm, unikaj overstridingu i długiego kontaktu z podłożem, monitoruj SmO₂ w czasie rzeczywistym",
             }
         )
     else:
         priorities.append(
             {
                 "name": "Siła wytrzymałościowa",
-                "example": "4×8 min @ 50–60 rpm pod LT1, Cel: poprawa rekrutacji włókien wolnokurczliwych",
+                "example": "4×8 min podbiegi 4–8% pod LT1, Cel: poprawa rekrutacji włókien wolnokurczliwych",
             }
         )
 

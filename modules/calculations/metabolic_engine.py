@@ -359,8 +359,8 @@ def generate_training_block(profile: MetabolicProfile, weeks: int = 6) -> Traini
                 frequency="1×/tydzień (weekend)",
             ),
             TrainingSession(
-                name="Strength Endurance",
-                power_range=f"{int(cp * 0.65)}-{int(cp * 0.75)}W @ 50-60rpm",
+                name="Siła biegowa (podbiegi)",
+                power_range=f"{int(cp * 0.65)}-{int(cp * 0.75)}W @ podbieg 4-8%",
                 duration="4 × 10min",
                 adaptation_goal="Rekrutacja włókien, adaptacja nerwowo-mięśniowa",
                 expected_smo2="55-65%",

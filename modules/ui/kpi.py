@@ -12,7 +12,6 @@ def _build_drift_chart(
 ) -> tuple:
     """Build the drift/scatter chart and return (fig_dec, has_data)."""
     fig_dec = go.Figure()
-    has_data = False
 
     if "pace_smooth" not in df_plot_resampled.columns:
         return fig_dec, False
@@ -57,7 +56,6 @@ def _build_drift_chart(
                 hovertemplate="🩸 SmO₂: %{y:.1f}%<extra></extra>",
             )
         )
-    )
 
     time_vals = (
         df_plot_resampled["time_min"].values

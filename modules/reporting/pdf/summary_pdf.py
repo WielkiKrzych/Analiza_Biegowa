@@ -8,6 +8,8 @@ import io
 import logging
 from typing import Any, Dict, Optional
 
+# Set matplotlib backend to Agg (no display required) BEFORE importing pyplot.
+import matplotlib
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -16,17 +18,15 @@ from reportlab.lib.units import cm
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-logger = logging.getLogger(__name__)
-
-# Import existing PDF styles with Polish font support
-# Set matplotlib backend to Agg (no display required)
-import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402  (must follow matplotlib.use)
+from matplotlib.backends.backend_agg import (  # noqa: E402  (must follow matplotlib.use)
+    FigureCanvasAgg as FigureCanvas,
+)
 
 from .styles import FONT_FAMILY, FONT_FAMILY_BOLD
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+logger = logging.getLogger(__name__)
 
 
 def _make_table_style(

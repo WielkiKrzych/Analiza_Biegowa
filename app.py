@@ -52,6 +52,10 @@ class TabRegistry:
         "heart_rate": ("modules.ui.heart_rate", "render_hr_tab"),
         "summary": ("modules.ui.summary", "render_summary_tab"),
         "drift_maps": ("modules.ui.drift_maps_ui", "render_drift_maps_tab"),
+        "training_load": ("modules.ui.training_load_ui", "render_training_load_tab"),
+        "banister": ("modules.ui.banister_ui", "render_banister_tab"),
+        "durability": ("modules.ui.durability_ui", "render_durability_tab"),
+        "tte": ("modules.ui.tte_ui", "render_tte_tab"),
     }
 
     @classmethod
@@ -351,7 +355,7 @@ if uploaded_file is not None:
 
     with tab_performance:
         UIComponents.show_breadcrumb("⚡ Performance")
-        t1, t2, t3, t4, t5, t6 = st.tabs(
+        t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs(
             [
                 "🏃 Running",
                 "🦶 Biomechanika",
@@ -359,6 +363,8 @@ if uploaded_file is not None:
                 "❤️ HR",
                 "🧬 Hematology",
                 "📈 Drift Maps",
+                "🛡️ Wytrzymałość",
+                "⏱️ TTE",
             ]
         )
         with t1:
@@ -378,14 +384,24 @@ if uploaded_file is not None:
             render_tab_content("hemo", df_plot)
         with t6:
             render_tab_content("drift_maps", df_plot)
+        with t7:
+            render_tab_content("durability", df_plot, df_plot_resampled, metrics)
+        with t8:
+            render_tab_content("tte", df_plot, 0.0, uploaded_file.name)
 
     with tab_intelligence:
         UIComponents.show_breadcrumb("🧠 Intelligence")
-        t1, t2 = st.tabs(["🍎 Nutrition", "🚧 Limiters"])
+        t1, t2, t3, t4 = st.tabs(
+            ["🍎 Nutrition", "🚧 Limiters", "📊 Obciążenie (PMC)", "🎯 Banister"]
+        )
         with t1:
             render_tab_content("nutrition", df_plot, 0, threshold_pace_input, threshold_pace_input)
         with t2:
             render_tab_content("limiters", df_plot, 0, vt2_vent)
+        with t3:
+            render_tab_content("training_load")
+        with t4:
+            render_tab_content("banister")
 
     with tab_physiology:
         UIComponents.show_breadcrumb("🫀 Physiology")

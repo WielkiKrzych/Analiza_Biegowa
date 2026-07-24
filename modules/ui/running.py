@@ -17,7 +17,6 @@ from modules.calculations.pace import (
     calculate_pace_duration_curve,
     calculate_pace_zones_time,
     classify_running_phenotype,
-    estimate_vo2max_from_pace,
     get_fri_interpretation_pace,
     get_phenotype_description,
 )

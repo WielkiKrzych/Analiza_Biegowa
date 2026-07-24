@@ -375,7 +375,7 @@ def build_page_thresholds(
             "VT2 to Twój „szklany sufit” – powyżej niego kwas narasta szybciej niż organizm go utylizuje, "
             "co wymaga długiej regeneracji. Znajomość tych punktów pozwala unikać „strefy zgubnej” między progami, "
             "gdzie zmęczenie jest duże, a adaptacje nieoptymalne. Jako trener używam ich, by każda Twoja minuta "
-            "na rowerze miała konkretny cel fizjologiczny. Dzięki temu nie trenujesz po prostu „ciężko”, "
+            "na treningu miała konkretny cel fizjologiczny. Dzięki temu nie trenujesz po prostu „ciężko”, "
             "ale trenujesz mądrze i precyzyjnie.",
             styles,
         )

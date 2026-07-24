@@ -2,7 +2,8 @@
 
 import io
 import logging
-from typing import Optional
+from dataclasses import dataclass
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -402,10 +403,6 @@ def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
         gc.collect()
 
     return pd.concat(chunks, ignore_index=True)
-
-
-from dataclasses import dataclass
-from typing import List
 
 
 @dataclass

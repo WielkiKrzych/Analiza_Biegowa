@@ -323,8 +323,8 @@ if MLX_AVAILABLE:
 else:
     # Fallback gdy MLX nie jest dostępny
 
-    class TrainingCallback(ABC):
-        """Pusta definicja dla kompatybilności."""
+    class TrainingCallback:
+        """Pusta definicja dla kompatybilności (fallback bez MLX)."""
 
         pass
 

@@ -1,8 +1,8 @@
+from typing import Optional
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-
-from typing import Optional
 
 
 def render_limiters_tab(df_plot, cp_input, vt2_vent):
@@ -598,7 +598,7 @@ def _render_cycling_limiter_recommendation(limiting_factor: str) -> None:
         Mięśnie zużywają cały dostarczany tlen. Sugestie:
         - Więcej pracy siłowej (squat, deadlift)
         - Interwały "over-under" (93-97% FTP / 103-107% FTP)
-        - Sprawdź pozycję na rowerze (okluzja mechaniczna?)
+        - Sprawdź technikę biegu i overstriding (okluzja mechaniczna?)
         """)
 
 

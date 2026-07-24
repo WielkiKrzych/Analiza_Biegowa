@@ -93,7 +93,7 @@ def calculate_glycogen_consumption(
         vlamax: VLaMax [mmol/L/s] (typical: 0.3-0.8)
         occlusion_index: Occlusion index (0-1, higher = more occlusion)
         smo2_slope: SmO2 slope [%/Nm] (negative = desaturation)
-        cadence: Pedaling cadence [RPM]
+        cadence: Running cadence [spm]
 
     Returns:
         dict with CHO consumption [g/h] and breakdown
@@ -175,8 +175,8 @@ def calculate_glycogen_consumption(
 def compare_cadence_glycogen(
     power: float,
     cp: float,
-    cadence_low: float = 60.0,
-    cadence_high: float = 95.0,
+    cadence_low: float = 165.0,
+    cadence_high: float = 185.0,
     core_temp: float = 37.5,
     vlamax: float = 0.5,
     occlusion_index_low: float = 0.35,  # High occlusion at low cadence
@@ -191,8 +191,8 @@ def compare_cadence_glycogen(
     Args:
         power: Power output [W]
         cp: Critical Power [W]
-        cadence_low: Low cadence [RPM]
-        cadence_high: High cadence [RPM]
+        cadence_low: Low cadence [spm]
+        cadence_high: High cadence [spm]
         Other params: See calculate_glycogen_consumption
 
     Returns:
@@ -250,5 +250,5 @@ def compare_cadence_glycogen(
         },
         "delta_cho_g_per_hour": round(delta_cho, 1),
         "delta_pct": round(delta_pct, 1),
-        "metabolic_cost_occlusion": f"+{delta_cho:.1f} g/h ({delta_pct:.1f}%) at {cadence_low:.0f} RPM vs {cadence_high:.0f} RPM",
+        "metabolic_cost_occlusion": f"+{delta_cho:.1f} g/h ({delta_pct:.1f}%) at {cadence_low:.0f} spm vs {cadence_high:.0f} spm",
     }

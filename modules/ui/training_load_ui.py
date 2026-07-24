@@ -15,7 +15,7 @@ from modules.training_load import TrainingLoadManager
 
 def render_training_load_tab():
     """Render the Training Load / PMC tab."""
-    st.header("📊 Training Load (PMC)")
+    st.header("📊 Obciążenie Treningowe (PMC)")
 
     manager = TrainingLoadManager()
     session_count = manager.store.get_session_count()
@@ -58,9 +58,9 @@ def render_training_load_tab():
         )
 
     with col3:
-        # Recommended TSS for today
-        min_tss, max_tss = manager.get_recommended_tss()
-        st.info(f"🎯 **Zalecany TSS dziś:** {min_tss:.0f} - {max_tss:.0f}")
+        # Recommended RSS for today
+        min_rss, max_rss = manager.get_recommended_tss()
+        st.info(f"🎯 **Zalecany RSS dziś:** {min_rss:.0f} - {max_rss:.0f}")
 
     # Key metrics row
     m1, m2, m3, m4 = st.columns(4)
@@ -95,14 +95,14 @@ def render_training_load_tab():
     # Create dual-axis chart
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # TSS bars
+    # RSS bars
     fig.add_trace(
         go.Bar(
             x=df["date"],
             y=df["tss"],
-            name="TSS",
+            name="RSS",
             marker_color="rgba(100, 100, 100, 0.5)",
-            hovertemplate="TSS: %{y:.0f}<extra></extra>",
+            hovertemplate="RSS: %{y:.0f}<extra></extra>",
         ),
         secondary_y=False,
     )
@@ -173,7 +173,7 @@ def render_training_load_tab():
         height=450,
         hovermode="x unified",
         legend=dict(orientation="h", y=1.1),
-        yaxis_title="TSS / CTL / ATL",
+        yaxis_title="RSS / CTL / ATL",
         yaxis2_title="TSB (Forma)",
     )
 
@@ -184,27 +184,27 @@ def render_training_load_tab():
     st.subheader("🗓️ Planowanie Tygodnia")
 
     with st.expander("Symuluj wpływ planowanego treningu", expanded=False):
-        st.write("Wprowadź planowane TSS na kolejne dni:")
+        st.write("Wprowadź planowany RSS na kolejne dni:")
 
         cols = st.columns(7)
-        planned_tss = []
+        planned_rss = []
         day_names = ["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"]
         today_idx = datetime.now().weekday()
 
         for i, col in enumerate(cols):
             day_idx = (today_idx + i + 1) % 7
             with col:
-                tss = st.number_input(
+                rss = st.number_input(
                     day_names[day_idx],
                     min_value=0,
                     max_value=500,
                     value=50 if i < 5 else 100,
-                    key=f"planned_tss_{i}",
+                    key=f"planned_rss_{i}",
                 )
-                planned_tss.append(tss)
+                planned_rss.append(rss)
 
         if st.button("🔮 Przewiduj formę"):
-            predictions = manager.predict_future_form(planned_tss)
+            predictions = manager.predict_future_form(planned_rss)
 
             if predictions:
                 pred_df = pd.DataFrame(
@@ -227,8 +227,8 @@ def render_training_load_tab():
                     "Data": s.date,
                     "Plik": s.filename[:30] + "..." if len(s.filename) > 30 else s.filename,
                     "Czas (min)": s.duration_sec // 60,
-                    "TSS": f"{s.tss:.0f}",
-                    "NP": f"{s.np:.0f} W",
+                    "RSS": f"{s.tss:.0f}",
+                    "Kadencja": f"{s.avg_cadence:.0f} spm",
                     "Avg HR": f"{s.avg_hr:.0f} bpm",
                 }
                 for s in sessions[:20]  # Limit to 20 most recent

@@ -25,7 +25,7 @@ def render_sticky_header(
         avg_power: Average power in watts
         avg_hr: Average heart rate in bpm
         avg_smo2: Average SmO2 in %
-        avg_cadence: Average cadence in rpm
+        avg_cadence: Average cadence in spm (steps per minute)
         avg_ve: Average ventilation in L/min
         duration_min: Duration in minutes
     """
@@ -48,7 +48,7 @@ def render_sticky_header(
             </div>
             <div class="metric-box">
                 <div class="label">Cadence</div>
-                <div class="value">{avg_cadence:.0f} <span class="unit">rpm</span></div>
+                <div class="value">{avg_cadence:.0f} <span class="unit">spm</span></div>
             </div>
             <div class="metric-box">
                 <div class="label">Avg VE</div>

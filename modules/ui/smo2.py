@@ -11,7 +11,6 @@ from modules.calculations.smo2_phases import (
     detect_smo2_phases,
 )
 
-
 # ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
@@ -99,7 +98,7 @@ def _render_notes_section(
             note_text = st.text_input(
                 "Notatka",
                 key="smo2_note_text",
-                placeholder="Np. 'Atak 500W', 'Próg beztlenowy', 'Błąd sensoryka'",
+                placeholder="Np. 'Przyspieszenie', 'Próg beztlenowy', 'Błąd sensoryka'",
             )
 
         if st.button("➕ Dodaj Notatkę", key="smo2_add_note"):
@@ -639,13 +638,13 @@ Mierzona przez sensory NIRS (Near-Infrared Spectroscopy), np. **Moxy, TrainRed, 
 
 **THb** odzwierciedla ilość krwi w obszarze pomiaru:
 
-- **⬆️ Wzrost THb**: Większy przepływ krwi (rozszerzenie naczyń, niższa kadencja)
-- **⬇️ Spadek THb**: Okluzja naczyń (wysokie napięcie mięśniowe, niska kadencja + duża siła)
+- **⬆️ Wzrost THb**: Większy przepływ krwi (rozszerzenie naczyń, płynny bieg)
+- **⬇️ Spadek THb**: Okluzja naczyń (wysokie napięcie mięśniowe, długi kontakt z podłożem + duża siła)
 - **➡️ Stabilny THb**: Prawidłowy przepływ przy stałym obciążeniu
 
 ### Praktyczny przykład:
-- **Podjazd na niskiej kadencji (50 rpm)**: THb spada → napięcie mięśni blokuje przepływ
-- **Płaski teren, wysoka kadencja (95 rpm)**: THb rośnie → "pompa mięśniowa" wspomaga krążenie
+- **Stromy podbieg / overstriding (długi kontakt)**: THb spada → napięcie mięśni blokuje przepływ
+- **Płaski teren, wysoka kadencja (180 spm)**: THb rośnie → "pompa mięśniowa" wspomaga krążenie
 
 ---
 
@@ -691,7 +690,7 @@ Jeśli późne punkty są niżej niż wczesne przy tej samej mocy → **zmęczen
 ⚠️ **Czynniki wpływające na dokładność:**
 - Grubość tkanki tłuszczowej (> 10mm zaburza pomiar)
 - Pozycja sensora (różne mięśnie = różne wartości)
-- Ruch sensora podczas jazdy
+- Ruch sensora podczas biegu
 - Światło zewnętrzne (bezpośrednie słońce)
 - Temperatura skóry
 

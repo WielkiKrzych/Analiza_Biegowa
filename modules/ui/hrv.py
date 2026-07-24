@@ -332,7 +332,6 @@ def _render_ddfa_and_thresholds(df_dfa: Any) -> None:
             y = alpha1_series[valid_mask]
             # Convert beat indices to approximate minutes (assume ~1 beat/sec for HR data)
             # Use simple linear regression
-            n_pts = len(x)
             x_mean = x.mean()
             y_mean = y.mean()
             ss_xy = np.sum((x - x_mean) * (y - y_mean))

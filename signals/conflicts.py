@@ -482,16 +482,6 @@ def detect_signal_conflicts(
         signals_analyzed=signals_analyzed,
     )
 
-    agreement_score = max(0.0, 1.0 - conflict_weight)
-
-    return ConflictAnalysisResult(
-        has_conflicts=len(conflicts) > 0,
-        conflicts=conflicts,
-        agreement_score=round(agreement_score, 2),
-        recommendations=recommendations,
-        signals_analyzed=signals_analyzed,
-    )
-
 
 __all__ = [
     # Enums

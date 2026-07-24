@@ -15,7 +15,6 @@ from modules.calculations.running_dynamics import (
     calculate_stride_metrics,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -713,12 +712,8 @@ def _render_vertical_oscillation_section(
     - **8-10 cm:** Średnia efektywność
     - **> 10 cm:** Wysoka oscylacja - "bouncing"
 
-    **Dla rowerzystów:**
-    VO jest naturalnie niższa (siedzenie). Wartości > 3 cm przy pedałowaniu
-    mogą wskazywać na "podskakiwanie" na siodełku.
-
     **Korelacja z kadencją:**
-    Wyższa kadencja zazwyczaj = niższa VO (mniej "bouncing").
+    Wyższa kadencja (spm) zazwyczaj = niższa VO (mniej "bouncing").
     Szukaj optymalnego punktu gdzie VO jest minimalna przy komfortowej kadencji.
     """)
 
@@ -760,7 +755,7 @@ def _render_vo_cadence_scatter(
     fig_scatter.update_layout(
         template="plotly_dark",
         title="VO vs Kadencja",
-        xaxis_title="Cadence [SPM/RPM]",
+        xaxis_title="Kadencja [spm]",
         yaxis_title="VO [cm]",
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),

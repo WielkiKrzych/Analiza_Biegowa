@@ -119,7 +119,7 @@ def generate_thermal_chart(
     ax1.set_title("Termoregulacja: Temp. rdzenia vs HSI", fontsize=title_size, fontweight="bold")
 
     lines = [l1, l2]
-    labels = [l.get_label() for l in lines]
+    labels = [ln.get_label() for ln in lines]
     ax1.legend(lines, labels, loc="upper left", framealpha=0.9)
 
     apply_common_style(fig, ax1, **cfg)

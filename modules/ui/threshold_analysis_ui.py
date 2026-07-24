@@ -275,6 +275,7 @@ def _render_test_config(col_info: _ColumnInfo, total_duration_min: int) -> None:
             value=3,
             step=1,
             help="Standardowy ramp test to 3 minuty na stopień",
+            key="step_duration",
         )
         st.caption(f"Oczekiwana liczba stopni: ~{total_duration_min // step_duration}")
 
@@ -312,6 +313,7 @@ def _run_step_test_analysis(
     target_df: pd.DataFrame, test_start_sec: int, test_end_sec: int
 ) -> None:
     with st.spinner("Analizuję test schodkowy..."):
+        step_duration = st.session_state.get("step_duration", 3)
         if "time" in target_df.columns:
             min_time = target_df["time"].min()
             mask = (target_df["time"] >= min_time + test_start_sec) & (

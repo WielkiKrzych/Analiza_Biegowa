@@ -365,8 +365,8 @@ def detect_vt_transition_zone(
         if len(w) < 10:
             continue
         slope, _, err = calculate_slope(w[time_column], w[ve_column])
-        l, u = slope - Z * err, slope + Z * err
-        if l <= 0.05 <= u and 0.02 <= slope <= 0.08:
+        lower, upper = slope - Z * err, slope + Z * err
+        if lower <= 0.05 <= upper and 0.02 <= slope <= 0.08:
             vt1_c.append(
                 {
                     "avg_watts": w[power_column].mean(),
@@ -374,7 +374,7 @@ def detect_vt_transition_zone(
                     "std_err": err,
                 }
             )
-        if l <= 0.15 <= u and 0.10 <= slope <= 0.20:
+        if lower <= 0.15 <= upper and 0.10 <= slope <= 0.20:
             vt2_c.append(
                 {
                     "avg_watts": w[power_column].mean(),

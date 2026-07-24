@@ -9,6 +9,7 @@ import logging
 from typing import Any, Optional, Union
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,6 @@ try:
 except ImportError:
     POLARS_AVAILABLE = False
     pl = None
-
-import pandas as pd
 
 # Type alias for DataFrame compatibility
 DataFrame = Union[pd.DataFrame, "pl.DataFrame"] if POLARS_AVAILABLE else pd.DataFrame

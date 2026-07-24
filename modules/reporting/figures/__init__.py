@@ -7,8 +7,6 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
-
 from .biomech import generate_biomech_chart, generate_torque_smo2_chart
 from .common import DPI, get_color, save_figure
 from .cp_curve import generate_cp_curve_chart, generate_pdc_chart
@@ -19,6 +17,8 @@ from .smo2_vs_power import generate_smo2_power_chart
 from .thermal import generate_efficiency_chart, generate_thermal_chart
 from .ve_profile import generate_ve_profile_chart
 from .vent_full import generate_full_vent_chart
+
+logger = logging.getLogger(__name__)
 
 
 def generate_all_ramp_figures(

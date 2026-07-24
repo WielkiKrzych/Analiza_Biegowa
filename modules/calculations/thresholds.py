@@ -9,7 +9,7 @@ from .metabolic import detect_smo2_from_steps
 
 # NOTE: _detect_smo2_thresholds_legacy removed - was never called
 from .step_detection import detect_step_test_range, segment_load_phases
-from .threshold_types import HysteresisResult, StepTestResult
+from .threshold_types import HysteresisResult, StepTestRange, StepTestResult
 from .ventilatory import detect_vt_from_steps, detect_vt_transition_zone, run_sensitivity_analysis
 
 
@@ -35,7 +35,6 @@ def _apply_step_range_results(
         result.analysis_notes.append("Używanie detekcji legacy (sliding window)")
         return
 
-    mask = (df[time_column] >= step_range.start_time) & (df[time_column] <= step_range.end_time)
     result.steps_analyzed = len(step_range.steps)
     result.analysis_notes.append(f"✅ Wykryto test schodkowy: {len(step_range.steps)} stopni")
     result.analysis_notes.extend([f"  • {n}" for n in step_range.notes])

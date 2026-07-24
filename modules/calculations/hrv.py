@@ -3,6 +3,7 @@ SRP: Moduł odpowiedzialny za analizę HRV i DFA Alpha-1.
 """
 
 import logging
+from collections import OrderedDict
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -225,9 +226,6 @@ def validate_dfa_quality(
 
 
 # Cache for DFA results with max size to prevent memory leak
-from collections import OrderedDict
-
-
 class LRUCache(OrderedDict):
     """LRU Cache with max size limit."""
 

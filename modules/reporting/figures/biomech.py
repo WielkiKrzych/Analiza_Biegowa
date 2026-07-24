@@ -152,7 +152,7 @@ def generate_biomech_chart(
         linewidth=1.2,
         alpha=0.7,
     )
-    ax2.set_ylabel("Kadencja [RPM]", color=color_cad)
+    ax2.set_ylabel("Kadencja [spm]", color=color_cad)
     ax2.tick_params(axis="y", labelcolor=color_cad)
 
     # Metadata / Footer

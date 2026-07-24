@@ -554,7 +554,6 @@ def _render_vo2max_details(
         c3.metric("CV mocy", f"{m['power_cv']:.1f}%")
 
         if m.get("hr_col"):
-            hr_col = m["hr_col"]
             c1, c2, c3 = st.columns(3)
             c1.metric("Średnie HR", f"{m['hr_mean']:.0f} bpm")
             c2.metric("SD HR", f"{m['hr_sd']:.1f} bpm")

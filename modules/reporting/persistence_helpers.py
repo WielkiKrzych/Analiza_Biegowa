@@ -41,7 +41,7 @@ def _get_limiter_interpretation(limiting_factor: str) -> dict:
             "suggestions": [
                 "Więcej pracy siłowej (squat, deadlift)",
                 "Interwały 'over-under' (93-97% / 103-107% FTP)",
-                "Sprawdź pozycję na rowerze (okluzja mechaniczna?)",
+                "Sprawdź technikę biegu i overstriding (okluzja mechaniczna?)",
             ],
         },
     }

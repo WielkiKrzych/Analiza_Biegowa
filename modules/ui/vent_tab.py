@@ -107,7 +107,7 @@ Wykres scatter pokazuje zależność między mocą a wentylacją:
 - Pozycja sensora na klatce piersiowej
 - Oddychanie ustami vs nosem
 - Warunki atmosferyczne (wysokość, wilgotność)
-- Intensywność mowy podczas jazdy
+- Intensywność mowy podczas biegu
 
 💡 **Wskazówka**: Dla dokładnej detekcji progów wykonaj Test Stopniowany (Ramp Test)!
 """

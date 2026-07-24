@@ -11,15 +11,15 @@ import sqlite3
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-from pathlib import Path
-
 from modules.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

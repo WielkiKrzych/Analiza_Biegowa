@@ -503,15 +503,15 @@ def _detect_occlusion(biomech_occlusion: Dict[str, Any]) -> _OcclusionContext:
         )
 
     if torque > 0:
-        constraint = f"⚠️ WARUNEK: Kadencja >90 RPM (okluzja wykryta przy {int(torque)} Nm)"
+        constraint = f"⚠️ WARUNEK: Kadencja >175 spm, unikaj overstridingu (okluzja wykryta przy {int(torque)} Nm)"
     else:
-        constraint = "⚠️ WARUNEK: Kadencja >90 RPM (ryzyko okluzji przy niskiej kadencji)"
+        constraint = "⚠️ WARUNEK: Kadencja >175 spm (ryzyko okluzji przy długim kontakcie z podłożem)"
 
     return _OcclusionContext(
         detected=True,
         cadence_constraint=constraint,
         strength_blocked=True,
-        strength_warning="❌ ZABLOKOWANE: Trening siłowy (niska kadencja) przeciwwskazany przy wykrytej okluzji",
+        strength_warning="❌ ZABLOKOWANE: Ciężkie podbiegi / maksymalna siła (długi kontakt z podłożem) przeciwwskazane przy wykrytej okluzji",
     )
 
 
@@ -520,7 +520,7 @@ def _power_fmt(
     high_pct: float,
     base: int,
     ftp_ref: int,
-    ftp_name: str = "FTP",
+    ftp_name: str = "CP",
     fallback: str = "---",
 ) -> str:
     """Format power range with watts AND %FTP."""
@@ -550,12 +550,12 @@ def _build_central_cards(
         },
         {
             "strategy_name": "INTERWAŁY VO₂max",
-            "power_range": _power_fmt(1.05, 1.15, vt2, ftp_ref, ftp_name, "106–120% FTP"),
+            "power_range": _power_fmt(1.05, 1.15, vt2, ftp_ref, ftp_name, "106–120% CP"),
             "volume": "4–6 × 4min, 2× / tydzień",
             "adaptation_goal": "Podniesienie pułapu tlenowego",
             "expected_response": "Wzrost VO₂max o 3–5% w 8 tygodni",
             "risk_level": "medium",
-            "constraint": f"{occ.cadence_constraint} (95-105 RPM optymalnie)"
+            "constraint": f"{occ.cadence_constraint} (175-185 spm optymalnie)"
             if occ.detected
             else "",
         },
@@ -583,10 +583,10 @@ def _build_peripheral_cards(
     if occ.strength_blocked:
         return [
             {
-                "strategy_name": "SWEET SPOT KADENCYJNY",
-                "power_range": f"{int(vt1 * 1.0)}–{int(vt2 * 0.92)}W @ 95-105 RPM"
+                "strategy_name": "TEMPO WYSOKOKADENCYJNE",
+                "power_range": f"{int(vt1 * 1.0)}–{int(vt2 * 0.92)}W @ 175-185 spm"
                 if vt1
-                else "88–94% FTP",
+                else "88–94% CP",
                 "volume": "2 × 20min, kadencja wysoka",
                 "adaptation_goal": "Poprawa kapilaryzacji BEZ okluzji",
                 "expected_response": "Zbliżenie SmO₂ LT2 do VT2 o 10–15W",
@@ -595,7 +595,7 @@ def _build_peripheral_cards(
             },
             {
                 "strategy_name": "OBJĘTOŚĆ AEROBOWA (BEZPIECZNA)",
-                "power_range": f"{int(vt1 * 0.70)}–{int(vt1 * 0.82)}W @ 90+ RPM" if vt1 else "Z2",
+                "power_range": f"{int(vt1 * 0.70)}–{int(vt1 * 0.82)}W @ 175+ spm" if vt1 else "Z2",
                 "volume": "2–3h / sesja, 10–14h / tydzień",
                 "adaptation_goal": "Rozbudowa sieci naczyń włosowatych",
                 "expected_response": "Wzrost SmO₂ bazowego o 2–4%",
@@ -603,12 +603,10 @@ def _build_peripheral_cards(
                 "constraint": occ.cadence_constraint,
             },
             {
-                "strategy_name": "SINGLE-LEG DRILLS",
-                "power_range": f"{int(vt1 * 0.50)}–{int(vt1 * 0.65)}W / noga"
-                if vt1
-                else "30-40% FTP",
-                "volume": "4 × 2min / noga, co-wheel spinning",
-                "adaptation_goal": "Aktywacja mięśniowa bez okluzji",
+                "strategy_name": "DRILLS BIEGOWE (A/B SKIP, RYTMY)",
+                "power_range": f"{int(vt1 * 0.50)}–{int(vt1 * 0.65)}W" if vt1 else "30-40% CP",
+                "volume": "4 × 2min technika + 6 × 100m rytmy",
+                "adaptation_goal": "Aktywacja mięśniowa i ekonomia biegu bez okluzji",
                 "expected_response": "Lepsza koordynacja i rekrutacja",
                 "risk_level": "low",
                 "constraint": occ.strength_warning,
@@ -617,22 +615,22 @@ def _build_peripheral_cards(
 
     return [
         {
-            "strategy_name": "SWEET SPOT + SIŁA",
-            "power_range": f"{int(vt1 * 1.0)}–{int(vt2 * 0.92)}W" if vt1 else "88–94% FTP",
-            "volume": "2 × 20min + 3 × 10min niska kadencja",
+            "strategy_name": "TEMPO + SIŁA BIEGOWA",
+            "power_range": f"{int(vt1 * 1.0)}–{int(vt2 * 0.92)}W" if vt1 else "88–94% CP",
+            "volume": "2 × 20min tempo + 6 × 10s podbieg",
             "adaptation_goal": "Poprawa kapilaryzacji i siły mięśniowej",
             "expected_response": "Zbliżenie SmO₂ LT2 do VT2 o 10–15W",
             "risk_level": "medium",
             "constraint": "",
         },
         {
-            "strategy_name": "TRENING SIŁOWY NA ROWERZE",
-            "power_range": f"{int(vt1 * 0.85)}–{int(vt1 * 0.95)}W @ 50–60rpm"
+            "strategy_name": "PODBIEGI SIŁOWE (HILL REPS)",
+            "power_range": f"{int(vt1 * 0.85)}–{int(vt1 * 0.95)}W na podbiegu 6–10%"
             if vt1
-            else "Z3 @ niska kadencja",
-            "volume": "4 × 8min, 1× / tydzień",
-            "adaptation_goal": "Rozwój włókien wolnokurczliwych",
-            "expected_response": "Poprawa momentu obrotowego",
+            else "Z3 @ podbieg",
+            "volume": "4 × 8 × 30s podbieg, 1× / tydzień",
+            "adaptation_goal": "Rozwój włókien wolnokurczliwych i siły",
+            "expected_response": "Poprawa mocy podbiegowej i ekonomii",
             "risk_level": "low",
             "constraint": "",
         },
@@ -665,7 +663,7 @@ def _build_metabolic_cards(
         },
         {
             "strategy_name": "TEMPO DŁUGIE",
-            "power_range": f"{int(vt1 * 0.92)}–{int(vt2 * 0.88)}W" if vt1 else "85–92% FTP",
+            "power_range": f"{int(vt1 * 0.92)}–{int(vt2 * 0.88)}W" if vt1 else "85–92% CP",
             "volume": "60–90min ciągłe, 1× / tydzień",
             "adaptation_goal": "Efektywność metaboliczna na progu",
             "expected_response": "Poprawa klirensu mleczanu",
@@ -741,10 +739,10 @@ def _build_balanced_cards(
         },
         {
             "strategy_name": "SWEET SPOT MAINTENANCE",
-            "power_range": f"{int(vt2 * 0.88)}–{int(vt2 * 0.94)}W" if vt2 else "88–94% FTP",
+            "power_range": f"{int(vt2 * 0.88)}–{int(vt2 * 0.94)}W" if vt2 else "88–94% CP",
             "volume": "2 × 20min, 1× / tydzień",
             "adaptation_goal": "Podtrzymanie mocy progowej",
-            "expected_response": "Utrzymanie CP/FTP",
+            "expected_response": "Utrzymanie CP",
             "risk_level": "low",
             "constraint": occ_tag,
         },
@@ -797,7 +795,7 @@ def generate_training_cards(
     limiter_type = limiter.get("limiter_type", "balanced")
     occ = _detect_occlusion(biomech_occlusion)
     ftp_ref = vt2 if vt2 else cp
-    ftp_name = "FTP"
+    ftp_name = "CP"
 
     builder = _CARD_BUILDERS.get(limiter_type, _build_balanced_cards)
     return builder(vt1, vt2, ftp_ref, ftp_name, occ)

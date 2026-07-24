@@ -367,7 +367,7 @@ def _generate_training_implications(profile: CardiacDriftProfile) -> List[str]:
             implications = [
                 "PRIORYTET: Treningi tempo 2x20min Z3",
                 "Praca nad wytrzymałością mięśniową (strength endurance)",
-                "Zwiększ kadencję o 5-10 rpm dla lepszej perfuzji",
+                "Zwiększ kadencję o 5-10 spm dla lepszej perfuzji",
             ]
         else:
             implications = [

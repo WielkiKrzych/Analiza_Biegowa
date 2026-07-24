@@ -179,10 +179,18 @@ def _run_biomech_occlusion(data: Dict, df_ts: Any, ctx: Dict) -> None:
         analysis_df = df_ts.copy()
         ctx["analysis_df"] = analysis_df
 
+        # Running cadence is steps/min, not crank angular velocity, so the
+        # crank-torque formula (Power = Torque · 2π · cadence/60) does NOT apply.
+        # Only derive torque from power+cadence for cycling sessions; for running
+        # we require a real measured `torque` column, otherwise skip occlusion.
+        is_running = ("pace" in analysis_df.columns) or ("speed" in analysis_df.columns)
+
         if "torque" in analysis_df.columns:
             torque = analysis_df["torque"].values
-        elif "watts" in analysis_df.columns and (
-            "cadence" in analysis_df.columns or "cad" in analysis_df.columns
+        elif (
+            not is_running
+            and "watts" in analysis_df.columns
+            and ("cadence" in analysis_df.columns or "cad" in analysis_df.columns)
         ):
             power = analysis_df["watts"].values
             cad_col = "cadence" if "cadence" in analysis_df.columns else "cad"

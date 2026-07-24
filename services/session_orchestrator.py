@@ -18,8 +18,6 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-logger = logging.getLogger(__name__)
-
 from modules.calculations import (
     calculate_advanced_kpi,
     calculate_heat_strain_index,
@@ -31,6 +29,8 @@ from modules.calculations import (
 
 from .data_validation import validate_dataframe
 from .session_analysis import apply_smo2_smoothing, calculate_extended_metrics, resample_dataframe
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize_df_for_cache(df: pd.DataFrame) -> bytes:
@@ -200,8 +200,16 @@ def prepare_session_record(
 
 
 def prepare_sticky_header_data(df_plot: pd.DataFrame, metrics: Dict[str, Any]) -> Dict[str, Any]:
-    """Prepare data for the sticky header display."""
+    """Prepare data for the sticky header display.
+
+    Running-first: when a ``pace`` column is present the header shows average
+    pace (min/km) and cadence in SPM. Power is still passed through so dual-mode
+    (running power / cycling) sessions can fall back to watts.
+    """
+    avg_pace = _mean_running_pace(df_plot)
     return {
+        "avg_pace": avg_pace,
+        "is_running": avg_pace > 0,
         "avg_power": metrics.get("avg_watts", 0),
         "avg_hr": metrics.get("avg_hr", 0),
         "avg_smo2": df_plot["smo2"].mean() if "smo2" in df_plot.columns else 0,
@@ -209,3 +217,20 @@ def prepare_sticky_header_data(df_plot: pd.DataFrame, metrics: Dict[str, Any]) -
         "avg_ve": metrics.get("avg_vent", 0),
         "duration_min": len(df_plot) / 60 if len(df_plot) > 0 else 0,
     }
+
+
+def _mean_running_pace(df_plot: pd.DataFrame) -> float:
+    """Return mean moving pace in seconds/km, ignoring standing/invalid samples.
+
+    Accepts either a ``pace`` column (sec/km) or a ``speed`` column (m/s).
+    """
+    if "pace" in df_plot.columns:
+        pace = pd.to_numeric(df_plot["pace"], errors="coerce")
+        # Keep only plausible moving paces: 2:00–20:00 min/km.
+        pace = pace[(pace >= 120) & (pace <= 1200)]
+        return float(pace.mean()) if len(pace) > 0 else 0.0
+    if "speed" in df_plot.columns:
+        speed = pd.to_numeric(df_plot["speed"], errors="coerce")
+        speed = speed[speed > 0.5]  # ignore near-stationary samples
+        return float(1000.0 / speed.mean()) if len(speed) > 0 else 0.0
+    return 0.0

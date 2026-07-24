@@ -20,7 +20,7 @@ __all__ = ["_build_training_timeline_chart", "_render_metrics_panel"]
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:
+def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]:  # noqa: C901
     """Build training timeline chart with pace, HR, SmO2, VE (cached)."""
     fig = go.Figure()
     time_x = (
@@ -61,7 +61,6 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         )
 
     hr_col = next((c for c in ["heartrate", "hr"] if c in df_plot.columns), None)
-    hr_vals = df_plot[hr_col] if hr_col else None
 
     smo2_vals = (
         df_plot["smo2"].rolling(10, center=True).mean() if "smo2" in df_plot.columns else None

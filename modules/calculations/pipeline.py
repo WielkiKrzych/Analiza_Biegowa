@@ -19,8 +19,6 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from models.results import (
     ConflictReport,
     ConflictSeverity,
@@ -37,6 +35,8 @@ from modules.calculations.power import calculate_power_duration_curve
 from modules.calculations.step_detection import detect_step_test_range
 from modules.calculations.threshold_types import StepSmO2Result, StepTestRange, StepVTResult
 from modules.calculations.ventilatory import detect_vt_from_steps
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # STEP 1: TEST VALIDATION

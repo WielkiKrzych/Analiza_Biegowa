@@ -34,12 +34,19 @@ def _ensure_numeric(df: pd.DataFrame, col: str) -> Tuple[Optional[pd.DataFrame],
 def _validate_column_range(
     df: pd.DataFrame, col: str, max_val: float, label: str, unit: str
 ) -> Optional[str]:
-    """Check if column max exceeds limit; returns failure message or None."""
+    """Check if column 99th percentile exceeds limit; returns failure message or None.
+
+    Uses 99th percentile (not max) so isolated sensor spikes do not block
+    an otherwise valid import.
+    """
     if col not in df.columns:
         return None
-    col_max = df[col].max()
-    if col_max > max_val:
-        return f"{label} ({col_max:.0f} {unit}) przekracza limit ({max_val} {unit}). Sprawdź jednostki."
+    series = df[col].dropna()
+    if series.empty:
+        return None
+    col_p99 = float(series.quantile(0.99))
+    if col_p99 > max_val:
+        return f"{label} ({col_p99:.0f} {unit}) przekracza limit ({max_val} {unit}). Sprawdź jednostki."
     return None
 
 

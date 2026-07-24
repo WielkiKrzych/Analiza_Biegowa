@@ -117,7 +117,7 @@ def generate_full_vent_chart(
     # Title & Legend
     ax1.set_title("Dynamika Wentylacji vs Tempo", fontsize=title_size, fontweight="bold")
 
-    labels = [l.get_label() for l in lines]
+    labels = [ln.get_label() for ln in lines]
     ax1.legend(lines, labels, loc="upper left", framealpha=0.9)
 
     apply_common_style(fig, ax1, **cfg)

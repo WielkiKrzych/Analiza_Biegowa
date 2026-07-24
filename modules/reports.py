@@ -6,11 +6,11 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-
-logger = logging.getLogger(__name__)
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
+
+logger = logging.getLogger(__name__)
 
 
 def _calculate_fallback_metrics(metrics: Dict[str, Any], df_plot: pd.DataFrame) -> Dict[str, Any]:
@@ -82,7 +82,7 @@ def _add_kpi_section(doc: Document, metrics: Dict[str, Any], df_plot: pd.DataFra
         ("Normalized Power (NP)", f"{metrics.get('np', 0):.0f} W"),
         ("Praca Całkowita", f"{metrics.get('work_kj', 0):.0f} kJ"),
         ("Średnie Tętno", f"{metrics.get('avg_hr', 0):.0f} bpm"),
-        ("Średnia Kadencja", f"{metrics.get('avg_cadence', 0):.0f} rpm"),
+        ("Średnia Kadencja", f"{metrics.get('avg_cadence', 0):.0f} spm"),
         ("Średnia Wentylacja (VE)", f"{metrics.get('avg_vent', 0):.1f} L/min"),
         ("Średnie Oddechy (RR)", f"{metrics.get('avg_rr', 0):.1f} /min"),
         ("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f}%"),
