@@ -168,6 +168,14 @@ if uploaded_file is not None:
                 st.error(f"Błąd analizy: {error_msg}")
                 st.stop()
 
+            if metrics.get("power_is_estimated"):
+                st.info(
+                    "🏃 **Tryb biegowy (tempo + HR):** brak miernika mocy, więc intensywność "
+                    "liczona jest z **tempa/GAP** (moc w watach w zakładkach to wartość *szacowana* "
+                    "z tempa, nie pomiar). Analizy progów, obciążenia i limiterów bazują na "
+                    "Twoim tempie i tętnie."
+                )
+
             # Extract intermediate results from metrics (DIP: metrics acts as a container here)
             # FIX: Use .get() instead of .pop() to avoid mutating cached data
             decoupling_percent = metrics.get("_decoupling_percent", 0.0)

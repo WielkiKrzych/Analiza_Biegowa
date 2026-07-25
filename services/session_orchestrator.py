@@ -26,6 +26,7 @@ from modules.calculations import (
     calculate_z2_drift,
     process_data,
 )
+from modules.calculations.running_power import ensure_power_column
 
 from .data_validation import validate_dataframe
 from .session_analysis import apply_smo2_smoothing, calculate_extended_metrics, resample_dataframe
@@ -70,7 +71,9 @@ def _process_session_cached(
         return b"", b"", {"_error": error_msg}
 
     df_clean_pl = process_data(df_raw)
+    power_estimated = ensure_power_column(df_clean_pl, rider_weight)
     metrics = calculate_metrics(df_clean_pl, cp_input)
+    metrics["power_is_estimated"] = power_estimated
     df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
     decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
     drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
@@ -79,6 +82,7 @@ def _process_session_cached(
     metrics = calculate_extended_metrics(
         df_plot, metrics, rider_weight, vt1_watts, vt2_watts, ef_factor
     )
+    metrics["power_is_estimated"] = power_estimated
     df_plot = apply_smo2_smoothing(df_plot)
     df_plot_resampled = resample_dataframe(df_plot)
 
@@ -150,7 +154,9 @@ def process_uploaded_session(
             return None, None, None, error_msg
 
         df_clean_pl = process_data(df_raw)
+        power_estimated = ensure_power_column(df_clean_pl, rider_weight)
         metrics = calculate_metrics(df_clean_pl, cp_input)
+        metrics["power_is_estimated"] = power_estimated
         df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
         decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
         drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
