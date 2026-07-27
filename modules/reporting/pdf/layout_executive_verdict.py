@@ -590,7 +590,7 @@ def build_page_executive_verdict(
     )
     footer_text = (
         f"<b>Typ testu:</b> Ramp Test | <b>Metodologia:</b> Ventilatory & BreathRate + SmO₂ + Core Temp "
-        f"| <b>Źródło VO₂max:</b> {metrics['vo2max_source']} | <b>System:</b> Tri Dashboard v2.0"
+        f"| <b>Źródło VO₂max:</b> {metrics['vo2max_source']} | <b>System:</b> Run Analytics Pro v2.0"
     )
     elements.append(Paragraph(footer_text, footer_style))
 

@@ -68,7 +68,11 @@ def calculate_pace_zones_time(
     # NOTE: This function assumes 1Hz (1-second) sampled data.
     # mask.sum() counts rows, which equals seconds only at 1Hz.
     # Data MUST be resampled to 1s before calling this function.
-    pace = df["pace"].fillna(threshold_pace * 2)  # NaN = very slow
+    # A stop is recorded either as NaN or as pace == 0 depending on the source
+    # device/file. Both mean "not moving", NOT "infinitely fast" — leaving 0 in
+    # place would push standing rest into the fastest zone (Z6 Repetition).
+    pace = df["pace"].mask(df["pace"] <= 0)
+    pace = pace.fillna(threshold_pace * 2)  # stopped/unknown = very slow
     results = {}
 
     for zone_name, (low_pct, high_pct) in zones.items():
@@ -89,27 +93,39 @@ DEFAULT_PDC_DURATIONS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200]
 if NUMBA_AVAILABLE:
 
     @njit(cache=True)
-    def _calculate_pdc_numba(pace: np.ndarray, durations: np.ndarray) -> np.ndarray:
-        n = len(pace)
+    def _calculate_pdc_numba(speed: np.ndarray, durations: np.ndarray) -> np.ndarray:
+        """Best mean SPEED for each duration, via a sliding-window sum.
+
+        Works in speed space on purpose: the best N-second pace is
+        distance / time, i.e. the harmonic mean of pace, which equals the
+        arithmetic mean of speed. Averaging pace directly would report a
+        pace the athlete never actually held.
+        """
+        n = len(speed)
         m = len(durations)
         results = np.empty(m, dtype=np.float64)
 
         for i in range(m):
             duration = int(durations[i])
-            if n < duration:
+            if n < duration or duration <= 0:
                 results[i] = np.nan
                 continue
 
-            best_pace = np.inf
-            for j in range(n - duration + 1):
-                window_mean = np.mean(pace[j : j + duration])
-                if window_mean < best_pace:
-                    best_pace = window_mean
+            window_sum = 0.0
+            for j in range(duration):
+                window_sum += speed[j]
+            best_sum = window_sum
 
-            if best_pace == np.inf:
+            for j in range(duration, n):
+                window_sum += speed[j] - speed[j - duration]
+                if window_sum > best_sum:
+                    best_sum = window_sum
+
+            best_speed = best_sum / duration
+            if best_speed <= 0.0:
                 results[i] = np.nan
             else:
-                results[i] = best_pace
+                results[i] = best_speed
 
         return results
 
@@ -119,6 +135,11 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
 
     Similar to Power Duration Curve but for pace.
     Returns the BEST (lowest) pace achieved for each duration.
+
+    The best N-second pace is defined as distance covered / N, so the average
+    is taken over SPEED, not over pace. Stopped samples (pace <= 0 or NaN) are
+    treated as zero speed rather than as an infinitely fast sample — otherwise
+    a mid-run traffic-light stop would create a fictitious "best effort".
     """
     df = ensure_pandas(df_pl)
 
@@ -128,35 +149,42 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
     if durations is None:
         durations = DEFAULT_PDC_DURATIONS
 
-    pace = df["pace"].ffill().bfill().values
-    n = len(pace)
+    pace_arr = pd.to_numeric(df["pace"], errors="coerce").to_numpy(dtype=float)
+    # pace <= 0 or NaN => not moving => 0 m/s
+    with np.errstate(divide="ignore", invalid="ignore"):
+        speed = np.where(pace_arr > 0, 1000.0 / pace_arr, 0.0)
+    speed = np.nan_to_num(speed, nan=0.0, posinf=0.0, neginf=0.0)
+    n = len(speed)
+
+    def _to_pace(best_speed: Optional[float]) -> Optional[float]:
+        if best_speed is None or not np.isfinite(best_speed) or best_speed <= 0:
+            return None
+        return float(1000.0 / best_speed)
 
     if NUMBA_AVAILABLE and n > 100:
         try:
             durations_arr = np.array(durations, dtype=np.float64)
-            results_arr = _calculate_pdc_numba(pace, durations_arr)
+            results_arr = _calculate_pdc_numba(speed, durations_arr)
 
             results = {}
             for i, duration in enumerate(durations):
                 val = results_arr[i]
-                results[duration] = None if np.isnan(val) else float(val)
+                results[duration] = None if np.isnan(val) else _to_pace(float(val))
             return results
         except (ValueError, TypeError, RuntimeError):
             pass
 
     results = {}
+    speed_s = pd.Series(speed)
     for duration in durations:
-        if n < duration:
+        if n < duration or duration <= 0:
             results[duration] = None
             continue
 
-        rolling = pd.Series(pace).rolling(window=duration, min_periods=duration).mean()
-        best_pace = rolling.min()
+        rolling = speed_s.rolling(window=duration, min_periods=duration).mean()
+        best_speed = rolling.max()
 
-        if pd.notna(best_pace):
-            results[duration] = float(best_pace)
-        else:
-            results[duration] = None
+        results[duration] = _to_pace(float(best_speed)) if pd.notna(best_speed) else None
 
     return results
 

@@ -13,8 +13,8 @@ BASE_DIR = Path(__file__).parent.parent
 class Config:
     BASE_DIR = BASE_DIR
     # --- Application Settings ---
-    APP_TITLE = os.getenv("APP_TITLE", "Pro Athlete Dashboard")
-    APP_ICON = os.getenv("APP_ICON", "⚡")
+    APP_TITLE = os.getenv("APP_TITLE", "Run Analytics Pro")
+    APP_ICON = os.getenv("APP_ICON", "🏃")
     APP_LAYOUT = os.getenv("APP_LAYOUT", "wide")
     CSS_FILE = os.getenv("CSS_FILE", "style.css")
 

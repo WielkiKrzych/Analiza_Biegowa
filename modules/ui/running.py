@@ -47,19 +47,36 @@ def get_pace_zone_color(pace: float, threshold_pace: float) -> str:
         return "#e74c3c"  # Red - Interval/Repetition
 
 
+def _mean_pace(series: pd.Series) -> float:
+    """Time-weighted average pace = total distance / total time.
+
+    The arithmetic mean of pace (sec/km) is NOT the average pace: it
+    over-weights slow samples. E.g. 30 min at 4:00 + 30 min at 6:00 averages
+    to 4:48/km (distance/time), not 5:00/km. Averaging in speed space and
+    converting back gives the correct, device-consistent value.
+    """
+    paces = pd.to_numeric(series, errors="coerce")
+    paces = paces[paces > 0].dropna()
+    if paces.empty:
+        return 0.0
+    mean_speed = float((1000.0 / paces).mean())
+    return 1000.0 / mean_speed if mean_speed > 0 else 0.0
+
+
 def calculate_pace_summary_stats(df: pd.DataFrame, threshold_pace: float) -> Dict:
     """Calculate summary statistics for pace data."""
     stats = {}
 
     if "pace" in df.columns:
         paces = df["pace"].dropna()
-        stats["avg_pace"] = float(paces.mean())
-        stats["min_pace"] = float(paces.min())
-        stats["max_pace"] = float(paces.max())
+        moving = paces[paces > 0]
+        stats["avg_pace"] = _mean_pace(paces)
+        # min = fastest, max = slowest; ignore stopped samples (pace <= 0)
+        stats["min_pace"] = float(moving.min()) if not moving.empty else 0.0
+        stats["max_pace"] = float(moving.max()) if not moving.empty else 0.0
 
     if "gap" in df.columns:
-        gaps = df["gap"].dropna()
-        stats["avg_gap"] = float(gaps.mean())
+        stats["avg_gap"] = _mean_pace(df["gap"])
 
     if "pace" in df.columns:
         stats["time_in_zones"] = calculate_pace_zones_time(df, threshold_pace)

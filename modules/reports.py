@@ -57,7 +57,7 @@ def _add_header_section(doc: Document, uploaded_file: Any) -> None:
     style.font.size = Pt(10)
 
     # Title
-    title = doc.add_heading("Pro Athlete Dashboard - Raport Treningowy", 0)
+    title = doc.add_heading("Run Analytics Pro - Raport Treningowy", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Date
@@ -223,7 +223,7 @@ def _add_notes_section(doc: Document) -> None:
 def _add_footer(doc: Document) -> None:
     """Add report footer."""
     doc.add_paragraph("---")
-    footer = doc.add_paragraph("Raport wygenerowany przez Pro Athlete Dashboard | Streamlit App")
+    footer = doc.add_paragraph("Raport wygenerowany przez Run Analytics Pro | Streamlit App")
     footer.runs[0].font.size = Pt(8)
     footer.runs[0].font.color.rgb = RGBColor(128, 128, 128)
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER

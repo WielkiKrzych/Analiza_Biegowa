@@ -400,7 +400,7 @@ class PlatformSync:
         Returns:
             Formatted description string
         """
-        lines = ["📊 Pro Athlete Dashboard Analysis\n"]
+        lines = ["📊 Run Analytics Pro Analysis\n"]
 
         if metrics.get("np"):
             lines.append(f"⚡ NP: {metrics['np']:.0f} W")

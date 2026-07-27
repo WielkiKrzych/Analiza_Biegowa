@@ -1,5 +1,36 @@
 ## 📋 Changelog
 
+### 2026-07-26 - Running Analysis Correctness Fixes + Rebrand
+
+**🔴 Krytyczne błędy w logice biegowej (naprawione):**
+
+- 🔴 **GAP: tabela Minetti niezgodna ze źródłem.** Moduł cytował Minetti et al. (2002), ale wpisane ręcznie koszty metaboliczne odbiegały od oryginału o czynnik **1,3–4,6×**. Skutki: podbiegi zawyżane o 13–21% w typowym zakresie ±5–10%, a przy zbiegach stromszych niż ~-15% **odwracał się znak korekty** (5:00/km na -45% raportowane jako GAP 1:00/km). Zastąpione bezpośrednim wyliczeniem z wielomianu z pracy: `Cr(i) = 155,4i⁵ − 30,4i⁴ − 43,3i³ + 46,3i² + 19,5i + 3,6`. Minimum kosztu wypada teraz poprawnie przy ~-20%.
+- 🔴 **PDC wymyślał rekordy z postojów.** Krzywa uśredniała tempo arytmetycznie po surowej kolumnie `pace`, gdzie postój zapisany jest jako `0`. 30 s na światłach w środku równego biegu 5:00/km dawało „najlepsze 60 s" = 2:30/km. Przepisane na przestrzeń prędkości (najlepsze N s = dystans/czas), co przy okazji naprawia drugi błąd — średnia arytmetyczna tempa **nie jest** średnim tempem (interwały 30 s/30 s: 5:00/km zamiast poprawnych 4:27/km).
+- 🔴 **Strefy tempa wrzucały postoje do Z6 Repetition.** `pace == 0` wpadało w przedział 0–75% progu, więc stanie w miejscu liczyło się jako najostrzejsza praca. Teraz `pace <= 0` trafia do Z1 razem z `NaN`.
+- 🟠 **Średnie tempo liczone arytmetycznie.** 30 min @ 4:00 + 30 min @ 6:00 pokazywało 5:00/km zamiast 4:48/km — 12 s/km rozbieżności z zegarkiem. Zmienione na dystans/czas; `min_pace`/`max_pace` pomijają teraz postoje.
+
+**Blast radius:** `gap` zasila `running_power.py` → CP/W′, progi, limitery i fenotyp. Wpisy historyczne w `training_history.db` liczone starym GAP-em są na innej skali niż nowe.
+
+**🎨 Rebranding: `Pro Athlete Dashboard` / `TriDashboard` → `Run Analytics Pro`**
+- Tytuł w sidebarze i karcie przeglądarki (`Config.APP_TITLE`, ikona `🏃`)
+- Watermark eksportu PNG, stopka raportu PDF, nagłówek i stopka DOCX, eksport FIT
+- Nadpisywalne przez `APP_TITLE` / `APP_ICON` w env
+- Nowa ikona aplikacji (macOS squircle, gradient turkus→granat, sylwetka biegacza), pełny `.icns` 16–1024 px
+
+**🚀 Launcher: kolizja portów między projektami**
+- `Analiza_Kolarska` również miała na sztywno `PORT=8502` — launcher biegowej sprawdzał tylko „czy port zajęty" i **otwierał cudzą aplikację**
+- Własna pula portów **8510–8519** + identyfikacja serwera po katalogu roboczym procesu (`lsof` cwd), nie po numerze portu
+- Automatyczny restart, gdy serwer wystartował przed ostatnią zmianą kodu (Streamlit nie przeładowuje niezawodnie zaimportowanych modułów)
+- Ponowne kliknięcie ikony reużywa działającą instancję zamiast dublować
+
+**Walidacja:**
+- ✅ **346/346 testów przechodzi** (było 321 — dodano 25 testów regresyjnych w `tests/calculations/test_running_regressions.py`)
+- ✅ **Ruff: 0 naruszeń**, formatowanie czyste
+- ✅ Aplikacja startuje bez błędów, wszystkie 22 zakładki importują się poprawnie
+
+---
+
+
 ### 2026-04-05 - Comprehensive Code Quality Refactor
 
 **Critical bug fixes:**
@@ -309,6 +340,29 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+### 🖥️ Aplikacja natywna na macOS
+
+```bash
+# Zbuduj "Analiza Biegowa.app" i dodaj do Docka
+bash build_biegowa_app.sh
+```
+
+Tworzy applet (`osacompile`) w `/Applications`, wgrywa ikonę i dopina go do Docka.
+Kliknięcie ikony wywołuje `launcher.sh`, który:
+
+| Krok | Zachowanie |
+|------|-----------|
+| 1 | Szuka serwera Streamlit, którego **katalog roboczy** to ten projekt (pula portów `8510–8519`) |
+| 2 | Jeśli serwer wystartował **przed** ostatnią zmianą kodu — restartuje go |
+| 3 | Jeśli jest aktualny — reużywa i tylko otwiera przeglądarkę |
+| 4 | Jeśli nie ma żadnego — startuje na pierwszym wolnym porcie z puli |
+
+> ⚠️ Identyfikacja po katalogu roboczym, a nie po numerze portu, jest celowa — kilka projektów
+> Streamlit obok siebie (`Analiza_Biegowa`, `Analiza_Kolarska`, `Tri_Dashboard`) potrafiło
+> nawzajem przejmować sobie porty i otwierać cudzą aplikację.
+
+Log uruchomienia: `/tmp/analiza_biegowa_launch.log`
+
 ---
 
 ## 🎯 Kluczowa Zmiana: Tempo zamiast Mocy
@@ -600,8 +654,12 @@ Wszystkie wykresy w aplikacji używają spójnych ikon emoji w tooltipach (po na
 │   ├── ⚡ session_orchestrator.py   ← Pipeline
 │   └── ✅ data_validation.py        ← Walidacja
 │
-└── 🧪 tests/                         ← 31 testów
-    ├── 📐 calculations/             ← Unit tests
+└── 🧪 tests/                         ← 346 testów
+    ├── 📐 calculations/             ← Unit tests + regresje biegowe
+    ├── 📡 signals/                  ← Preprocessing / konflikty sygnałów
+    ├── 🗄️ db/                       ← Session store
+    ├── 📄 reporting/                ← Persistence
+    ├── 🔧 services/                 ← Walidacja danych
     └── 🔗 integration/              ← Testy integracyjne
 ```
 
@@ -617,17 +675,25 @@ pytest tests/ -v
 pytest --cov=modules tests/
 ```
 
-**Status:** `73/73 ✅`
+**Status:** `346/346 ✅`
 
 | Kategoria | Testy | Status |
 |-----------|-------|:------:|
-| 📐 Obliczenia (pace, d_prime, pipeline) | 30 | ✅ |
+| 📐 Obliczenia (pace, d_prime, pipeline, pace_utils) | 30 | ✅ |
+| 🏃 **Regresje logiki biegowej** (GAP/Minetti, PDC, strefy, avg pace) | **25** | ✅ |
 | 🔗 Integracja (running pipeline) | 5 | ✅ |
+| 🗄️ Session store | 49 | ✅ |
+| 📡 Sygnały (preprocessing, conflicts, validation) | 167 | ✅ |
+| 📄 Reporting / persistence | 32 | ✅ |
 | ✅ Walidacja danych | 30 | ✅ |
-| 🔄 Repeatability | 1 | ✅ |
 | 🩸 SmO2 / Resaturation | 3 | ✅ |
 | ⚙️ Settings | 3 | ✅ |
+| 🔄 Repeatability | 1 | ✅ |
 | 🗺️ State Machine | 1 | ✅ |
+
+> 🏃 `tests/calculations/test_running_regressions.py` przypina każdy błąd znaleziony
+> w audycie z 2026-07-26 — m.in. zgodność współczynnika GAP z wielomianem Minettiego,
+> brak fikcyjnych rekordów PDC po postojach i średnie tempo liczone jako dystans/czas.
 
 ---
 

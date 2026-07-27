@@ -20,7 +20,7 @@ CHART_SIZES = {
 }
 
 
-def add_watermark(image_bytes: bytes, text: str = "TriDashboard") -> bytes:
+def add_watermark(image_bytes: bytes, text: str = "Run Analytics Pro") -> bytes:
     """
     Dodaje watermark do obrazu PNG.
 
