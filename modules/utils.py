@@ -425,42 +425,48 @@ class DataQualityReport:
         }
 
 
+# Metric definitions for data completeness validation (P2-4, audit v2).
+# Moved from inside `validate_data_completeness` to module level so:
+#   1. The dict is allocated once, not on every call.
+#   2. Tests can iterate it without invoking the function.
+#   3. Adding a new metric is one place to edit.
+METRIC_GROUP_DEFINITIONS = {
+    "core": {
+        "watts": ["watts", "power"],
+        "heartrate": ["heartrate", "hr", "heart_rate"],
+    },
+    "advanced": {
+        "cadence": ["cadence", "cad"],
+        "smo2": ["smo2"],
+        "thb": ["thb", "total_hemoglobin"],
+    },
+    "ventilation": {
+        "ve": ["tymeventilation", "ve", "ventilation"],
+        "br": ["tymebreathrate", "br", "breath_rate"],
+    },
+    "thermal": {
+        "core_temp": ["core_temperature", "core_temp"],
+        "skin_temp": ["skin_temperature", "skin_temp"],
+    },
+    "biomechanics": {
+        "vo": ["verticaloscillation", "VerticalOscillation", "vo"],
+    },
+    "running": {
+        "pace": ["pace", "speed", "velocity_smooth"],
+        "gct": ["ground_contact", "gct"],
+    },
+}
+
+
 def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
     """Validate data completeness and provide recommendations."""
     available = []
     missing = []
     recommendations = []
 
-    metric_definitions = {
-        "core": {
-            "watts": ["watts", "power"],
-            "heartrate": ["heartrate", "hr", "heart_rate"],
-        },
-        "advanced": {
-            "cadence": ["cadence", "cad"],
-            "smo2": ["smo2"],
-            "thb": ["thb", "total_hemoglobin"],
-        },
-        "ventilation": {
-            "ve": ["tymeventilation", "ve", "ventilation"],
-            "br": ["tymebreathrate", "br", "breath_rate"],
-        },
-        "thermal": {
-            "core_temp": ["core_temperature", "core_temp"],
-            "skin_temp": ["skin_temperature", "skin_temp"],
-        },
-        "biomechanics": {
-            "vo": ["verticaloscillation", "VerticalOscillation", "vo"],
-        },
-        "running": {
-            "pace": ["pace", "speed", "velocity_smooth"],
-            "gct": ["ground_contact", "gct"],
-        },
-    }
-
     columns_lower = [c.lower() for c in df.columns]
 
-    for group, metrics in metric_definitions.items():
+    for group, metrics in METRIC_GROUP_DEFINITIONS.items():
         for metric_name, aliases in metrics.items():
             found = any(a.lower() in columns_lower for a in aliases)
             if found:

@@ -47,7 +47,7 @@ class AppLayout:
                 step=1,
                 min_value=100,
                 max_value=250,
-                value=180,
+                value=Config.DEFAULT_RUNNER_HEIGHT_CM,
                 key="height",
                 on_change=self.state.save_settings_callback,
             )
@@ -56,13 +56,13 @@ class AppLayout:
                 step=1,
                 min_value=10,
                 max_value=100,
-                value=30,
+                value=Config.DEFAULT_RUNNER_AGE_YEARS,
                 key="age",
                 on_change=self.state.save_settings_callback,
             )
             params["is_male"] = st.checkbox(
                 "Mężczyzna?",
-                value=True,
+                value=Config.DEFAULT_IS_MALE,
                 key="gender_m",
                 on_change=self.state.save_settings_callback,
             )
@@ -72,7 +72,7 @@ class AppLayout:
                 "Tempo Progowe [s/km]",
                 min_value=120,
                 max_value=600,
-                value=233,
+                value=Config.DEFAULT_THRESHOLD_PACE_SEC_PER_KM,
                 help="Np. 3:53 min/km = 233s",
                 key="threshold_pace",
                 on_change=self.state.save_settings_callback,
@@ -81,7 +81,7 @@ class AppLayout:
                 "LTHR (Tętno Progowe) [bpm]",
                 min_value=100,
                 max_value=200,
-                value=166,
+                value=Config.DEFAULT_LTHR_BPM,
                 key="lthr",
                 on_change=self.state.save_settings_callback,
             )
@@ -89,7 +89,7 @@ class AppLayout:
                 "MaxHR [bpm]",
                 min_value=120,
                 max_value=220,
-                value=184,
+                value=Config.DEFAULT_MAX_HR_BPM,
                 key="max_hr",
                 on_change=self.state.save_settings_callback,
             )

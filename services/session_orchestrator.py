@@ -58,7 +58,7 @@ def _process_session_core(
     rider_weight: float,
     vt1_watts: float,
     vt2_watts: float,
-) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, Any], Optional[str]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any], str | None]:
     """Core session processing — shared by cached and uncached paths.
 
     P1-1 (audit v2): the previous `process_uploaded_session` duplicated ~25
@@ -140,7 +140,7 @@ def process_uploaded_session(
     rider_weight: float = Config.DEFAULT_BODY_WEIGHT_KG,
     vt1_watts: float = 0,
     vt2_watts: float = 0,
-) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[Dict[str, Any]], Optional[str]]:
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None, dict[str, Any] | None, str | None]:
     """Process an uploaded session file through the full analysis pipeline.
 
     Orchestrates:

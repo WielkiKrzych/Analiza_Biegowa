@@ -26,6 +26,17 @@ class Config:
     # this, the three sites hard-coded 95.0 vs 75.0 vs 75.0 — power could
     # differ by 27% depending on call path.
     DEFAULT_BODY_WEIGHT_KG = float(os.getenv("DEFAULT_BODY_WEIGHT_KG", "75.0"))
+    # Other athlete defaults (P2-1, audit v2): the sidebar previously had
+    # six hard-coded numbers (height, age, gender, threshold pace, LTHR,
+    # MaxHR). All are now env-overridable for tests and personalization.
+    DEFAULT_RUNNER_HEIGHT_CM = int(os.getenv("DEFAULT_RUNNER_HEIGHT_CM", "180"))
+    DEFAULT_RUNNER_AGE_YEARS = int(os.getenv("DEFAULT_RUNNER_AGE_YEARS", "30"))
+    DEFAULT_IS_MALE = os.getenv("DEFAULT_IS_MALE", "true").lower() in ("true", "1", "yes")
+    DEFAULT_THRESHOLD_PACE_SEC_PER_KM = int(
+        os.getenv("DEFAULT_THRESHOLD_PACE_SEC_PER_KM", "233")  # 3:53 /km
+    )
+    DEFAULT_LTHR_BPM = int(os.getenv("DEFAULT_LTHR_BPM", "166"))
+    DEFAULT_MAX_HR_BPM = int(os.getenv("DEFAULT_MAX_HR_BPM", "184"))
 
     # --- Analysis Parameters ---
     ROLLING_WINDOW_5MIN = int(os.getenv("ROLLING_WINDOW_5MIN", "300"))
