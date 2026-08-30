@@ -35,7 +35,10 @@ class AppLayout:
                 step=0.5,
                 min_value=30.0,
                 max_value=200.0,
-                value=95.0,
+                # P0-3 (audit v2): single source of truth for default weight.
+                # Before: value=95.0 (sidebar) vs weight_kg=75.0 (orchestrator/
+                # running_power) — power estimate differed by 27%.
+                value=Config.DEFAULT_BODY_WEIGHT_KG,
                 key="weight",
                 on_change=self.state.save_settings_callback,
             )

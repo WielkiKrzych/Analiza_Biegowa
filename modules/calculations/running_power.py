@@ -24,6 +24,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from modules.config import Config
+
 # W per (kg · m/s). ~5:00/km (3.333 m/s) × 75 kg × 1.04 ≈ 260 W.
 POWER_PER_KG_PER_MS = 1.04
 
@@ -53,14 +55,14 @@ def _equivalent_speed(df: pd.DataFrame) -> Optional[pd.Series]:
     return None
 
 
-def estimate_running_power(df: pd.DataFrame, weight_kg: float = 75.0) -> Optional[pd.Series]:
+def estimate_running_power(df: pd.DataFrame, weight_kg: float = Config.DEFAULT_BODY_WEIGHT_KG) -> Optional[pd.Series]:
     """Estimate running power [W] per sample from pace/GAP.
 
     Returns a float Series aligned to *df*, or None when no usable pace/speed
     column is present.
     """
     if weight_kg is None or weight_kg <= 0:
-        weight_kg = 75.0
+        weight_kg = Config.DEFAULT_BODY_WEIGHT_KG
     speed = _equivalent_speed(df)
     if speed is None:
         return None
@@ -79,7 +81,7 @@ def has_measured_power(df: pd.DataFrame) -> bool:
     return False
 
 
-def ensure_power_column(df: pd.DataFrame, weight_kg: float = 75.0) -> bool:
+def ensure_power_column(df: pd.DataFrame, weight_kg: float = Config.DEFAULT_BODY_WEIGHT_KG) -> bool:
     """Populate ``df['watts']`` from pace when no measured power exists.
 
     Mutates *df* in place. Returns True when power was ESTIMATED from pace

@@ -18,6 +18,15 @@ class Config:
     APP_LAYOUT = os.getenv("APP_LAYOUT", "wide")
     CSS_FILE = os.getenv("CSS_FILE", "style.css")
 
+    # --- Athlete Defaults ---
+    # Single source of truth for default body weight. Used by the sidebar
+    # (`modules/frontend/layout.py`), the orchestrator
+    # (`services/session_orchestrator.py`), and the power estimator
+    # (`modules/calculations/running_power.py`). Audit v2 §6 P0-3: before
+    # this, the three sites hard-coded 95.0 vs 75.0 vs 75.0 — power could
+    # differ by 27% depending on call path.
+    DEFAULT_BODY_WEIGHT_KG = float(os.getenv("DEFAULT_BODY_WEIGHT_KG", "75.0"))
+
     # --- Analysis Parameters ---
     ROLLING_WINDOW_5MIN = int(os.getenv("ROLLING_WINDOW_5MIN", "300"))
     ROLLING_WINDOW_30S = int(os.getenv("ROLLING_WINDOW_30S", "30"))

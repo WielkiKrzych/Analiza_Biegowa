@@ -81,10 +81,14 @@ def calculate_normalized_pace(df: Union[pd.DataFrame, Any], rolling_window_sec: 
         return 0.0
 
     # Filter out invalid pace values (0, NaN, negative)
-    # Clip to physiological range: 60 sec/km (sprint) to 900 sec/km (brisk walk)
-    # Exclude stopped periods (>900 sec/km) from NP calculation
+    # Lower sanity cap: 60 sec/km (sprint). Values below are kept as 60.
+    # Filter (DROP) stopped periods: >900 sec/km. The docstring promises
+    # "Exclude stopped periods (>900 sec/km) from NP calculation" — the
+    # previous `clip(upper=900)` merely compressed them to 900 (15:00/km),
+    # not excluded them. See audit v2 §6 P0-2.
     pace = df[col].replace(0, np.nan).replace(-np.inf, np.nan)
-    pace = pace.clip(lower=60, upper=900)
+    pace = pace[pace <= 900]  # exclude stopped periods (>900 s/km)
+    pace = pace.clip(lower=60)  # lower sanity cap: sub-1:00/km is not sustained running
     pace = pace.dropna()
 
     if len(pace) < rolling_window_sec:

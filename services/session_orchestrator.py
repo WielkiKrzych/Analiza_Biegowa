@@ -27,6 +27,7 @@ from modules.calculations import (
     process_data,
 )
 from modules.calculations.running_power import ensure_power_column
+from modules.config import Config
 
 from .data_validation import validate_dataframe
 from .session_analysis import apply_smo2_smoothing, calculate_extended_metrics, resample_dataframe
@@ -103,7 +104,7 @@ def process_uploaded_session(
     df_raw: pd.DataFrame,
     cp_input: float = 0,
     w_prime_input: float = 0,
-    rider_weight: float = 75.0,
+    rider_weight: float = Config.DEFAULT_BODY_WEIGHT_KG,
     vt1_watts: float = 0,
     vt2_watts: float = 0,
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[Dict[str, Any]], Optional[str]]:
