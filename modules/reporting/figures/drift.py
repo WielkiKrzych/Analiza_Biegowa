@@ -23,15 +23,6 @@ def _find_column(df: pd.DataFrame, aliases: list) -> Optional[str]:
     return None
 
 
-def _format_pace_min_km(pace_sec_per_km: float) -> str:
-    """Convert pace from sec/km to min:sec/km format for display."""
-    if pd.isna(pace_sec_per_km) or pace_sec_per_km <= 0:
-        return "--:--"
-    minutes = int(pace_sec_per_km // 60)
-    seconds = int(pace_sec_per_km % 60)
-    return f"{minutes}:{seconds:02d}"
-
-
 def _sec_to_min(pace_sec: float) -> float:
     """Convert pace from sec/km to min/km for axis display."""
     return pace_sec / 60.0 if pace_sec and pace_sec > 0 else 0

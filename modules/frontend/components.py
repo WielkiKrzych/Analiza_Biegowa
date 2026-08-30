@@ -8,17 +8,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-
-def _format_pace_mmss(pace_sec_per_km: float) -> str:
-    """Format a pace given in seconds/km as ``m:ss`` (e.g. 315 -> ``5:15``)."""
-    if not pace_sec_per_km or pace_sec_per_km <= 0:
-        return "—"
-    minutes = int(pace_sec_per_km // 60)
-    seconds = int(round(pace_sec_per_km - minutes * 60))
-    if seconds == 60:
-        minutes += 1
-        seconds = 0
-    return f"{minutes}:{seconds:02d}"
+from modules.calculations.pace_utils import format_pace
 
 
 class UIComponents:
@@ -53,7 +43,7 @@ class UIComponents:
         is_running = data.get("is_running", False)
         if is_running:
             intensity_label = "Avg Pace"
-            intensity_value = _format_pace_mmss(data.get("avg_pace", 0))
+            intensity_value = format_pace(data.get("avg_pace", 0))
             intensity_unit = "min/km"
             cadence_unit = "spm"
         else:

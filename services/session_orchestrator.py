@@ -12,10 +12,12 @@ PERFORMANCE OPTIMIZATIONS:
 
 import hashlib
 import logging
+import pickle
 from datetime import date
 from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
+import pyarrow
 import streamlit as st
 
 from modules.calculations import (
@@ -49,27 +51,30 @@ def _df_to_bytes_hash(df: pd.DataFrame) -> str:
     return hashlib.md5(_serialize_df_for_cache(df)).hexdigest()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _process_session_cached(
-    df_bytes: bytes,
+def _process_session_core(
+    df_raw: pd.DataFrame,
     cp_input: float,
     w_prime_input: float,
     rider_weight: float,
     vt1_watts: float,
     vt2_watts: float,
-) -> Tuple[bytes, bytes, Dict[str, Any]]:
-    """Cached session processing - internal implementation.
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, Any], Optional[str]]:
+    """Core session processing — shared by cached and uncached paths.
 
-    Takes serialized DataFrame bytes for stable hashing.
-    Returns serialized DataFrames for cache stability.
+    P1-1 (audit v2): the previous `process_uploaded_session` duplicated ~25
+    lines of pipeline code between the cache path and a fallback. The two
+    paths have now been merged into this single function. The caller
+    handles caching and serialization; this function only deals in
+    DataFrames so it is easy to read and monkey-patch in tests.
+
+    Returns:
+        (df_plot, df_plot_resampled, metrics, error_message)
+        On validation failure, df_plot and df_plot_resampled are empty
+        DataFrames and error_message is set.
     """
-    import io
-
-    df_raw = pd.read_parquet(io.BytesIO(df_bytes))
-
     is_valid, error_msg = validate_dataframe(df_raw)
     if not is_valid:
-        return b"", b"", {"_error": error_msg}
+        return pd.DataFrame(), pd.DataFrame(), {"_error": error_msg}, error_msg
 
     df_clean_pl = process_data(df_raw)
     power_estimated = ensure_power_column(df_clean_pl, rider_weight)
@@ -89,15 +94,43 @@ def _process_session_cached(
 
     metrics["_decoupling_percent"] = decoupling_percent
     metrics["_drift_z2"] = drift_z2
+    metrics["_df_clean_pl"] = df_clean_pl
 
-    # FIX: Add _df_clean_pl to cached metrics for HRV analysis
-    df_clean_pl_bytes = _serialize_df_for_cache(df_clean_pl)
-    metrics["_df_clean_pl_bytes"] = df_clean_pl_bytes
+    return df_plot, df_plot_resampled, metrics, None
 
-    df_plot_bytes = _serialize_df_for_cache(df_plot)
-    df_resampled_bytes = _serialize_df_for_cache(df_plot_resampled)
 
-    return df_plot_bytes, df_resampled_bytes, metrics
+@st.cache_data(ttl=3600, show_spinner=False)
+def _process_session_cached(
+    df_bytes: bytes,
+    cp_input: float,
+    w_prime_input: float,
+    rider_weight: float,
+    vt1_watts: float,
+    vt2_watts: float,
+) -> Tuple[bytes, bytes, Dict[str, Any]]:
+    """Cached session processing — thin wrapper that serializes around
+    `_process_session_core` so the cache key is stable across Streamlit
+    re-runs.
+    """
+    import io
+
+    df_raw = pd.read_parquet(io.BytesIO(df_bytes))
+    df_plot, df_plot_resampled, metrics, error_msg = _process_session_core(
+        df_raw, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
+    )
+    if error_msg:
+        return b"", b"", {"_error": error_msg}
+
+    # Pack _df_clean_pl into bytes for the cache; the public entry point
+    # will deserialize it back so callers see a DataFrame.
+    df_clean_pl = metrics.pop("_df_clean_pl")
+    metrics["_df_clean_pl_bytes"] = _serialize_df_for_cache(df_clean_pl)
+
+    return (
+        _serialize_df_for_cache(df_plot),
+        _serialize_df_for_cache(df_plot_resampled),
+        metrics,
+    )
 
 
 def process_uploaded_session(
@@ -120,9 +153,19 @@ def process_uploaded_session(
     7. SmO2 smoothing
     8. Resampling
 
+    P1-1 (audit v2): the previous implementation had a broad
+    `except Exception` that re-ran the entire pipeline a second time on any
+    failure. Real bugs in `process_data` (ValueError, etc.) were hidden
+    behind a "falling back to uncached" warning and the user paid double
+    the compute for the same failure. The except is now narrowed to
+    cache/deserialization exceptions — any other exception propagates so
+    the bug is visible.
+
     Returns:
     (df_plot, df_plot_resampled, metrics, error_message)
     """
+    import io
+
     df_bytes = _serialize_df_for_cache(df_raw)
 
     try:
@@ -133,46 +176,28 @@ def process_uploaded_session(
         if metrics.get("_error"):
             return None, None, None, metrics["_error"]
 
-        import io
-
         df_plot = pd.read_parquet(io.BytesIO(df_plot_bytes))
         df_plot_resampled = pd.read_parquet(io.BytesIO(df_resampled_bytes))
 
-        # FIX: Deserialize _df_clean_pl_bytes to _df_clean_pl for HRV analysis
+        # Deserialize _df_clean_pl_bytes to _df_clean_pl for HRV analysis
         if "_df_clean_pl_bytes" in metrics:
             metrics["_df_clean_pl"] = pd.read_parquet(io.BytesIO(metrics["_df_clean_pl_bytes"]))
-            del metrics["_df_clean_pl_bytes"]  # Remove bytes to save memory
+            del metrics["_df_clean_pl_bytes"]
 
         return df_plot, df_plot_resampled, metrics, None
 
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Cached session processing failed, falling back to uncached: %s", e)
-        import io
-
-        df_raw = pd.read_parquet(io.BytesIO(df_bytes))
-        is_valid, error_msg = validate_dataframe(df_raw)
-        if not is_valid:
-            return None, None, None, error_msg
-
-        df_clean_pl = process_data(df_raw)
-        power_estimated = ensure_power_column(df_clean_pl, rider_weight)
-        metrics = calculate_metrics(df_clean_pl, cp_input)
-        metrics["power_is_estimated"] = power_estimated
-        df_w_prime = calculate_w_prime_balance(df_clean_pl, cp_input, w_prime_input)
-        decoupling_percent, ef_factor = calculate_advanced_kpi(df_clean_pl)
-        drift_z2 = calculate_z2_drift(df_clean_pl, cp_input)
-        df_with_hsi = calculate_heat_strain_index(df_w_prime)
-        df_plot = df_with_hsi
-        metrics = calculate_extended_metrics(
-            df_plot, metrics, rider_weight, vt1_watts, vt2_watts, ef_factor
+    except (OSError, pyarrow.ArrowInvalid, pickle.UnpicklingError) as e:
+        # Cache/deserialization failure — re-run the core pipeline once on
+        # the freshly-deserialized DataFrame (no re-serialization needed).
+        # Any other exception type (ValueError, KeyError, …) propagates so
+        # the underlying bug is not masked.
+        logger.warning("Cache deserialization failed, running uncached: %s", e)
+        df_raw_retry = pd.read_parquet(io.BytesIO(df_bytes))
+        df_plot, df_plot_resampled, metrics, error_msg = _process_session_core(
+            df_raw_retry, cp_input, w_prime_input, rider_weight, vt1_watts, vt2_watts
         )
-        df_plot = apply_smo2_smoothing(df_plot)
-        df_plot_resampled = resample_dataframe(df_plot)
-
-        metrics["_decoupling_percent"] = decoupling_percent
-        metrics["_drift_z2"] = drift_z2
-        metrics["_df_clean_pl"] = df_clean_pl
-
+        if error_msg:
+            return None, None, None, error_msg
         return df_plot, df_plot_resampled, metrics, None
 
 

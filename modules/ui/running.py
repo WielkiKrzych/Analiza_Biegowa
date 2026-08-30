@@ -24,11 +24,6 @@ from modules.calculations.pace_utils import format_pace
 from modules.plots import apply_chart_style
 
 
-def format_pace_for_display(pace_sec_per_km: float) -> str:
-    """Format pace for UI display."""
-    return format_pace(pace_sec_per_km)
-
-
 def get_pace_zone_color(pace: float, threshold_pace: float) -> str:
     """Get color for pace zone."""
     if threshold_pace <= 0:
@@ -181,8 +176,8 @@ def render_running_metrics_cards(
     with col1:
         st.metric(
             "Srednie tempo",
-            format_pace_for_display(avg_pace),
-            help=f"Prog: {format_pace_for_display(threshold_pace)}",
+            format_pace(avg_pace),
+            help=f"Prog: {format_pace(threshold_pace)}",
         )
 
     with col2:
