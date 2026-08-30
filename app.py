@@ -1,19 +1,10 @@
-import hashlib
 import importlib
 import logging
 import os
-import sqlite3
 
-import numpy as np
 import streamlit as st
 
-from modules.calculations.dual_mode import (
-    calculate_normalized_pace,
-    calculate_running_stress_score,
-)
-from modules.calculations.pace_utils import format_pace
-from modules.db import SessionRecord, SessionStore
-from modules.domain import SessionType, classify_ramp_test, classify_session_type
+from modules.domain import SessionType
 from modules.frontend.components import UIComponents
 from modules.frontend.layout import AppLayout
 from modules.frontend.state import StateManager
@@ -21,9 +12,11 @@ from modules.frontend.theme import ThemeManager
 from modules.ml_logic import MLX_AVAILABLE, MODEL_FILE, predict_only
 from modules.notes import TrainingNotes
 from modules.reporting.persistence import check_git_tracking
-from modules.utils import load_data, validate_data_completeness
-from services import prepare_session_record, prepare_sticky_header_data
-from services.session_orchestrator import process_uploaded_session
+from services.dashboard_renderer import (
+    auto_save_session,
+    process_and_cache_session,
+    render_header_and_metrics,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -124,134 +117,35 @@ if uploaded_file is not None:
     state.cleanup_old_data()
     training_notes = TrainingNotes()
 
-    with st.spinner("Przetwarzanie danych..."):
+    # P1-4 (audit v2): processing pipeline + auto-save + header + metrics
+    # were 128 lines of inline code in app.py. Now they live in
+    # `services/dashboard_renderer.py` so app.py focuses on routing.
+    df_plot, df_plot_resampled, metrics = process_and_cache_session(
+        uploaded_file, runner_weight=runner_weight, state=state
+    )
+
+    # AI Section (Optional/Non-critical) — kept inline because it's short
+    # and only relevant for some sessions.
+    if MLX_AVAILABLE and os.path.exists(MODEL_FILE):
         try:
-            df_raw = load_data(uploaded_file)
-
-            # --- SESSION TYPE CLASSIFICATION (MUST run first) ---
-            # FIX: Use MD5 hash of file content instead of name+size to avoid collisions
-            uploaded_file.seek(0)
-            file_content = uploaded_file.read()
-            uploaded_file.seek(0)  # Reset for later use
-            current_file_hash = hashlib.md5(file_content).hexdigest()
-            cached_hash = st.session_state.get("current_file_hash")
-
-            if cached_hash != current_file_hash:
-                # New file - process and cache
-                session_type = classify_session_type(df_raw, uploaded_file.name)
-                st.session_state["session_type"] = session_type
-                st.session_state["current_file_hash"] = current_file_hash
-                # Store detailed ramp classification for gating decisions
-                ramp_classification = None
-                if "watts" in df_raw.columns or "power" in df_raw.columns:
-                    power_col = "watts" if "watts" in df_raw.columns else "power"
-                    power = df_raw[power_col].dropna()
-                    if len(power) >= 300:
-                        ramp_classification = classify_ramp_test(power)
-                        st.session_state["ramp_classification"] = ramp_classification
-            else:
-                # Use cached values
-                session_type = st.session_state.get("session_type")
-                ramp_classification = st.session_state.get("ramp_classification")
-
-            # --- DATA QUALITY VALIDATION ---
-            quality_report = validate_data_completeness(df_raw)
-            st.session_state["data_quality_report"] = quality_report
-            st.session_state["sport_type"] = quality_report.sport_type
-
-            # --- PROCESSING PIPELINE (SRP/DIP) ---
-            df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-                df_raw, rider_weight=runner_weight, vt1_watts=0, vt2_watts=0
-            )
-
-            if error_msg:
-                st.error(f"Błąd analizy: {error_msg}")
-                st.stop()
-
-            if metrics.get("power_is_estimated"):
-                st.info(
-                    "🏃 **Tryb biegowy (tempo + HR):** brak miernika mocy, więc intensywność "
-                    "liczona jest z **tempa/GAP** (moc w watach w zakładkach to wartość *szacowana* "
-                    "z tempa, nie pomiar). Analizy progów, obciążenia i limiterów bazują na "
-                    "Twoim tempie i tętnie."
-                )
-
-            # Extract intermediate results from metrics (DIP: metrics acts as a container here)
-            # FIX: Use .get() instead of .pop() to avoid mutating cached data
-            decoupling_percent = metrics.get("_decoupling_percent", 0.0)
-            drift_z2 = metrics.get("_drift_z2", 0.0)
-            df_clean_pl = metrics.get("_df_clean_pl", df_raw)
-
-            # If _df_clean_pl is in metrics, use it; otherwise use df_raw for HRV
-            if df_clean_pl is None or (hasattr(df_clean_pl, "empty") and df_clean_pl.empty):
-                df_clean_pl = df_raw
-
-            state.set_data_loaded()
-
-            # AI Section (Optional/Non-critical)
-            if MLX_AVAILABLE and os.path.exists(MODEL_FILE):
-                try:
-                    auto_pred = predict_only(df_plot_resampled)
-                    if auto_pred is not None:
-                        df_plot_resampled["ai_hr"] = auto_pred
-                except (ValueError, TypeError, RuntimeError) as e:
-                    logger.warning(f"AI prediction failed: {e}")
-
-        except (ValueError, TypeError, KeyError, OSError) as e:
-            st.error(f"Błąd wczytywania pliku: {e}")
-            st.stop()
+            auto_pred = predict_only(df_plot_resampled)
+            if auto_pred is not None:
+                df_plot_resampled["ai_hr"] = auto_pred
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.warning(f"AI prediction failed: {e}")
 
     # --- RENDER DASHBOARD ---
+    np_header = render_header_and_metrics(df_plot, metrics, threshold_pace_input)
+    auto_save_session(uploaded_file, df_plot, metrics, np_header)
 
-    # 1. Header Metrics — Running only
-    np_header = calculate_normalized_pace(df_plot)
-    if_header = threshold_pace_input / np_header if np_header > 0 else 0.0
-    tss_header = 0.0
-
-    # Auto-save
-    try:
-        session_data = prepare_session_record(
-            uploaded_file.name, df_plot, metrics, np_header, if_header, tss_header
-        )
-        SessionStore().add_session(SessionRecord(**session_data))
-    except (sqlite3.Error, ValueError, KeyError) as e:  # noqa: BLE001
-        logger.warning(f"Auto-save failed: {e}")
-
-    # Sticky Header
-    header_data = prepare_sticky_header_data(df_plot, metrics)
-    UIComponents.render_sticky_header(header_data)
-
-    # Calculate running metrics
-    # FIX: Calculate duration from time column, not len(df_plot) which assumes 1Hz
-    if "time" in df_plot.columns:
-        duration_sec = float(df_plot["time"].max() - df_plot["time"].min())
-    else:
-        duration_sec = len(df_plot)  # Fallback assumption of 1Hz
-
-    rss_header = calculate_running_stress_score(df_plot, threshold_pace_input, duration_sec)
-    intensity_factor = threshold_pace_input / np_header if np_header > 0 else 0
-
-    # FIX: Calculate distance cumulatively from pace (speed integration)
-    if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
-        distance_km = float(df_plot["distance"].max()) / 1000.0
-    elif "pace" in df_plot.columns:
-        # FIX: Use cumulative distance (sum of speed*dt), not mean_pace * duration
-        # This correctly accounts for variable pace during the activity
-        pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
-        if len(pace_valid) > 0:
-            # Speed = 1000 / pace (m/s), assume 1s per sample after resampling
-            speed_ms = 1000.0 / pace_valid
-            distance_m = speed_ms.sum()  # Cumulative distance = sum(speed * 1s)
-            distance_km = distance_m / 1000.0
-        else:
-            distance_km = 0
-    else:
-        distance_km = 0
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Tempo Normalizowane", format_pace(np_header))
-    m2.metric("RSS", f"{rss_header:.0f}", help=f"IF: {intensity_factor:.2f}")
-    m3.metric("Dystans", f"{distance_km:.2f} km")
+    # `decoupling_percent`, `drift_z2`, `df_clean_pl` were previously read
+    # here from `metrics`. After the refactor they are still available via
+    # `metrics` (the dict is returned by `process_and_cache_session`).
+    decoupling_percent = metrics.get("_decoupling_percent", 0.0)
+    drift_z2 = metrics.get("_drift_z2", 0.0)
+    df_clean_pl = metrics.get("_df_clean_pl")
+    if df_clean_pl is None or (hasattr(df_clean_pl, "empty") and df_clean_pl.empty):
+        df_clean_pl = None  # caller must handle the absence
 
     # Session Type Badge with Confidence
     session_type = st.session_state.get("session_type")
