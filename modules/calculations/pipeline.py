@@ -30,6 +30,7 @@ from models.results import (
     ThresholdRange,
     ValidityLevel,
 )
+from modules.calculations.conflicts import detect_conflicts
 from modules.calculations.metabolic import detect_smo2_from_steps
 from modules.calculations.power import calculate_power_duration_curve
 from modules.calculations.step_detection import detect_step_test_range
@@ -441,6 +442,23 @@ def integrate_signals(analysis: IndependentAnalysisResults) -> IntegrationResult
             vt1_mid = result.vt1.midpoint_watts
             deviation = smo2_drop_power - vt1_mid
             result.smo2_deviation_vt1 = deviation
+            # P0-1 (audit v2): wire up `modules.calculations.conflicts.detect_conflicts()`
+            # to produce the SMO2_EARLY/SMO2_LATE SignalConflict with PL description,
+            # interpretation, and recommendation from CONFLICT_DESCRIPTIONS. The inline
+            # modulation (confidence ±, range widen) stays here — that is IntegrationResult
+            # side effect, not ConflictReport responsibility.
+            wired_conflict_report = detect_conflicts(
+                vt_result=analysis.vt_result, smo2_result=smo2_result, df=None
+            )
+            # Filter to the SmO2/VT conflict we know exists at this deviation magnitude.
+            _smo2_vt_conflict = next(
+                (
+                    c
+                    for c in wired_conflict_report.conflicts
+                    if c.conflict_type in (ConflictType.SMO2_EARLY, ConflictType.SMO2_LATE)
+                ),
+                None,
+            )
 
             # SmO₂ MODULATES VT based on agreement
             if abs(deviation) <= 10:
@@ -463,23 +481,38 @@ def integrate_signals(analysis: IndependentAnalysisResults) -> IntegrationResult
                     f"ℹ️ SmO₂ (LOCAL) bliski VT1 (różnica: {deviation:.0f} W) → confidence -0.05"
                 )
             else:
-                # SmO₂ significantly different → conflict, reduce confidence
-                conflict_type = ConflictType.SMO2_EARLY if deviation < 0 else ConflictType.SMO2_LATE
-                result.conflicts.conflicts.append(
-                    SignalConflict(
-                        conflict_type=conflict_type,
-                        severity=ConflictSeverity.WARNING,
-                        signal_a="SmO2 (LOCAL)",
-                        signal_b="VE",
-                        description=f"SmO₂ (LOCAL) różni się od VT1 o {deviation:.0f} W",
-                        physiological_interpretation=(
-                            "SmO₂ jest sygnałem LOKALNYM (jeden mięsień). "
-                            "Rozbieżność z VT może oznaczać różnicę między lokalną a systemową odpowiedzią."
-                        ),
-                        magnitude=abs(deviation),
-                        confidence_penalty=0.15,
+                # SmO₂ significantly different → conflict, reduce confidence.
+                # P0-1 (audit v2): use the SignalConflict produced by
+                # `detect_conflicts()` so the description, interpretation, and
+                # recommendation come from `CONFLICT_DESCRIPTIONS` rather than
+                # being hand-written here. Fallback to a hand-built conflict
+                # if for some reason the detector returned nothing for this
+                # magnitude (should not happen given the 20W threshold in
+                # `conflicts.py:_detect_smo2_vs_vt_conflicts`).
+                if _smo2_vt_conflict is not None:
+                    result.conflicts.conflicts.append(_smo2_vt_conflict)
+                else:
+                    conflict_type = (
+                        ConflictType.SMO2_EARLY if deviation < 0 else ConflictType.SMO2_LATE
                     )
-                )
+                    result.conflicts.conflicts.append(
+                        SignalConflict(
+                            conflict_type=conflict_type,
+                            severity=ConflictSeverity.WARNING,
+                            signal_a="SmO2 (LOCAL)",
+                            signal_b="VE",
+                            description=(
+                                f"SmO₂ (LOCAL) różni się od VT1 o {deviation:.0f} W"
+                            ),
+                            physiological_interpretation=(
+                                "SmO₂ jest sygnałem LOKALNYM (jeden mięsień). "
+                                "Rozbieżność z VT może oznaczać różnicę między "
+                                "lokalną a systemową odpowiedzią."
+                            ),
+                            magnitude=abs(deviation),
+                            confidence_penalty=0.15,
+                        )
+                    )
                 result.vt1.confidence = max(0.3, result.vt1.confidence - 0.1)
                 # Widen the range (lower certainty)
                 expand = 0.15
