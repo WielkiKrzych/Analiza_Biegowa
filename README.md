@@ -1,3 +1,35 @@
+# Run Analytics Pro
+
+[![Tests](https://github.com/WielkiKrzych/Analiza_Biegowa/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/WielkiKrzych/Analiza_Biegowa/actions/workflows/test.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Zaawansowana platforma analityczna dla biegaczy (pace-first, GAP, Minetti, D', SmO₂ kinetics, ventilatory thresholds).
+
+## Spis treści
+
+- [🚀 Szybki Start](#-szybki-start)
+- [🏗️ Architektura Systemu](#-architektura-systemu)  → szczegóły w [`docs/architecture.md`](docs/architecture.md)
+- [📊 Główne Zakładki](#-główne-zakładki)
+- [🔄 Pipeline Przetwarzania](#-pipeline-przetwarzania)
+- [📈 Kluczowe Metryki](#-kluczowe-metryki)
+- [🎨 Wykresy Fizjologiczne](#-wykresy-fizjologiczne-vs-tempo)
+- [📦 Struktura Projektu](#-struktura-projektu)
+- [🧪 Testy](#-testy)
+- [📥 Wymagane Dane CSV](#-wymagane-dane-csv)  → format danych w [`docs/data-format.md`](docs/data-format.md)
+- [⚙️ Konfiguracja (Sidebar)](#️-konfiguracja-sidebar)
+- [🚀 Optymalizacje](#-optymalizacje-wydajności)
+- [🔬 Raport Jakości Danych](#-raport-jakości-danych)
+- [🛠️ Technologie](#-technologie)
+- [🤝 Jak Wspierać](#-jak-wspierać)
+- [📋 Changelog](#-changelog)  (historyczny rekord zmian)
+
+Materiały dodatkowe w [`docs/`](docs/): methodology (`physiological_methodology.md`, `power_duration.md`, `ramp_test_premium_report.md`), raporty audytu (`PARITY_GAP_REPORT.md`, `coverage-report.md`, `UI_VERIFICATION_REPORT.md`).
+
+
+---
+
 ## 📋 Changelog
 
 ### 2026-07-26 - Running Analysis Correctness Fixes + Rebrand
@@ -412,116 +444,8 @@ PRZED:                    PO:
 
 ## 🏗️ Architektura Systemu
 
-> See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    🚀 STREAMLIT APP                          │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ 📋 Tabs     │  │ 🎨 Theme    │  │ 💾 Cache    │         │
-│  │ (29 mod)    │  │ Manager     │  │ Manager     │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    🔧 SERVICES LAYER                         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────┐  ┌─────────────────────┐          │
-│  │ ⚡ Orchestrator     │  │ ✅ Validation       │          │
-│  │ (Numba JIT +       │  │ (Schema Check)      │          │
-│  │  Polars)            │  │                     │          │
-│  └─────────────────────┘  └─────────────────────┘          │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    📦 MODULES LAYER                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  🧮 CALCULATIONS          🎨 UI            💾 DATABASE      │
-│  ───────────────          ─────            ──────────       │
-│  • ⏱️ pace.py            • 📊 charts      • 🗄️ SQLite      │
-│  • 🔋 d_prime.py         • 📈 reports     • 📂 sessions    │
-│  • 🫁 ventilatory.py     • 🎯 metrics    • 📝 notes       │
-│  • 💪 power.py           • 🗺️ maps       • ⚙️ settings    │
-│  • ❤️ hrv.py             • 📱 mobile                        │
-│  • 🩸 smo2_advanced.py                                      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📊 Główne Zakładki
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                                                                          │
-│   📊 OVERVIEW    │   ⚡ PERFORMANCE   │   🫀 PHYSIOLOGY   │   🧠 AI      │
-│   ────────────   │   ─────────────    │   ─────────────    │   ─────     │
-│                                                                          │
-│   • 📈 Report      • 🏃 Running         • ❤️ HRV           • 🤖 ML       │
-│   • 📋 Summary     • 🦶 Biomechanics    • 🩸 SmO2          • 🍽️ Nutrition│
-│   • 🎯 KPIs        • 📐 Model           • 🫁 Ventilation   • 🔍 Limiters │
-│   • 📊 Charts      • ❤️ HR Zones        • 🌡️ Thermal                      │
-│   • 🗺️ Maps        • 🩸 Hematology      • 💧 Hydration                    │
-│   • 📝 Notes       • 📉 Drift Maps                                        │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🔄 Pipeline Przetwarzania
-
-```
-    📁 CSV Input
-       │
-       ▼
-┌─────────────────────┐
-│  ⚡ Polars Loader   │  ← Szybkie I/O (10-100x)
-│  (TTL Cache 1h)     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  🔄 Normalize       │  ← Mapowanie kolumn
-│     Columns         │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  🧹 Clean &         │  ← Walidacja danych
-│     Validate        │
-└──────────┬──────────┘
-           │
-      ┌────┴────┐
-      ▼         ▼
-┌─────────┐ ┌─────────┐
-│ 📊 Pandas│ │ ⚡ Numba │  ← Równoległe przetwarzanie
-│ Standard│ │   JIT   │
-└────┬────┘ └────┬────┘
-     │           │
-     └─────┬─────┘
-           ▼
-┌─────────────────────┐
-│  🎯 Metrics Calc    │  ← W', NP, HR, Tempo
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  💾 Cache Results   │  ← @st.cache_data
-└─────────────────────┘
-```
-
----
-
-## 📈 Kluczowe Metryki
-
-| Metryka | Ikona | Opis | Jednostka |
-|---------|-------|------|-----------|
+> Pełna architektura (diagramy ASCII + opis warstw) przeniesiona do [`docs/architecture.md`](docs/architecture.md). Ten plik pozostaje historycznym changelogiem.
+---------|-------|------|-----------|
 | **Tempo** | ⏱️ | Główny wskaźnik intensywności | min/km |
 | **Normalized Pace** | 📈 | Algorytm 3-potęgowy (Skiba) | min/km |
 | **Critical Speed** | 🎯 | Prędkość krytyczna | m/s |

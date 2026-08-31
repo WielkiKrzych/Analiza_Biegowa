@@ -37,3 +37,14 @@ jobs:
 
       - name: Run tests
         run: python3 -m pytest -q --tb=short
+
+      - name: Type-check with mypy
+        # P3-5 / Faza 5 (audit v2): start with `ignore_missing_imports = true`
+        # so the first green run is unblocked by missing third-party stubs.
+        # Tighten `[tool.mypy]` incrementally as the codebase is annotated.
+        run: |
+          if command -v mypy &> /dev/null; then
+            mypy modules/ services/ models/ --config-file pyproject.toml
+          else
+            echo "mypy not found, skipping type-check (install with: pip install mypy)"
+          fi
