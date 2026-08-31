@@ -1,0 +1,46 @@
+# Pre-commit hooks for run_analytics_pro.
+# P3-2 (audit v2): this is a Python project's pre-commit, not Node's
+# `husky`. Install once with:
+#
+#     pip install pre-commit
+#     pre-commit install
+#
+# Then `git commit` will run all hooks on staged files.
+# Run on all files manually with:  pre-commit run --all-files
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # ---- Generic file hygiene ----
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-yaml
+      - id: check-toml
+
+  # ---- Ruff (lint + format) ----
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  # ---- Local pytest (smoke test) ----
+  # P3-2: only run on push (not every commit) to keep the loop fast.
+  # The full suite runs in CI on every PR.
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (smoke)
+        entry: python3 -m pytest tests/ -q -x --timeout=30
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]

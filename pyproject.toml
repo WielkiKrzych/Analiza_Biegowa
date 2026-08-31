@@ -42,6 +42,8 @@ dev = [
     "mypy",
     "pytest-cov",
     "isort",
+    "pre-commit>=3.5.0",
+    "bump2version>=1.0.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -71,3 +73,41 @@ testpaths = [
     "tests",
 ]
 python_files = "test_*.py"
+
+# mypy (Faza 5, audit v2): start with `ignore_missing_imports = true` to
+# avoid being blocked by third-party libs without type stubs (streamlit,
+# plotly, neurokit2, mlx, ...). Tighten incrementally as the codebase
+# is annotated.
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = false
+# Be lenient on first run; tighten to strict later.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+exclude = [
+    "tests/",
+    "scripts/",
+    ".venv/",
+    "build/",
+]
+
+[[tool.mypy.overrides]]
+module = "streamlit.*"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = "plotly.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "neurokit2.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "mlx.*"
+ignore_missing_imports = true
