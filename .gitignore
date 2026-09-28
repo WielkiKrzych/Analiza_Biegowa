@@ -50,3 +50,6 @@ treningi_csv/
 *_history.json
 .worktrees/
 worktrees/
+
+# Gemini CLI task state (generated)
+.gemini-tasks/
