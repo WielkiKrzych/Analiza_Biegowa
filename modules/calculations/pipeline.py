@@ -687,6 +687,48 @@ def _calculate_overall_confidence(
 # ============================================================
 
 
+def _hr_at_manual_power(
+    df: pd.DataFrame,
+    manual_power: Optional[float],
+    power_column: str,
+    hr_column: str,
+    time_column: str,
+    step_range=None,
+) -> Optional[float]:
+    """Heart rate measured at *manual_power*, looked up inside the step range only.
+
+    A plain `idxmin` over the whole recording returns the globally closest power
+    sample, and a warm-up plateau usually sits at the same power as an early step but
+    tens of bpm lower - the report then printed that warm-up heart rate as the manual
+    SmO2 threshold HR. Falls back to the full frame when no valid step range is
+    detected, so a recording the detector cannot classify keeps the old behaviour.
+    """
+    if manual_power is None or df is None or df.empty:
+        return None
+
+    p_col = power_column if power_column in df.columns else "watts"
+    h_col = hr_column if hr_column in df.columns else "hr"
+    if p_col not in df.columns or h_col not in df.columns:
+        return None
+
+    if time_column in df.columns:
+        if step_range is None:
+            step_range = detect_step_test_range(df, power_column=p_col, time_column=time_column)
+        if step_range is not None and step_range.is_valid:
+            in_range = (df[time_column] >= step_range.start_time) & (
+                df[time_column] <= step_range.end_time
+            )
+            if in_range.any():
+                df = df[in_range]
+
+    try:
+        idx = (df[p_col] - manual_power).abs().idxmin()
+        return float(df.loc[idx, h_col])
+    except (ValueError, KeyError) as e:
+        logger.debug(f"Failed to find HR for manual power {manual_power}: {e}")
+        return None
+
+
 def run_ramp_test_pipeline(
     df: pd.DataFrame,
     power_column: str = "watts",
@@ -764,28 +806,24 @@ def run_ramp_test_pipeline(
     mmp_curve = calculate_power_duration_curve(preprocessed.df)
 
     # Calculate HR for manual thresholds
-    smo2_manual_lt1_hr = None
-    smo2_manual_lt2_hr = None
-
-    if not preprocessed.df.empty:
-        df_p = preprocessed.df
-        p_col = power_column if power_column in df_p.columns else "watts"
-        h_col = hr_column if hr_column in df_p.columns else "hr"
-
-        if p_col in df_p.columns and h_col in df_p.columns:
-            if smo2_manual_lt1 is not None:
-                try:
-                    idx = (df_p[p_col] - smo2_manual_lt1).abs().idxmin()
-                    smo2_manual_lt1_hr = float(df_p.loc[idx, h_col])
-                except (ValueError, KeyError) as e:
-                    logger.debug(f"Failed to find LT1 HR: {e}")
-
-            if smo2_manual_lt2 is not None:
-                try:
-                    idx = (df_p[p_col] - smo2_manual_lt2).abs().idxmin()
-                    smo2_manual_lt2_hr = float(df_p.loc[idx, h_col])
-                except (ValueError, KeyError) as e:
-                    logger.debug(f"Failed to find LT2 HR: {e}")
+    # preprocessed.step_range is already detected in preprocess_signals() with the
+    # same columns — passing it avoids two more detector runs per report.
+    smo2_manual_lt1_hr = _hr_at_manual_power(
+        preprocessed.df,
+        smo2_manual_lt1,
+        power_column,
+        hr_column,
+        time_column,
+        step_range=preprocessed.step_range,
+    )
+    smo2_manual_lt2_hr = _hr_at_manual_power(
+        preprocessed.df,
+        smo2_manual_lt2,
+        power_column,
+        hr_column,
+        time_column,
+        step_range=preprocessed.step_range,
+    )
 
     result = build_result(
         validity=validity,
