@@ -81,6 +81,8 @@ def cache_result(ttl: int = 3600, key_func: Optional[Callable] = None):
                 if result is not _SENTINEL:
                     return result
             except Exception:  # noqa: BLE001
+                # Best-effort cache read: an unreadable/evicted entry must never
+                # fail the computation, so fall through and recompute.
                 pass
 
             # Compute and cache
@@ -88,6 +90,8 @@ def cache_result(ttl: int = 3600, key_func: Optional[Callable] = None):
             try:
                 cache.set(cache_key, result, expire=ttl)
             except Exception:  # noqa: BLE001
+                # Best-effort cache write: a full or unwritable cache costs
+                # performance, not correctness — the result is already computed.
                 pass
 
             return result
@@ -154,6 +158,7 @@ def _invalidate_cache(func_name: str, args: tuple, kwargs: dict, key_func: Optio
     try:
         cache.delete(cache_key)
     except Exception:  # noqa: BLE001
+        # Best-effort invalidation: a missing entry is the desired end state.
         pass
 
 

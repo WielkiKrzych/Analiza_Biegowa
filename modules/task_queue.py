@@ -182,7 +182,8 @@ class BackgroundTaskManager:
             timeout: Maximum time to wait in seconds
 
         Returns:
-            Task object or None if timeout
+            Task object — still RUNNING when the timeout expired — or None for
+            an unknown task_id.
         """
         future = None
         with self._lock:
@@ -192,6 +193,10 @@ class BackgroundTaskManager:
             try:
                 future.result(timeout=timeout)
             except Exception:  # noqa: BLE001
+                # Swallowed on purpose: `_run_task` already records the failure
+                # on the Task (status=FAILED, error=...) and stores the result on
+                # success, so the caller reads the Task returned below. A timeout
+                # must not raise either — it just leaves the Task RUNNING.
                 pass
 
         return self.get_task(task_id)

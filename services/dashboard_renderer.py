@@ -48,10 +48,11 @@ def process_and_cache_session(
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[Dict[str, Any]]]:
     """Load, classify, validate and process the uploaded file.
 
-    Results are cached in `st.session_state` so the same file isn't
-    re-processed on every Streamlit re-run. The cache key is the MD5 of
-    the file content (not the filename), so a re-upload of the same
-    content is also cached.
+    Per-file derived state (`session_type`, `current_file_hash`,
+    `ramp_classification`) is kept in `st.session_state` keyed by the MD5 of
+    the file CONTENT (not the filename), so re-uploading the same content
+    reuses it. The heavy pipeline itself is not cached here — that is
+    `st.cache_data` on `session_orchestrator._process_session_cached`.
 
     Returns:
         (df_plot, df_plot_resampled, metrics) or (None, None, None) on error.
@@ -148,14 +149,15 @@ def render_header_and_metrics(
     metrics: Dict[str, Any],
     threshold_pace_input: float,
 ) -> float:
-    """Render the sticky header (auto-save + UI) and the 3-metric bar (NP/RSS/Distance).
+    """Render the sticky header and the 3-metric bar (NP/RSS/Distance).
+
+    Persisting the session is NOT done here — `app.py` calls
+    `auto_save_session()` separately once it has the uploaded file handle.
 
     Returns the calculated Normalized Pace so the caller can reuse it.
     """
-    # --- Auto-save (P1-4: was inline; now in its own function above) ---
+    # --- Auto-save is the caller's job (see auto_save_session above) ---
     np_header = calculate_normalized_pace(df_plot)
-    # We can't auto_save here without the uploaded_file handle — the caller
-    # is expected to call auto_save_session() separately.
 
     # --- Sticky Header ---
     header_data = prepare_sticky_header_data(df_plot, metrics)
