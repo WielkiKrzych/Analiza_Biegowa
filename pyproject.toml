@@ -27,6 +27,13 @@ dependencies = [
     "matplotlib>=3.8.0",
     "statsmodels>=0.14.0",
     "python-docx>=1.1.0",
+    # Hard imports that were never declared: `pip install -e .` on a clean
+    # machine (e.g. CI) failed on `ModuleNotFoundError: No module named
+    # 'reportlab'` while local runs passed on incidentally installed wheels.
+    "reportlab>=4.0.0",
+    "pillow>=10.0.0",
+    "pyarrow>=14.0.0",
+    "requests>=2.31.0",
     "mlx>=0.0.10",
     "numba>=0.59.0",
     "kaleido==0.2.1",
