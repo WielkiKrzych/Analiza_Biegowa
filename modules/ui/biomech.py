@@ -14,6 +14,7 @@ from modules.calculations.running_dynamics import (
     calculate_gct_stats,
     calculate_stride_metrics,
 )
+from modules.config import Config
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -609,8 +610,13 @@ def render_biomech_tab(df_plot: pd.DataFrame, df_plot_resampled: pd.DataFrame) -
     is_running = sport_type == "running" or "pace" in df_plot.columns
 
     if is_running:
-        runner_weight = st.session_state.get("rider_weight", 70.0)
-        runner_height = st.session_state.get("runner_height", 175)
+        # "rider_weight"/"runner_height" are not session keys — the sidebar
+        # widgets write "weight"/"height". Reading the wrong keys silently fell
+        # back to hardcoded 70 kg / 175 cm, so this tab disagreed with every
+        # other tab (and with the summary tab, which calls the same
+        # _render_running_effectiveness_section with the sidebar weight).
+        runner_weight = st.session_state.get("weight", Config.DEFAULT_BODY_WEIGHT_KG)
+        runner_height = st.session_state.get("height", Config.DEFAULT_RUNNER_HEIGHT_CM)
 
         _render_cadence_section(df_plot)
         _render_gct_section(df_plot)
@@ -771,7 +777,7 @@ def _render_vo_pace_effectiveness(
     """Render VO-based running effectiveness metrics when pace data is available."""
     st.subheader("🏃 Efektywność Biegu z VO")
 
-    runner_height = st.session_state.get("runner_height", 180)
+    runner_height = st.session_state.get("height", Config.DEFAULT_RUNNER_HEIGHT_CM)
     avg_pace = df_plot["pace"].mean()
     avg_vo = vo_stats["mean_vo"]
 

@@ -226,6 +226,8 @@ def _render_manual_range() -> None:
                 st.session_state.vent_start_sec = manual_start_sec
                 st.session_state.vent_end_sec = manual_end_sec
                 st.success(f"✅ Zaktualizowano zakres: {manual_start} - {manual_end}")
+            else:
+                st.error("Nieprawidłowy format czasu. Użyj formatu HH:MM:SS lub MM:SS")
 
 
 def _render_interval_analysis(

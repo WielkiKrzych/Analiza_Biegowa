@@ -146,6 +146,8 @@ def _render_manual_range_input() -> None:
                 st.session_state.smo2_start_sec = manual_start_sec
                 st.session_state.smo2_end_sec = manual_end_sec
                 st.success(f"✅ Zaktualizowano zakres: {manual_start} - {manual_end}")
+            else:
+                st.error("Nieprawidłowy format czasu. Użyj formatu HH:MM:SS lub MM:SS")
 
 
 # ---------------------------------------------------------------------------

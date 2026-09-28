@@ -144,6 +144,8 @@ def _render_br_manual_input() -> None:
                 st.session_state.br_start_sec = br_start
                 st.session_state.br_end_sec = br_end
                 st.success(f"✅ Zaktualizowano zakres BR: {manual_br_start} - {manual_br_end}")
+            else:
+                st.error("Nieprawidłowy format czasu. Użyj formatu HH:MM:SS lub MM:SS")
 
 
 def _render_br_metrics(
@@ -494,6 +496,8 @@ def _render_tidal_volume_section(target_df):
                 st.session_state.tv_start_sec = tv_start
                 st.session_state.tv_end_sec = tv_end
                 st.success(f"✅ Zaktualizowano zakres VT: {manual_tv_start} - {manual_tv_end}")
+            else:
+                st.error("Nieprawidłowy format czasu. Użyj formatu HH:MM:SS lub MM:SS")
 
     tv_startsec = st.session_state.tv_start_sec
     tv_endsec = st.session_state.tv_end_sec

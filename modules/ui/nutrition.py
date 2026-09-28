@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from modules.config import Config
+
 
 def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
     st.header("⚡ Kalkulator Spalania Glikogenu (The Bonk Prediction)")
@@ -342,7 +344,10 @@ def render_nutrition_tab(df_plot, critical_pace, vt1_pace, vt2_pace):
             """)
 
     elif "pace" in df_plot.columns:
-        runner_weight = st.session_state.get("runner_weight", 75.0)
+        # The sidebar writes the session key "weight"; "runner_weight" is only
+        # a settings-JSON key, so the lookup always fell back to 75 kg and the
+        # calorie estimate ignored the weight the user had entered.
+        runner_weight = st.session_state.get("weight", Config.DEFAULT_BODY_WEIGHT_KG)
         threshold_pace = critical_pace
 
         # Poprawiony wzór dla biegu: energia [kcal/h] = masa [kg] × prędkość [km/h] × 1.05

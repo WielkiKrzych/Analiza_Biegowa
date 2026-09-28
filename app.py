@@ -68,8 +68,23 @@ class TabRegistry:
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
             return func(*args, **kwargs)
-        except (ImportError, AttributeError, RuntimeError) as e:
-            logger.warning(f"Tab {tab_name} failed: {e}")
+        except (
+            ImportError,
+            AttributeError,
+            RuntimeError,
+            # Data-shape errors raised inside a tab (missing column, wrong
+            # dtype, short frame) used to escape this boundary and take the
+            # whole page down instead of one tab. Still an explicit tuple —
+            # not `except Exception` — so genuine bug types keep surfacing.
+            ValueError,
+            KeyError,
+            TypeError,
+            IndexError,
+        ) as e:
+            # exc_info: the boundary now also catches TypeError/KeyError/IndexError,
+            # which are usually real bugs — one log line without a traceback would
+            # make them untraceable.
+            logger.warning(f"Tab {tab_name} failed: {e}", exc_info=True)
             with st.expander(f"⚠️ Błąd w zakładce {tab_name}", expanded=True):
                 st.error(f"Nie udało się załadować zakładki: {tab_name}")
                 st.caption(f"Szczegóły błędu: {type(e).__name__}: {e}")

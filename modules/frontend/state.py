@@ -6,6 +6,7 @@ Centralized state manager to handle Session State with type safety.
 
 import streamlit as st
 
+from modules.config import Config
 from modules.settings import SettingsManager
 
 
@@ -29,15 +30,23 @@ class StateManager:
         }
 
     def init_session_state(self) -> None:
-        """Initialize session state with hardcoded defaults."""
+        """Initialize session state with the Config defaults.
+
+        These keys are pre-seeded *before* the sidebar widgets with the same
+        ``key=`` are created, and Streamlit ignores a widget's ``value=`` when
+        its key already exists in session state. So the numbers here — not the
+        ones in ``AppLayout.render_sidebar`` — are what the user actually sees.
+        They must therefore come from ``Config`` (single source of truth);
+        hardcoded copies silently overrode it.
+        """
         defaults = {
-            "weight": 95.0,
-            "height": 180,
-            "age": 30,
-            "gender_m": True,
-            "threshold_pace": 233,
-            "lthr": 166,
-            "max_hr": 184,
+            "weight": Config.DEFAULT_BODY_WEIGHT_KG,
+            "height": Config.DEFAULT_RUNNER_HEIGHT_CM,
+            "age": Config.DEFAULT_RUNNER_AGE_YEARS,
+            "gender_m": Config.DEFAULT_IS_MALE,
+            "threshold_pace": Config.DEFAULT_THRESHOLD_PACE_SEC_PER_KM,
+            "lthr": Config.DEFAULT_LTHR_BPM,
+            "max_hr": Config.DEFAULT_MAX_HR_BPM,
             "vt1_v": 0.0,
             "vt2_v": 0.0,
         }
