@@ -2038,6 +2038,16 @@ def build_page_protocol(metadata: Dict[str, Any] = None, styles: Dict = None) ->
 # ============================================================================
 
 
+# Polish labels for the tolerance tokens produced by
+# modules.calculations.thermoregulation._classify_tolerance.
+HEAT_TOLERANCE_LABELS_PL = {
+    "good": "Dobra",
+    "moderate": "Umiarkowana",
+    "poor": "Słaba",
+    "unknown": "Brak danych",
+}
+
+
 def build_page_thermal(
     thermal_data: Dict[str, Any], figure_paths: Dict[str, str], styles: Dict
 ) -> List:
@@ -2053,12 +2063,26 @@ def build_page_thermal(
     )
     elements.append(Spacer(1, 6 * mm))
 
-    core_temp_avg = thermal_data.get("core_temp_avg", 0)
-    core_temp_max = thermal_data.get("core_temp_max", 0)
-    thermal_data.get("skin_temp_avg", 0)
-    heat_strain_index = thermal_data.get("heat_strain_index", 0)
-    thermal_drift_rate = thermal_data.get("thermal_drift_rate", 0)
-    thermal_data.get("thermal_status", "unknown")
+    # Canonical schema (format_thermo_for_report) stores measurements under "metrics".
+    thermo_metrics = thermal_data.get("metrics", {}) if thermal_data else {}
+    if not thermo_metrics:
+        elements.append(
+            Paragraph(
+                "Brak danych o termoregulacji — w pliku źródłowym nie znaleziono pomiaru "
+                "temperatury rdzeniowej.",
+                styles["body"],
+            )
+        )
+        return elements
+
+    def _num(key: str, spec: str = ".1f") -> str:
+        value = thermo_metrics.get(key)
+        return f"{value:{spec}}" if isinstance(value, (int, float)) else "brak danych"
+
+    # Only the two values used for card colouring are read here; the printed
+    # numbers go through _num() so a missing metric shows "brak danych".
+    core_temp_max = thermo_metrics.get("max_core_temp")
+    peak_hsi = thermo_metrics.get("peak_hsi")
 
     def build_card(title, value, unit, interp, color):
         card_content = [
@@ -2081,33 +2105,34 @@ def build_page_thermal(
         )
         return card_table
 
-    ct_color = (
-        "#2ECC71" if core_temp_max < 38.5 else ("#F39C12" if core_temp_max < 39.0 else "#E74C3C")
-    )
+    if isinstance(core_temp_max, (int, float)):
+        ct_color = (
+            "#2ECC71" if core_temp_max < 38.5 else ("#F39C12" if core_temp_max < 39.0 else "#E74C3C")
+        )
+    else:
+        ct_color = "#7F8C8D"
     card1 = build_card(
-        "TEMP. RDZENIOWA", f"{core_temp_max:.1f}", "°C", f"avg: {core_temp_avg:.1f}°C", ct_color
+        "TEMP. RDZENIOWA", _num("max_core_temp"), "°C", f"min: {_num('min_core_temp')}°C", ct_color
     )
 
-    hsi_color = (
-        "#2ECC71" if heat_strain_index < 3 else ("#F39C12" if heat_strain_index < 5 else "#E74C3C")
-    )
-    hsi_interp = (
-        "Niski" if heat_strain_index < 3 else ("Średni" if heat_strain_index < 5 else "Wysoki")
-    )
-    card2 = build_card("HEAT STRAIN INDEX", f"{heat_strain_index:.1f}", "", hsi_interp, hsi_color)
+    if isinstance(peak_hsi, (int, float)):
+        hsi_color = "#2ECC71" if peak_hsi < 3 else ("#F39C12" if peak_hsi < 5 else "#E74C3C")
+        hsi_interp = "Niski" if peak_hsi < 3 else ("Średni" if peak_hsi < 5 else "Wysoki")
+    else:
+        hsi_color = "#7F8C8D"
+        hsi_interp = "Brak danych"
+    card2 = build_card("HEAT STRAIN INDEX", _num("peak_hsi"), "", hsi_interp, hsi_color)
 
-    drift_color = (
-        "#2ECC71"
-        if abs(thermal_drift_rate) < 0.1
-        else ("#F39C12" if abs(thermal_drift_rate) < 0.3 else "#E74C3C")
-    )
-    drift_interp = (
-        "Stabilna"
-        if abs(thermal_drift_rate) < 0.1
-        else ("Umiarkowany" if abs(thermal_drift_rate) < 0.3 else "Wysoki")
+    # Drift rate is stored as delta per 10 min; classification comes from the producer.
+    # `_classify_tolerance` returns the tokens "good"/"moderate"/"poor", which are
+    # internal labels — printing them raw put English words in a Polish report.
+    classification = thermal_data.get("classification", {})
+    drift_color = classification.get("color") or "#7F8C8D"
+    drift_interp = HEAT_TOLERANCE_LABELS_PL.get(
+        classification.get("heat_tolerance"), "Brak danych"
     )
     card3 = build_card(
-        "DRYF TERMICZNY", f"{thermal_drift_rate:.2f}", "°C/h", drift_interp, drift_color
+        "DRYF TERMICZNY", _num("delta_per_10min", ".2f"), "°C/10min", drift_interp, drift_color
     )
 
     cards_row = Table([[card1, card2, card3]], colWidths=[58 * mm] * 3)

@@ -406,6 +406,50 @@ def _extract_cpet_overrides(
     return vt1_onset, rcp_onset
 
 
+def _extract_limitations(report_json: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the payload for the limitations page (section 5).
+
+    Nothing produced this key before, so the page always printed "Brak
+    zidentyfikowanych ograniczen." — including for a CONDITIONAL test, where the
+    caveats are the whole point. Sources: the validity status and its issue list
+    (models.results.TestValidity.to_dict) plus the interpretation warnings.
+    """
+    validity = report_json.get("test_validity", {})
+    status = str(validity.get("status", "")).lower()
+    limitations: List[Dict[str, str]] = []
+
+    if status == "conditional":
+        limitations.append(
+            {
+                "title": "Test ważny z zastrzeżeniami",
+                "severity": "warning",
+                "description": "Kryteria metodologiczne spełnione tylko częściowo — "
+                "wyniki interpretuj z ostrożnością.",
+            }
+        )
+    elif status == "invalid":
+        limitations.append(
+            {
+                "title": "Test metodologicznie nieważny",
+                "severity": "error",
+                "description": "Test nie spełnia kryteriów ważności — powtórz go przed "
+                "wyciąganiem wniosków treningowych.",
+            }
+        )
+
+    for issue in validity.get("issues", []) or []:
+        limitations.append(
+            {"title": "Jakość danych", "severity": "warning", "description": str(issue)}
+        )
+
+    for warning in report_json.get("interpretation", {}).get("warnings", []) or []:
+        limitations.append(
+            {"title": "Zastrzeżenie interpretacyjne", "severity": "info", "description": str(warning)}
+        )
+
+    return {"limitations": limitations}
+
+
 def map_ramp_json_to_pdf_data(
     report_json: Dict[str, Any], manual_overrides: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
@@ -466,6 +510,7 @@ def map_ramp_json_to_pdf_data(
         "biomech_occlusion": report_json.get("biomech_occlusion", {}),
         "thermo_analysis": report_json.get("thermo_analysis", {}),
         "limiter_analysis": report_json.get("limiter_analysis", {}),
+        "limitations": _extract_limitations(report_json),
         "vt1_onset_watts": vt1_onset_watts,
         "rcp_onset_watts": rcp_onset_watts,
         "executive_summary": generate_executive_summary(
@@ -660,21 +705,19 @@ def _build_pdf_story(
     limiter_data = pdf_data.get("limiter_analysis", {})
     if limiter_data:
         story.extend(
-            build_page_limiter_radar(
-                limiter_data=limiter_data, figure_paths=figure_paths, styles=styles
-            )
+            build_page_limiter_radar(limiter_data=limiter_data, styles=styles)
         )
         story.append(PageBreak())
 
     if any(k in figure_paths for k in ["drift_heatmap_hr", "drift_heatmap_smo2"]):
         story.extend(
-            build_page_drift_kpi(kpi=pdf_data["kpi"], figure_paths=figure_paths, styles=styles)
+            build_page_drift_kpi(kpi=pdf_data["kpi"], styles=styles)
         )
         story.append(PageBreak())
 
     story.extend(
         build_page_thermal(
-            thermo_data=pdf_data.get("thermo_analysis", {}),
+            thermal_data=pdf_data.get("thermo_analysis", {}),
             figure_paths=figure_paths,
             styles=styles,
         )
@@ -713,7 +756,11 @@ def _build_pdf_story(
         story.extend(build_page_protocol(styles=styles))
         story.append(PageBreak())
 
-    story.extend(build_page_limitations(styles=styles, is_conditional=config.is_conditional))
+    # `build_page_limitations` takes the limitations payload, not a flag: the
+    # conditional-validity warning is already rendered by build_page_cover().
+    story.extend(
+        build_page_limitations(limitations_data=pdf_data.get("limitations", {}), styles=styles)
+    )
     story.extend(build_contact_footer(styles=styles))
 
     return story
