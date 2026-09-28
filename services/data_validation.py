@@ -4,15 +4,24 @@ Data Validation Service
 Handles DataFrame validation logic for uploaded training files.
 """
 
+import logging
 from typing import List, Optional, Tuple
 
 import pandas as pd
 
 from modules.config import Config
 
+logger = logging.getLogger(__name__)
+
 
 def _ensure_numeric(df: pd.DataFrame, col: str) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """Ensure column is numeric; coerce if needed.
+
+    Coercion happens IN PLACE on *df*. The caller keeps processing the very
+    frame it passed in, so a coerced copy would be thrown away and the
+    object-dtype column would reach `process_data`, where
+    `resample_with_pace` keeps only `select_dtypes(include=[np.number])`
+    and would silently drop the column from the output.
 
     Returns (df_or_None, error_message_or_None).
     On success returns (df, None); on failure returns (None, error_msg).
@@ -22,7 +31,6 @@ def _ensure_numeric(df: pd.DataFrame, col: str) -> Tuple[Optional[pd.DataFrame],
     if pd.api.types.is_numeric_dtype(df[col]):
         return df, None
     try:
-        df = df.copy()
         df[col] = pd.to_numeric(df[col], errors="coerce")
         if df[col].isna().all():
             return None, f"Kolumna '{col}' zawiera nieprawidłowe dane (nie-liczbowe)."
@@ -54,10 +62,30 @@ def _validate_numeric_columns(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame],
     """Validate and coerce numeric columns; returns (df, failure_messages)."""
     failures: List[str] = []
 
+    # These three block the import when they cannot be coerced (unchanged).
     for col in ("watts", "heartrate", "cadence"):
         df, err = _ensure_numeric(df, col)
         if err is not None:
             return None, [err]
+
+    # The remaining declared data columns were never coerced, so a numeric-looking
+    # object column (stray whitespace, one bad row) survived validation and was then
+    # dropped by `resample_with_pace`'s select_dtypes(include=[np.number]) -- the
+    # dashboard lost e.g. `pace` without a word. Coercion here keeps them. A column
+    # that is genuinely non-numeric (pace as "4:30") only gets logged: rejecting the
+    # whole file would block imports that work today.
+    for col in (*Config.VALIDATION_DATA_COLS, "hr"):
+        if col in ("watts", "heartrate", "cadence") or col not in df.columns:
+            continue
+        if pd.api.types.is_numeric_dtype(df[col]):
+            continue
+        coerced = pd.to_numeric(df[col], errors="coerce")
+        if coerced.isna().all():
+            logger.warning(
+                "Kolumna '%s' nie jest liczbowa i zostanie pominieta w analizie.", col
+            )
+            continue
+        df[col] = coerced
 
     failures.append(
         _validate_column_range(df, "watts", Config.VALIDATION_MAX_WATTS, "Moc maksymalna", "W")
