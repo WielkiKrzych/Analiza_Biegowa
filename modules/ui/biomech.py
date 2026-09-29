@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -15,6 +16,8 @@ from modules.calculations.running_dynamics import (
     calculate_stride_metrics,
 )
 from modules.config import Config
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -86,8 +89,10 @@ def _add_trend_line(
                 hoverinfo="skip",
             )
         )
-    except (ValueError, TypeError):
-        pass
+    except (ValueError, TypeError) as e:
+        # The chart stays useful without the trend line, so this is not fatal —
+        # but a missing regression on a chart with >100 points is worth a trace.
+        logger.warning("Trend line skipped for %s vs %s: %s", value_col, time_col, e)
 
 
 def _time_values(df: pd.DataFrame, time_col: str) -> np.ndarray:

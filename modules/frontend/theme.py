@@ -4,15 +4,24 @@ Frontend Theme Management.
 Handles CSS loading and theme configuration.
 """
 
+import os
+
 import streamlit as st
 
 from modules.config import Config
 
 
 @st.cache_data(show_spinner=False)
-def _read_css_file(css_path: str) -> str:
+def _read_css_file(css_path: str, mtime_ns: int, size: int) -> str:
     """Read CSS file contents. Cached per path so re-runs don't re-read
     the 12 KB file on every interaction.
+
+    The cached value is the file's *contents*, so the key has to carry the
+    file's identity too. `mtime_ns` and `size` are taken from the caller's
+    `stat()` and are not used in the body — they exist purely so that editing
+    `style.css` misses the cache. With a path-only key and no TTL the first
+    read of a session was also the last one, and a CSS edit stayed invisible
+    until the Streamlit process was restarted.
     """
     with open(css_path) as f:
         return f.read()
@@ -33,7 +42,8 @@ class ThemeManager:
         """
         css_file = Config.CSS_FILE
         try:
-            css = _read_css_file(css_file)
+            css_stat = os.stat(css_file)
+            css = _read_css_file(css_file, css_stat.st_mtime_ns, css_stat.st_size)
         except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             st.error(f"Failed to load CSS: {e}")
             return

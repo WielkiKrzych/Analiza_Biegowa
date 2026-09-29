@@ -9,6 +9,13 @@ _HR_ALIASES = ("heart_rate", "heart rate", "bpm", "tętno", "heartrate", "heart_
 
 
 def _parse_time(t_str: str) -> int | None:
+    """Parse ``hh:mm:ss`` / ``mm:ss`` / ``ss`` to seconds.
+
+    ``None`` means "could not parse". ``_select_time_range`` turns that into
+    ``st.error("Nieprawidłowy format czasu...")`` and aborts the render, so the
+    failure is never silent (unlike the sibling parser in
+    ``vent_utils``/``smo2``, which duplicates this same body).
+    """
     try:
         parts = list(map(int, t_str.split(":")))
     except (ValueError, TypeError):

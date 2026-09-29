@@ -17,7 +17,12 @@ from modules.calculations.smo2_phases import (
 
 
 def _parse_time_to_seconds(t_str: str) -> int | None:
-    """Convert ``hh:mm:ss`` / ``mm:ss`` / ``ss`` string to total seconds."""
+    """Convert ``hh:mm:ss`` / ``mm:ss`` / ``ss`` string to total seconds.
+
+    ``None`` means "could not parse" — ``_render_manual_range_input`` reports
+    that to the user and keeps the current range (see
+    ``tests/ui/test_review_ui.py``), so no logging happens here.
+    """
     try:
         parts = list(map(int, t_str.split(":")))
         if len(parts) == 3:

@@ -11,6 +11,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from modules.calculations.canonical_physio import VO2MAX_ACSM_SLOPE, calculate_vo2max_acsm
+
 __all__ = [
     "_render_smo2_thb_chart",
     "_render_running_dynamics_section",
@@ -483,17 +485,22 @@ def _compute_vo2max_metrics(
     power_cv = (power_sd / power_mean * 100) if power_mean > 0 else 0
     n = len(df_best5)
 
-    # Estymacja VO2max (Sitko et al. 2021)
-    power_per_kg = power_mean / rider_weight
-    vo2max = 16.61 + 8.87 * power_per_kg
+    if power_mean <= 0:
+        st.warning("⚠️ **Brak mocy w danych** — nie można estymować VO2max.")
+        return None
 
-    # Propagacja błędu: SE_vo2 = 8.87 / kg * SE_power
+    # Estymacja VO2max — wzór kanoniczny wołany, nie przepisany: ta zakładka
+    # i Podsumowanie muszą pokazywać tę samą liczbę dla tego samego pliku.
+    vo2max = calculate_vo2max_acsm(power_mean, rider_weight)
+
+    # Propagacja błędu: SE_vo2 = (nachylenie wzoru kanonicznego) / kg * SE_power.
+    # Nachylenie bierzemy ze stałej kanonicznej — jedna definicja wzoru.
     se_power = power_sd / np.sqrt(n)
-    se_vo2 = 8.87 * se_power / rider_weight
+    se_vo2 = VO2MAX_ACSM_SLOPE * se_power / rider_weight
     ci95_vo2 = 1.96 * se_vo2
 
     # Dodatkowa niepewność z HR response (jeśli dostępne)
-    hr_penalty, hr_col = _compute_hr_penalty(df_best5, ci95_vo2)
+    hr_penalty, hr_diagnostics = _compute_hr_penalty(df_best5, ci95_vo2)
 
     ci95_total = ci95_vo2 + hr_penalty
 
@@ -521,11 +528,21 @@ def _compute_vo2max_metrics(
         "confidence_pct": confidence_pct,
         "conf_color": conf_color,
         "conf_label": conf_label,
+        # `_render_vo2max_details` reads hr_col/hr_mean/hr_sd/hr_cv — they have
+        # to be part of this dict, they used to be computed and thrown away.
+        **hr_diagnostics,
     }
 
 
-def _compute_hr_penalty(df_best5: pd.DataFrame, ci95_vo2: float) -> tuple[float, str | None]:
-    """Compute HR-based CI penalty for unstable heart-rate response."""
+def _compute_hr_penalty(
+    df_best5: pd.DataFrame, ci95_vo2: float
+) -> tuple[float, dict[str, float | str]]:
+    """Compute the HR-based CI penalty and the HR diagnostics behind it.
+
+    Returns ``(penalty, diagnostics)``. ``diagnostics`` is empty when the frame
+    carries no heart-rate column, and otherwise holds the `hr_col` / `hr_mean` /
+    `hr_sd` / `hr_cv` values `_render_vo2max_details` renders.
+    """
     hr_col: str | None = None
     for alias in ["hr", "heartrate", "heart_rate", "bpm"]:
         if alias in df_best5.columns:
@@ -533,13 +550,18 @@ def _compute_hr_penalty(df_best5: pd.DataFrame, ci95_vo2: float) -> tuple[float,
             break
 
     if hr_col is None:
-        return 0.0, None
+        return 0.0, {}
 
     hr_mean = df_best5[hr_col].mean()
     hr_sd = df_best5[hr_col].std()
     hr_cv = (hr_sd / hr_mean * 100) if hr_mean > 0 else 0
     penalty = ci95_vo2 * 0.2 if hr_cv > 5 else 0.0
-    return penalty, hr_col
+    return penalty, {
+        "hr_col": hr_col,
+        "hr_mean": hr_mean,
+        "hr_sd": hr_sd,
+        "hr_cv": hr_cv,
+    }
 
 
 def _render_vo2max_details(

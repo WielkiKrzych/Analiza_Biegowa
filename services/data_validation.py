@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 def _ensure_numeric(df: pd.DataFrame, col: str) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """Ensure column is numeric; coerce if needed.
 
+    Mutates df in place.
+
     Coercion happens IN PLACE on *df*. The caller keeps processing the very
     frame it passed in, so a coerced copy would be thrown away and the
     object-dtype column would reach `process_data`, where

@@ -2,7 +2,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from modules.calculations import calculate_trend, calculate_vo2max
+from modules.calculations import calculate_trend
 from modules.config import Config
 
 
@@ -313,12 +313,15 @@ def render_kpi_tab(
     c3.metric("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f} %")
     c4.metric("Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM")
 
-    vo2max_est = calculate_vo2max(
-        df_plot["watts"].rolling(window=300).mean().max() if "watts" in df_plot.columns else 0,
-        rider_weight,
-    )
+    # See `report._render_kpi_section`: the canonical estimate is
+    # `metrics["vo2_max_est"]`, produced by `calculate_vo2max_acsm` in
+    # `services/session_analysis.py`. A local re-derivation here would drift
+    # from the summary tab whenever the two rolling windows disagreed.
+    vo2max_est = (metrics or {}).get("vo2_max_est") or 0.0
     c5.metric(
-        "Szac. VO2max", f"{vo2max_est:.1f}", help="Estymowane na podstawie mocy 5-minutowej (ACSM)."
+        "Szac. VO2max",
+        f"{vo2max_est:.1f}" if vo2max_est > 0 else "--",
+        help="Estymowane na podstawie mocy 5-minutowej (ACSM).",
     )
 
     st.divider()

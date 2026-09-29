@@ -85,7 +85,12 @@ def process_and_cache_session(
                         from modules.domain import classify_ramp_test
 
                         ramp_classification = classify_ramp_test(power)
-                        st.session_state["ramp_classification"] = ramp_classification
+                # Written even when it is None: a new file that carries no
+                # power column leaves `ramp_classification` unclassified, and
+                # `app.py` reads this key without a hash guard — the previous
+                # file's classification (and its confidence score) was shown
+                # next to the new session type.
+                st.session_state["ramp_classification"] = ramp_classification
             # else: reuse cached session_type / ramp_classification from session_state
 
             # --- DATA QUALITY VALIDATION ---

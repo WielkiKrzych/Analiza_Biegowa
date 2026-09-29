@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 class TabRegistry:
     """Registry for UI tabs to support Open/Closed Principle."""
 
+    # `thresholds`, `history`, `import` and `community` were deregistered: this
+    # registry listed them, but no `render_tab_content(...)` call ever reached
+    # them. Their modules stay on disk; see docs/DEAD_CODE_INVENTORY.md.
     _tabs = {
         "report": ("modules.ui.report", "render_report_tab"),
         "running": ("modules.ui.running", "render_running_tab"),
@@ -38,10 +41,6 @@ class TabRegistry:
         "thermal": ("modules.ui.thermal", "render_thermal_tab"),
         "nutrition": ("modules.ui.nutrition", "render_nutrition_tab"),
         "limiters": ("modules.ui.limiters", "render_limiters_tab"),
-        "thresholds": ("modules.ui.threshold_analysis_ui", "render_threshold_analysis_tab"),
-        "history": ("modules.ui.trends_history", "render_trends_history_tab"),
-        "community": ("modules.ui.community", "render_community_tab"),
-        "import": ("modules.ui.history_import_ui", "render_history_import_tab"),
         "heart_rate": ("modules.ui.heart_rate", "render_hr_tab"),
         "summary": ("modules.ui.summary", "render_summary_tab"),
         "drift_maps": ("modules.ui.drift_maps_ui", "render_drift_maps_tab"),

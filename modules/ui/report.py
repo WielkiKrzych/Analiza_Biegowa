@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from modules.calculations import calculate_trend, calculate_vo2max
+from modules.calculations import calculate_trend
 from modules.config import Config
 
 # ============================================================
@@ -82,7 +82,12 @@ def _render_kpi_section(
     decoupling_percent: float,
     drift_z2: float,
 ) -> None:
-    """Render the KPI metrics cards section."""
+    """Render the KPI metrics cards section.
+
+    ``rider_weight`` is part of the bundle `render_report_tab` receives and is
+    kept on the signature; the VO2max card no longer needs it because the
+    estimate comes from the pipeline (see below).
+    """
     st.subheader("📊 Kluczowe Wskaźniki Wydajności (KPI)")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Średnia Moc", f"{metrics.get('avg_watts', 0):.0f} W")
@@ -92,12 +97,17 @@ def _render_kpi_section(
         "Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM"
     )  # FIX: SPM (steps/min) for running, not RPM
 
-    vo2max_est = calculate_vo2max(
-        df_plot["watts"].rolling(window=300).mean().max() if "watts" in df_plot.columns else 0,
-        rider_weight,
-    )
+    # `vo2_max_est` is the canonical estimate: computed once per session in
+    # `services/session_analysis.calculate_extended_metrics` with
+    # `calculate_vo2max_acsm` (Sitko et al. 2021) over a 300 s window.
+    #
+    # The card renders "--" whenever the canonical estimate is missing, so a
+    # session too short to produce one no longer prints a bare "0.0".
+    vo2max_est = (metrics or {}).get("vo2_max_est") or 0.0
     c5.metric(
-        "Szac. VO2max", f"{vo2max_est:.1f}", help="Estymowane na podstawie mocy 5-minutowej (ACSM)."
+        "Szac. VO2max",
+        f"{vo2max_est:.1f}" if vo2max_est > 0 else "--",
+        help="Estymowane na podstawie mocy 5-minutowej (ACSM).",
     )
 
     st.divider()

@@ -395,8 +395,27 @@ def _render_training_zones(cp_input, ftp_input, max_hr_input) -> None:
 
 
 def _resolve_zone_thresholds(use_detected: bool, ftp_input) -> tuple:
-    if use_detected and "detected_vt1" in st.session_state:
-        return int(st.session_state["detected_vt1"]), int(st.session_state["detected_vt2"])
+    """Return the (VT1, VT2) power in watts used to build the training zones.
+
+    The detected values live in ``st.session_state["threshold_result"]`` —
+    that is the only key the detection step writes. The previous version read
+    ``detected_vt1``/``detected_vt2``, which no widget and no
+    ``StateManager.init_session_state()`` ever sets, so the branch was dead
+    and ticking "Użyj wykrytych progów" silently fell through to the two
+    manual inputs.
+
+    Scope note: the tab itself is dormant today. ``app.py`` registers a
+    ``"thresholds"`` entry, but no ``render_tab_content("thresholds", ...)``
+    call exists, so nothing renders this function in the running app. The fix
+    is what makes the checkbox behave the day the tab is wired up — it is not
+    a bug users hit today.
+    """
+    if use_detected:
+        result = st.session_state.get("threshold_result")
+        vt1_detected = getattr(result, "vt1_watts", 0) or 0
+        vt2_detected = getattr(result, "vt2_watts", 0) or 0
+        if vt1_detected > 0 and vt2_detected > 0:
+            return int(vt1_detected), int(vt2_detected)
 
     col1, col2 = st.columns(2)
     with col1:

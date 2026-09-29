@@ -4,7 +4,13 @@ from __future__ import annotations
 
 
 def _parse_time_to_seconds(t_str):
-    """Parse time string (hh:mm:ss or mm:ss) to seconds."""
+    """Parse time string (hh:mm:ss or mm:ss) to seconds.
+
+    Returns ``None`` when the string cannot be parsed — the callers
+    (`vent_tab._render_manual_range`, `vent_charts._render_br_manual_input`)
+    turn that ``None`` into a visible "nieprawidłowy format" message and leave
+    the previous range untouched, so this helper stays silent by contract.
+    """
     try:
         parts = list(map(int, t_str.split(":")))
         if len(parts) == 3:
