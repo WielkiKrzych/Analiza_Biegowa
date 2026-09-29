@@ -39,12 +39,38 @@ _TS_COLUMN_MAP: Dict[str, str] = {
     "torque": "torque_nm",
     "cadence": "cadence_rpm",
     "cad": "cadence_rpm",
+    # Pace in sec/km — the same aliases the figure code treats as one column
+    # (figures/drift.py). Speed columns are deliberately absent: they are m/s or km/h,
+    # and a rename map cannot convert units, so mapping them would file a speed value
+    # under a pace key.
+    "pace": "pace_sec_per_km",
+    "pace_smooth": "pace_sec_per_km",
+    "pace_sec_per_km": "pace_sec_per_km",
+    "tempo": "pace_sec_per_km",
     "core_temperature": "core_temp",
     "core_temperature_smooth": "core_temp",
     "hsi": "hsi",
     "heat_strain_index": "hsi",
     "heatstrainindex": "hsi",
 }
+
+# Canonical keys a figure in modules/reporting/figures/** actually reads back from
+# ``time_series`` (grep for ``time_series.get(``). A missing one of these costs a chart,
+# so it is worth a warning. ``torque_nm`` is the one key left out: no figure reads it, the
+# biomech analysis falls back to power × cadence without it, and warning about it means
+# warning about a sensor the athlete may simply not wear.
+_FIGURE_READ_KEYS = frozenset(
+    {
+        "power_watts",
+        "hr_bpm",
+        "smo2_pct",
+        "cadence_rpm",
+        "pace_sec_per_km",
+        "ve_lmin",
+        "core_temp",
+        "hsi",
+    }
+)
 
 
 def _check_gating(
@@ -93,9 +119,26 @@ def _extract_time_series_data(df_ts: Any) -> Dict:
     else:
         ts_data["time_sec"] = list(range(len(df_ts)))
 
+    matched: set = set()
     for df_col, json_key in _TS_COLUMN_MAP.items():
         if df_col in df_ts.columns and json_key not in ts_data:
             ts_data[json_key] = df_ts[df_col].fillna(0).tolist()
+            matched.add(json_key)
+
+    # A canonical key nobody matched is a chart that will silently render "no data" — but
+    # only for the keys the generated figures really read. The rest are sensors the
+    # athlete may simply not wear, and a warning about those on every single save is
+    # noise. Warned per canonical key, not per alias: the aliases are alternatives, so an
+    # unmatched one usually just means another spelling supplied the column.
+    for json_key in sorted(set(_TS_COLUMN_MAP.values()) - matched):
+        message = (
+            f"Time series: no source column matched {json_key!r}; "
+            "charts reading it will fall back to 'no data'."
+        )
+        if json_key in _FIGURE_READ_KEYS:
+            logger.warning(message)
+        else:
+            logger.debug(message)
 
     return ts_data
 
@@ -533,11 +576,24 @@ def _run_limiter_analysis(data: Dict, source_df: Any) -> None:
 
 
 def _parse_test_date(test_date_str: Optional[str], now: datetime) -> Any:
-    """Parse test date string, falling back to *now.date()*."""
+    """Parse test date string, falling back to *now.date()*.
+
+    The fallback keeps a report saveable when the analysis produced no usable
+    date, but it also invents a measurement date — so it is always logged and the
+    caller is told, so the report can carry the fact on its face.
+
+    Returns:
+        Tuple of ``(date, inferred)``. ``inferred`` is True when the string did not
+        parse and *now.date()* was substituted for a date nobody measured.
+    """
     try:
-        return datetime.strptime(test_date_str, "%Y-%m-%d").date()
+        return datetime.strptime(test_date_str, "%Y-%m-%d").date(), False
     except (ValueError, TypeError):
-        return now.date()
+        logger.warning(
+            f"Test date {test_date_str!r} is not a valid YYYY-MM-DD string; "
+            f"the report will be dated {now.date().isoformat()} instead."
+        )
+        return now.date(), True
 
 
 def _enrich_metadata(
@@ -548,6 +604,7 @@ def _enrich_metadata(
     now: datetime,
     session_id: str,
     test_date: Any,
+    test_date_inferred: bool,
 ) -> None:
     """Enrich data dict with standard metadata fields."""
     analysis_timestamp = now.isoformat()
@@ -555,9 +612,15 @@ def _enrich_metadata(
     if "metadata" not in data:
         data["metadata"] = {}
 
+    # An inferred date is written as the date actually used — the one the file is filed
+    # under and the one the PDF annotates — never as the unparseable text it replaced.
+    resolved_test_date = (
+        test_date.isoformat() if test_date_inferred else (result.test_date or test_date.isoformat())
+    )
+
     data["metadata"].update(
         {
-            "test_date": result.test_date or test_date.isoformat(),
+            "test_date": resolved_test_date,
             "analysis_timestamp": analysis_timestamp,
             "method_version": METHOD_VERSION,
             "session_id": session_id,
@@ -566,6 +629,13 @@ def _enrich_metadata(
             "analyzer": "Tri_Dashboard/ramp_pipeline",
         }
     )
+
+    if test_date_inferred:
+        # Written only when the date had to be guessed: reports with a parsed date keep
+        # their old shape, and old files stay readable without these keys.
+        data["metadata"]["test_date_inferred"] = True
+        if result.test_date:
+            data["metadata"]["test_date_raw"] = result.test_date
 
 
 def _apply_data_policy(final_json: Dict, data: Dict, manual_overrides: Optional[Dict]) -> None:
@@ -692,8 +762,10 @@ def save_ramp_test_report(
 
     now = datetime.now()
     session_id = str(uuid.uuid4())
-    test_date = _parse_test_date(result.test_date, now)
-    _enrich_metadata(data, result, athlete_id, notes, now, session_id, test_date)
+    test_date, test_date_inferred = _parse_test_date(result.test_date, now)
+    _enrich_metadata(
+        data, result, athlete_id, notes, now, session_id, test_date, test_date_inferred
+    )
 
     final_json = {"$schema": CANONICAL_SCHEMA, "version": CANONICAL_VERSION, **data}
 

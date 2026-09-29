@@ -122,6 +122,10 @@ def build_title_page(metadata: Dict[str, Any], styles: Dict) -> List:
 
     # Test info
     test_date = metadata.get("test_date", "---")
+    if metadata.get("test_date_inferred"):
+        # The save path had no usable date and filed the report under today's; say so
+        # next to the date rather than letting it pass as a measured one.
+        test_date = f"{test_date} (data przyjęta automatycznie)"
     session_id = metadata.get("session_id", "")[:8] if metadata.get("session_id") else ""
     method_version = metadata.get("method_version", "1.0.0")
     gen_date = datetime.now().strftime("%d.%m.%Y, %H:%M")

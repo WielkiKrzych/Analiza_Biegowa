@@ -42,8 +42,8 @@ def _find_first_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
 
 def _extract_ve_from_df(
     source_df: pd.DataFrame,
-) -> Tuple[List[float], List[float], List[float]]:
-    """Extract time, VE, and pace data from a source DataFrame."""
+) -> Tuple[List[float], List[float], List[float], List[float]]:
+    """Extract time, VE, pace (min/km), and pace (sec/km) data from a source DataFrame."""
     df = source_df.copy()
     df.columns = df.columns.str.lower().str.strip()
 
@@ -52,37 +52,44 @@ def _extract_ve_from_df(
     time_col = _find_first_col(df, ["time", "seconds"])
 
     if not ve_col or not time_col:
-        return [], [], []
+        return [], [], [], []
 
     time_data = df[time_col].tolist()
     ve_data = df[ve_col].fillna(0).tolist()
     pace_sec_data = df[pace_col].fillna(0).tolist() if pace_col else []
     pace_data = [_sec_to_min(p) for p in pace_sec_data] if pace_col else []
-    return time_data, ve_data, pace_data
+    return time_data, ve_data, pace_data, pace_sec_data
 
 
 def _extract_ve_from_json(
     time_series: Dict[str, Any],
-) -> Tuple[List[float], List[float], List[float]]:
-    """Extract time, VE, and pace data from JSON time_series."""
+) -> Tuple[List[float], List[float], List[float], List[float]]:
+    """Extract time, VE, pace (min/km), and pace (sec/km) data from JSON time_series."""
     time_data = time_series.get("time_sec", [])
     ve_data = time_series.get("ve_lmin", [])
-    pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-    pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
-    return time_data, ve_data, pace_data
+    pace_sec_data = time_series.get("pace_sec_per_km", time_series.get("pace", []))
+    pace_data = [_sec_to_min(p) for p in pace_sec_data] if pace_sec_data else []
+    return time_data, ve_data, pace_data, pace_sec_data
 
 
 def _find_vt_time(
     time_data: List[float],
-    time_series: Dict[str, Any],
+    pace_sec_data: List[float],
     vt_pace_sec: float,
 ) -> Optional[float]:
-    """Find the first time point where pace reaches the VT threshold."""
+    """Find the first time point where pace reaches the VT threshold.
+
+    Pace is sec/km, so a *smaller* number is faster: the threshold is reached at a pace
+    of at most ``vt_pace_sec`` seconds. Comparing the other way round returned the first
+    sample of the warm-up — the slowest pace of the run always "reaches" the threshold —
+    which drew the VT line seconds into every chart. ``0 <`` drops the standstills the
+    saved series stores as pace 0, and the pace series comes from the same branch that
+    drew the trace, so the line cannot be placed from a different source than the plot.
+    """
     if not vt_pace_sec:
         return None
-    pace_sec_list = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-    for t, p_sec in zip(time_data, pace_sec_list, strict=False):
-        if p_sec >= vt_pace_sec:
+    for t, p_sec in zip(time_data, pace_sec_data, strict=False):
+        if 0 < p_sec <= vt_pace_sec:
             return t
     return None
 
@@ -111,7 +118,7 @@ def _plot_vt_line(
     label: str,
 ) -> None:
     """Plot a vertical VT line with label annotation."""
-    if not vt_time_min or not vt_pace_min:
+    if vt_time_min is None or vt_pace_min is None:
         return
     color_key = label.lower()
     ax.axvline(
@@ -151,9 +158,9 @@ def generate_ve_profile_chart(
     time_series = report_data.get("time_series", {})
 
     if source_df is not None and not source_df.empty:
-        time_data, ve_data, pace_data = _extract_ve_from_df(source_df)
+        time_data, ve_data, pace_data, pace_sec_data = _extract_ve_from_df(source_df)
     else:
-        time_data, ve_data, pace_data = _extract_ve_from_json(time_series)
+        time_data, ve_data, pace_data, pace_sec_data = _extract_ve_from_json(time_series)
 
     if not time_data or not ve_data:
         empty_result = create_empty_figure(
@@ -167,14 +174,15 @@ def generate_ve_profile_chart(
     vt1_pace_sec = vt1_data.get("midpoint_pace_sec", 0)
     vt2_pace_sec = vt2_data.get("midpoint_pace_sec", 0)
 
-    vt1_time = _find_vt_time(time_data, time_series, vt1_pace_sec)
-    vt2_time = _find_vt_time(time_data, time_series, vt2_pace_sec)
+    vt1_time = _find_vt_time(time_data, pace_sec_data, vt1_pace_sec)
+    vt2_time = _find_vt_time(time_data, pace_sec_data, vt2_pace_sec)
     vt1_pace_min = _sec_to_min(vt1_pace_sec) if vt1_pace_sec else None
     vt2_pace_min = _sec_to_min(vt2_pace_sec) if vt2_pace_sec else None
 
     time_min = [t / 60 for t in time_data]
-    vt1_time_min = vt1_time / 60 if vt1_time else None
-    vt2_time_min = vt2_time / 60 if vt2_time else None
+    # `is not None`, not truthiness: a threshold met at t=0 is a real crossing at 0 min.
+    vt1_time_min = vt1_time / 60 if vt1_time is not None else None
+    vt2_time_min = vt2_time / 60 if vt2_time is not None else None
 
     fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
     ax2 = ax1.twinx()

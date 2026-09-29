@@ -58,6 +58,9 @@ def _extract_vt2_ve(report_data: Dict[str, Any]) -> float:
         vt2 = thresholds.get("vt2_result", thresholds.get("vt2", {}))
         return float(vt2.get("ve", 0))
     except (KeyError, TypeError, ValueError):
+        # why: 0.0 is the documented "no VT2 VE available" sentinel — the caller
+        # treats any non-positive value as missing and falls back to the observed
+        # VE max, so the radar's "% VEmax" axis still gets a real ceiling.
         return 0.0
 
 

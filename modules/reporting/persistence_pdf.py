@@ -71,16 +71,6 @@ def _auto_generate_pdf(
         report_data, figure_paths, str(pdf_path), pdf_config, manual_overrides=manual_overrides
     )
 
-    # Generate DOCX (optional)
-    try:
-        from .docx_builder import build_ramp_docx
-
-        docx_path = pdf_path.with_suffix(".docx")
-        build_ramp_docx(report_data, figure_paths, str(docx_path))
-        logger.info(f"Ramp Test DOCX generated: {docx_path}")
-    except (ImportError, OSError, ValueError) as e:
-        logger.error(f"DOCX generation failed: {e}")
-
     logger.info(f"Ramp Test PDF generated: {pdf_path}")
 
     # --- RESET HARD TRIGGER ---
@@ -238,16 +228,6 @@ def generate_and_save_pdf(
     generate_ramp_pdf(
         report_data, figure_paths, str(pdf_path), pdf_config, manual_overrides=manual_overrides
     )
-
-    # Generate DOCX (optional)
-    try:
-        from .docx_builder import build_ramp_docx
-
-        docx_path = pdf_path.with_suffix(".docx")
-        build_ramp_docx(report_data, figure_paths, str(docx_path))
-        logger.info(f"DOCX generated: {docx_path}")
-    except (ImportError, OSError, ValueError) as e:
-        logger.info(f"DOCX failure: {e}")
 
     # Update index with PDF path
     session_id = report_data.get("metadata", {}).get("session_id", "")

@@ -5,6 +5,7 @@ Defines typography, colors, and reusable styles for PDF generation.
 Uses ReportLab library. No physiological logic.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Dict
@@ -16,6 +17,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -77,8 +80,13 @@ def register_fonts():
         )
 
         return "DejaVuSans", "DejaVuSans-Bold", "DejaVuSans-Italic", "DejaVuSans-BoldItalic"
-    except (OSError, IOError):
-        # Fallback to standard fonts if registration fails
+    except (OSError, IOError) as e:
+        # Fallback to standard fonts if registration fails. The PDF still builds,
+        # but Helvetica has no Polish diacritics — worth a trace in the log.
+        logger.warning(
+            f"DejaVu font registration failed ({e}); falling back to Helvetica, "
+            "which cannot render Polish diacritics."
+        )
         return "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"
 
 

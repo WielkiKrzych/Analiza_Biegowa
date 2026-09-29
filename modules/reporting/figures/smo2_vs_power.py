@@ -17,7 +17,13 @@ from typing import Any, Dict, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from .common import apply_common_style, create_empty_figure, get_color, save_figure
+from .common import (
+    apply_common_style,
+    create_empty_figure,
+    get_color,
+    json_pace_pairs,
+    save_figure,
+)
 
 
 def _sec_to_min(pace_sec: float) -> float:
@@ -50,7 +56,10 @@ def generate_smo2_power_chart(
     time_series = report_data.get("time_series", {})
     report_data.get("thresholds", {})
     metadata = report_data.get("metadata", {})
-    smo2_context = report_data.get("smo2_context", {})
+    # RampTestResult.to_dict() writes "smo2_context": None when the test had no SmO2
+    # signal, and .get(key, {}) does not replace a stored None — the drop-point lookup
+    # below then raised AttributeError and took the whole figure run down with it.
+    smo2_context = report_data.get("smo2_context") or {}
 
     # Try to get data from source_df first
     if source_df is not None and len(source_df) > 0:
@@ -83,10 +92,11 @@ def generate_smo2_power_chart(
         else:
             pace_data, smo2_data = [], []
     else:
-        # Fallback to time_series from JSON
-        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
-        smo2_data = time_series.get("smo2_pct", [])
+        # Fallback to time_series from JSON — same filter as the branch above (non-NaN pace
+        # and SmO₂, 0 < pace < 1200; that branch sets no floor on SmO₂ itself, so neither
+        # does this one). Unfiltered, standstills land at 0 min/km in regenerated PDFs.
+        pace_sec_data, smo2_data, _ = json_pace_pairs(time_series, "smo2_pct")
+        pace_data = [_sec_to_min(p) for p in pace_sec_data]
 
     # Handle missing data
     if not pace_data or not smo2_data:

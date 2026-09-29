@@ -12,6 +12,7 @@ page builder functions that have not yet been extracted.
 """
 
 import logging
+import math
 import os
 from typing import Any, Dict, List, Optional
 
@@ -354,6 +355,9 @@ def build_page_thresholds(
         try:
             return f"{float(val):.0f}"
         except (ValueError, TypeError):
+            # why: the non-numeric case is a display string the extractor already
+            # accepted (a range like "250–270" or "~188"); printing it verbatim is
+            # the intended output, not a failure.
             return str(val)
 
     data = [
@@ -600,6 +604,8 @@ def _build_smo2_threshold_cards(smo2_manual: Dict[str, Any], styles: Dict) -> Li
         try:
             return f"{float(val):.0f}"
         except (ValueError, TypeError):
+            # why: same as the VT1/VT2 table — a non-numeric value is a label the
+            # extractor accepted, and it is shown verbatim on purpose.
             return str(val)
 
     lt1 = smo2_manual.get("lt1_watts", "---")
@@ -1603,6 +1609,28 @@ def build_page_ventilation(vent_data: Dict[str, Any], styles: Dict) -> List:
 # ============================================================================
 
 
+# Keys this page prints as facts. No producer writes them today —
+# format_metabolic_strategy_for_report emits "profile"/"training_block" — so the page
+# used to draw fabricated defaults (FATMAX "0 W / 0% tłuszczów", strefa "0–0 W",
+# werdykt "NIEOKREŚLONY 0%"). It is included only when these actually exist.
+# "cho_crossover_watts" is deliberately absent: that card has a real missing-data guard.
+_METABOLIC_ENGINE_REQUIRED_KEYS = (
+    "fat_max_watts",
+    "fat_max_pct",
+    "fat_burning_zone",
+    "cho_zone",
+    "metabolic_status",
+    "metabolic_confidence",
+)
+
+
+def has_metabolic_engine_data(metabolic_data: Dict[str, Any]) -> bool:
+    """True only when every value the metabolic-engine page prints is actually there."""
+    if not metabolic_data:
+        return False
+    return all(key in metabolic_data for key in _METABOLIC_ENGINE_REQUIRED_KEYS)
+
+
 def build_page_metabolic_engine(metabolic_data: Dict[str, Any], styles: Dict) -> List:
     """Build Metabolic Engine Diagnostic page - PREMIUM."""
     from reportlab.lib.colors import HexColor
@@ -2038,6 +2066,15 @@ def build_page_protocol(metadata: Dict[str, Any] = None, styles: Dict = None) ->
 # ============================================================================
 
 
+def _is_measurable(value: Any) -> bool:
+    """True only for a real measurement: not bool, not NaN/inf.
+
+    ``isinstance(True, int)`` is True and ``float("nan") < 250`` is False, so a plain
+    isinstance check would print ``nan`` into a card and colour it as if it were fine.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 # Polish labels for the tolerance tokens produced by
 # modules.calculations.thermoregulation._classify_tolerance.
 HEAT_TOLERANCE_LABELS_PL = {
@@ -2077,7 +2114,7 @@ def build_page_thermal(
 
     def _num(key: str, spec: str = ".1f") -> str:
         value = thermo_metrics.get(key)
-        return f"{value:{spec}}" if isinstance(value, (int, float)) else "brak danych"
+        return f"{value:{spec}}" if _is_measurable(value) else "brak danych"
 
     # Only the two values used for card colouring are read here; the printed
     # numbers go through _num() so a missing metric shows "brak danych".
@@ -2105,7 +2142,7 @@ def build_page_thermal(
         )
         return card_table
 
-    if isinstance(core_temp_max, (int, float)):
+    if _is_measurable(core_temp_max):
         ct_color = (
             "#2ECC71" if core_temp_max < 38.5 else ("#F39C12" if core_temp_max < 39.0 else "#E74C3C")
         )
@@ -2115,7 +2152,7 @@ def build_page_thermal(
         "TEMP. RDZENIOWA", _num("max_core_temp"), "°C", f"min: {_num('min_core_temp')}°C", ct_color
     )
 
-    if isinstance(peak_hsi, (int, float)):
+    if _is_measurable(peak_hsi):
         hsi_color = "#2ECC71" if peak_hsi < 3 else ("#F39C12" if peak_hsi < 5 else "#E74C3C")
         hsi_interp = "Niski" if peak_hsi < 3 else ("Średni" if peak_hsi < 5 else "Wysoki")
     else:
@@ -2168,11 +2205,15 @@ def build_page_biomech(
     )
     elements.append(Spacer(1, 6 * mm))
 
-    gct = biomech_data.get("gct_avg", 0)
+    # No producer writes these three keys: biomech_data carries the occlusion
+    # profile, which has no running-dynamics columns. Numeric defaults used to
+    # fabricate "0 ms / Krótki kontakt" and "50.0 % / Symetryczny" on the page, so
+    # an absent measurement is rendered as missing instead.
+    gct = biomech_data.get("gct_avg")
     biomech_data.get("gct_left", 0)
     biomech_data.get("gct_right", 0)
-    balance = biomech_data.get("stance_balance", 50.0)
-    vo = biomech_data.get("vertical_oscillation", 0)
+    balance = biomech_data.get("stance_balance")
+    vo = biomech_data.get("vertical_oscillation")
     biomech_data.get("vertical_ratio", 0)
     biomech_data.get("step_length", 0)
     biomech_data.get("gct_asymmetry", 0)
@@ -2198,23 +2239,34 @@ def build_page_biomech(
         )
         return card_table
 
-    gct_color = "#2ECC71" if gct < 250 else ("#F39C12" if gct < 300 else "#E74C3C")
-    gct_interp = "Krótki kontakt" if gct < 250 else ("Średni" if gct < 300 else "Długi kontakt")
-    card1 = build_card("GCT", f"{gct:.0f}", "ms", gct_interp, gct_color)
+    if _is_measurable(gct):
+        gct_color = "#2ECC71" if gct < 250 else ("#F39C12" if gct < 300 else "#E74C3C")
+        gct_interp = "Krótki kontakt" if gct < 250 else ("Średni" if gct < 300 else "Długi kontakt")
+        card1 = build_card("GCT", f"{gct:.0f}", "ms", gct_interp, gct_color)
+    else:
+        card1 = build_card("GCT", "---", "ms", "Brak danych", "#7F8C8D")
 
-    bal_color = (
-        "#2ECC71" if abs(balance - 50) < 2 else ("#F39C12" if abs(balance - 50) < 5 else "#E74C3C")
-    )
-    bal_interp = (
-        "Symetryczny"
-        if abs(balance - 50) < 2
-        else ("Lekka asymetria" if abs(balance - 50) < 5 else "Asymetria")
-    )
-    card2 = build_card("BALANS L/P", f"{balance:.1f}", "%", bal_interp, bal_color)
+    if _is_measurable(balance):
+        bal_color = (
+            "#2ECC71"
+            if abs(balance - 50) < 2
+            else ("#F39C12" if abs(balance - 50) < 5 else "#E74C3C")
+        )
+        bal_interp = (
+            "Symetryczny"
+            if abs(balance - 50) < 2
+            else ("Lekka asymetria" if abs(balance - 50) < 5 else "Asymetria")
+        )
+        card2 = build_card("BALANS L/P", f"{balance:.1f}", "%", bal_interp, bal_color)
+    else:
+        card2 = build_card("BALANS L/P", "---", "%", "Brak danych", "#7F8C8D")
 
-    vo_color = "#2ECC71" if vo < 8 else ("#F39C12" if vo < 10 else "#E74C3C")
-    vo_interp = "Niska" if vo < 8 else ("Średnia" if vo < 10 else "Wysoka")
-    card3 = build_card("OSCYLACJA PION.", f"{vo:.1f}", "cm", vo_interp, vo_color)
+    if _is_measurable(vo):
+        vo_color = "#2ECC71" if vo < 8 else ("#F39C12" if vo < 10 else "#E74C3C")
+        vo_interp = "Niska" if vo < 8 else ("Średnia" if vo < 10 else "Wysoka")
+        card3 = build_card("OSCYLACJA PION.", f"{vo:.1f}", "cm", vo_interp, vo_color)
+    else:
+        card3 = build_card("OSCYLACJA PION.", "---", "cm", "Brak danych", "#7F8C8D")
 
     cards_row = Table([[card1, card2, card3]], colWidths=[58 * mm] * 3)
     cards_row.setStyle(
@@ -2223,9 +2275,12 @@ def build_page_biomech(
     elements.append(cards_row)
     elements.append(Spacer(1, 6 * mm))
 
-    if figure_paths and "biomech_profile" in figure_paths:
+    # "biomech_summary" is what figures/__init__.py actually registers for the
+    # cadence/torque profile; the old "biomech_profile" key was never produced, so the
+    # chart never rendered.
+    if figure_paths and "biomech_summary" in figure_paths:
         elements.extend(
-            _build_chart(figure_paths["biomech_profile"], "Profil Biomechaniczny", styles)
+            _build_chart(figure_paths["biomech_summary"], "Profil Biomechaniczny", styles)
         )
 
     return elements

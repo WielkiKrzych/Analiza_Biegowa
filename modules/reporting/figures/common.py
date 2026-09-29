@@ -3,9 +3,10 @@ Common utilities for figure generation.
 Independent of UI or FigureConfig class.
 """
 
+import math
 import os
 from io import BytesIO
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 
@@ -64,6 +65,59 @@ def save_figure(fig, output_path: Optional[str] = None, **kwargs) -> bytes:
             f.write(data)
 
     return data
+
+
+def json_pace_pairs(
+    time_series: Dict[str, Any], target_key: str, min_target: Optional[float] = None
+) -> Tuple[List[float], List[float], List[float]]:
+    """Pace/target/time triples from the JSON fallback, filtered like the DataFrame branch.
+
+    ``persistence_save._extract_time_series_data`` stores every row, standstills included:
+    a stopped athlete has pace 0 (NaN, written as 0), and a missing sensor is a column of
+    zeros. The DataFrame branches drop those with ``0 < pace < 1200``; without the same
+    filter a PDF regenerated from a saved report draws a different map than the PDF from
+    the session that produced it. ``min_target`` is the floor of the branch being mirrored
+    (30 bpm for heart rate, 0 for SmO₂, ``None`` when that branch has no floor at all), and
+    NaN is dropped the way ``isna()`` drops it there — the three lists are filtered
+    together so their indices stay aligned. Pace stays in sec/km, the unit it is stored in;
+    the caller converts for display.
+    """
+    pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", [])) or []
+    target = time_series.get(target_key, []) or []
+    times = time_series.get("time_sec", []) or []
+
+    pace_data: List[float] = []
+    target_data: List[float] = []
+    time_data: List[float] = []
+    for index, (pace, value) in enumerate(zip(pace_sec, target, strict=False)):
+        if not isinstance(pace, (int, float)) or not isinstance(value, (int, float)):
+            continue
+        if math.isnan(pace) or math.isnan(value):
+            continue
+        if not 0 < pace < 1200:
+            continue
+        if min_target is not None and value <= min_target:
+            continue
+        pace_data.append(pace)
+        target_data.append(value)
+        if index < len(times):
+            time_data.append(times[index])
+
+    return pace_data, target_data, time_data
+
+
+def time_to_minutes(values: List[float], column_name: Optional[str] = None) -> List[float]:
+    """Minutes, whichever of the accepted time columns supplied the values.
+
+    ``column_name`` is the column they came from, or ``None`` for the JSON's ``time_sec``.
+    The DataFrame branches accept ``time_min`` as well as ``time``/``seconds``, while the
+    saved JSON only carries seconds — mixing the two colours one run on scales 60 times
+    apart. Minutes are the unit both sides can reach without losing the clock: seconds are
+    divided, never multiplied back by the 1/60 that produced them.
+    """
+    if column_name == "time_min":
+        return list(values)
+    return [value / 60 for value in values]
 
 
 def create_empty_figure(message: str, title: str, output_path: Optional[str] = None, **kwargs):

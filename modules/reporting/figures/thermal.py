@@ -6,6 +6,7 @@ Generates:
 2. Efficiency Factor (W/HR) vs Core Temperature (Scatter with Trend)
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ import numpy as np
 import pandas as pd
 
 from .common import apply_common_style, create_empty_figure, save_figure
+
+logger = logging.getLogger(__name__)
 
 
 def _find_column(df: pd.DataFrame, aliases: list) -> Optional[str]:
@@ -204,8 +207,10 @@ def generate_efficiency_chart(
         p = np.poly1d(z)
         x_trend = np.linspace(df_clean[temp_col].min(), df_clean[temp_col].max(), 100)
         ax.plot(x_trend, p(x_trend), "r--", linewidth=2, label=f"Trend (Slope: {z[0]:.3f})")
-    except (ValueError, np.linalg.LinAlgError):
-        pass
+    except (ValueError, np.linalg.LinAlgError) as e:
+        # Too few or degenerate points: the scatter is still valid, only the trend
+        # line is missing — say so rather than shipping a silently altered chart.
+        logger.warning(f"Thermal efficiency trend line omitted: {e}")
 
     ax.set_xlabel("Temperatura rdzenia [°C]", fontsize=font_size)
     ax.set_ylabel("Współczynnik Efektywności [W/bpm]", fontsize=font_size)

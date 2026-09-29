@@ -12,7 +12,14 @@ from typing import Any, Dict, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from .common import apply_common_style, create_empty_figure, get_color, save_figure
+from .common import (
+    apply_common_style,
+    create_empty_figure,
+    get_color,
+    json_pace_pairs,
+    save_figure,
+    time_to_minutes,
+)
 
 
 def _find_column(df: pd.DataFrame, aliases: list) -> Optional[str]:
@@ -67,15 +74,18 @@ def generate_power_hr_scatter(
             # Convert pace to min/km for display
             pace_data = [_sec_to_min(p) for p in df_clean[pace_col].tolist()]
             hr_data = df_clean[hr_col].tolist()
-            c_vals = df_clean[time_col].tolist() if time_col else None
+            # Minutes, like the JSON branch below: a "time_min" column taken as seconds
+            # would colour the same run on a scale 60 times larger.
+            c_vals = (
+                time_to_minutes(df_clean[time_col].tolist(), time_col) if time_col else None
+            )
         else:
             pace_data, hr_data, c_vals = [], [], None
     else:
-        # Fallback to JSON time_series
-        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
-        hr_data = time_series.get("hr_bpm", [])
-        c_vals = time_series.get("time_sec", [])
+        # Fallback to JSON time_series — same filter as the branch above (hr > 30 bpm).
+        pace_sec_data, hr_data, time_sec = json_pace_pairs(time_series, "hr_bpm", 30)
+        pace_data = [_sec_to_min(p) for p in pace_sec_data]
+        c_vals = time_to_minutes(time_sec)
 
     if not hr_data or not pace_data:
         empty_result = create_empty_figure(
@@ -89,7 +99,7 @@ def generate_power_hr_scatter(
     if c_vals and len(c_vals) == len(pace_data):
         sc = ax.scatter(pace_data, hr_data, c=c_vals, cmap="viridis", alpha=0.5, s=20)
         cbar = plt.colorbar(sc, ax=ax)
-        cbar.set_label("Czas")
+        cbar.set_label("Czas [min]")
     else:
         ax.scatter(pace_data, hr_data, c=get_color("pace"), alpha=0.5, s=20)
 
@@ -143,15 +153,18 @@ def generate_power_smo2_scatter(
             # Convert pace to min/km for display
             pace_data = [_sec_to_min(p) for p in df_clean[pace_col].tolist()]
             smo2_data = df_clean[smo2_col].tolist()
-            c_vals = df_clean[time_col].tolist() if time_col else None
+            # Minutes, like the JSON branch below: a "time_min" column taken as seconds
+            # would colour the same run on a scale 60 times larger.
+            c_vals = (
+                time_to_minutes(df_clean[time_col].tolist(), time_col) if time_col else None
+            )
         else:
             pace_data, smo2_data, c_vals = [], [], None
     else:
-        # Fallback to JSON time_series
-        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
-        smo2_data = time_series.get("smo2_pct", [])
-        c_vals = time_series.get("time_sec", [])
+        # Fallback to JSON time_series — same filter as the branch above (smo2 > 0).
+        pace_sec_data, smo2_data, time_sec = json_pace_pairs(time_series, "smo2_pct", 0)
+        pace_data = [_sec_to_min(p) for p in pace_sec_data]
+        c_vals = time_to_minutes(time_sec)
 
     if not pace_data or not smo2_data:
         empty_result = create_empty_figure(
@@ -165,7 +178,7 @@ def generate_power_smo2_scatter(
     if c_vals and len(c_vals) == len(pace_data):
         sc = ax.scatter(pace_data, smo2_data, c=c_vals, cmap="inferno", alpha=0.5, s=20)
         cbar = plt.colorbar(sc, ax=ax)
-        cbar.set_label("Czas")
+        cbar.set_label("Czas [min]")
     else:
         ax.scatter(pace_data, smo2_data, c=get_color("smo2"), alpha=0.5, s=20)
 
@@ -222,13 +235,11 @@ def generate_drift_heatmap(
         else:
             pace_data, target_data = [], []
     else:
-        # Fallback to JSON time_series
-        pace_sec = time_series.get("pace_sec_per_km", time_series.get("pace", []))
-        pace_data = [_sec_to_min(p) for p in pace_sec] if pace_sec else []
-        if mode == "hr":
-            target_data = time_series.get("hr_bpm", [])
-        else:
-            target_data = time_series.get("smo2_pct", [])
+        # Fallback to JSON time_series — same filter as the branch above (target > 0).
+        pace_sec_data, target_data, _ = json_pace_pairs(
+            time_series, "hr_bpm" if mode == "hr" else "smo2_pct", 0
+        )
+        pace_data = [_sec_to_min(p) for p in pace_sec_data]
 
     if mode == "hr":
         cmap = "magma"

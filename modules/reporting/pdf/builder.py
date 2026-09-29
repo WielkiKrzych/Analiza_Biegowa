@@ -40,6 +40,7 @@ from .layout import (
     build_page_thermal,
     build_page_thresholds,
     build_page_ventilation,
+    has_metabolic_engine_data,
 )
 from .layout_executive_summary import build_page_executive_summary
 from .layout_executive_verdict import build_page_executive_verdict
@@ -79,7 +80,10 @@ def _deep_get_num(
         try:
             return f"{float(val[0]):.0f}–{float(val[1]):.0f}"
         except (ValueError, TypeError):
-            pass
+            logger.warning(
+                f"PDF Mapping: {section}.{'.'.join(path)} is a 2-element list that is not "
+                f"numeric ({val!r}); printing it verbatim instead of a range."
+            )
 
     return str(val)
 
@@ -103,6 +107,9 @@ def _extract_metadata(
 
     mapped: Dict[str, Any] = {
         "test_date": meta.get("test_date", "brak danych"),
+        # Written by persistence_save only when the date had to be guessed; absent
+        # in every report that came from a parsed date.
+        "test_date_inferred": bool(meta.get("test_date_inferred", False)),
         "session_id": meta.get("session_id", "nieznany"),
         "method_version": meta.get("method_version", "1.0.0"),
         "protocol": meta.get("protocol", "Ramp Test"),
@@ -119,6 +126,8 @@ def _extract_metadata(
     # === METADATA OVERRIDES from Ramp Archive editor ===
     if manual_overrides.get("test_date_override"):
         mapped["test_date"] = manual_overrides["test_date_override"]
+        # The date on the page is now the operator's, not the one the save path inferred.
+        mapped["test_date_inferred"] = False
         logger.info(f"PDF: test_date overridden to {mapped['test_date']} (manual)")
 
     if manual_overrides.get("subject_name"):
@@ -213,8 +222,14 @@ def _extract_thresholds(
 
 
 def _extract_smo2_context(report_json: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract SmO2 context section."""
-    smo2 = report_json.get("smo2_context", {})
+    """Extract SmO2 context section.
+
+    RampTestResult.to_dict() writes ``"smo2_context": None`` for a test without an
+    SmO2 signal, and ``.get(key, {})`` does not replace a stored ``None``. Without
+    the ``or {}`` this raised AttributeError and every PDF for such a report — the
+    automatic one and the regenerated one — never got built.
+    """
+    smo2 = report_json.get("smo2_context") or {}
     mapped: Dict[str, Any] = {
         "drop_point_watts": "brak danych",
         "interpretation": smo2.get("interpretation", "nie przeanalizowano"),
@@ -540,8 +555,12 @@ def _add_page_footer(canvas: Any, doc: Any) -> None:
         os.path.dirname(__file__), "..", "..", "..", "assets", "watermark.jpg"
     )
     if os.path.exists(watermark_path):
+        # The restoreState() must run even when drawImage fails: it sits inside a
+        # nested saveState()/restoreState() pair, so skipping it would leave the
+        # outer state (saved above) unpopped and the reduced fill alpha active for
+        # the footer drawn below.
+        canvas.saveState()
         try:
-            canvas.saveState()
             canvas.setFillAlpha(0.12)
 
             page_width, page_height = PAGE_SIZE
@@ -559,9 +578,10 @@ def _add_page_footer(canvas: Any, doc: Any) -> None:
                 mask="auto",
                 preserveAspectRatio=True,
             )
+        except (OSError, IOError) as e:
+            logger.warning(f"PDF watermark could not be drawn ({e}); page continues without it.")
+        finally:
             canvas.restoreState()
-        except (OSError, IOError):
-            pass
 
     datetime.now().strftime("%Y-%m-%d %H:%M")
     footer_text = f"Strona {page_num}"
@@ -571,6 +591,36 @@ def _add_page_footer(canvas: Any, doc: Any) -> None:
     canvas.drawCentredString(PAGE_SIZE[0] / 2, 10 * mm, footer_text)
 
     canvas.restoreState()
+
+
+_METABOLIC_ENGINE_TOC_TITLE = "2.4 Silnik metaboliczny"
+
+
+def _contents_without_metabolic_page(section_titles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop the metabolic-engine entry and move every later page number one page up.
+
+    The contents list must not advertise a page the document does not contain, and the
+    numbers double as the link targets: left stale, the last one points past the end of
+    the file and ReportLab refuses to write the document at all — "format not resolved,
+    probably missing URL scheme or undefined destination target for 'page_25'".
+
+    A list without that entry is returned untouched: there is nothing to hide, and the
+    numbering cannot have shifted.
+    """
+    removed = next(
+        (s for s in section_titles if s["title"] == _METABOLIC_ENGINE_TOC_TITLE), None
+    )
+    if removed is None:
+        return section_titles
+    removed_page = int(removed["page"])
+
+    return [
+        {**section, "page": str(int(section["page"]) - 1)}
+        if int(section["page"]) > removed_page
+        else section
+        for section in section_titles
+        if section["title"] != _METABOLIC_ENGINE_TOC_TITLE
+    ]
 
 
 def _build_pdf_story(
@@ -594,6 +644,11 @@ def _build_pdf_story(
     story.extend(build_title_page(metadata=metadata, styles=styles))
     story.append(PageBreak())
 
+    # The metabolic-engine page is included only when the data it prints exists — no
+    # producer writes those keys today, and the page used to draw fabricated zeros.
+    metabolic_data = pdf_data.get("metabolic_strategy", {})
+    include_metabolic_page = has_metabolic_engine_data(metabolic_data)
+
     # SPIS TREŚCI
     section_titles = [
         {"title": "1. PODSUMOWANIE WYKONAWCZE", "page": "3", "level": 0},
@@ -603,7 +658,7 @@ def _build_pdf_story(
         {"title": "2.1 Szczegóły VT1/VT2", "page": "5", "level": 1},
         {"title": "2.2 Co oznaczają wyniki?", "page": "6", "level": 1},
         {"title": "2.3 Model metaboliczny", "page": "7", "level": 1},
-        {"title": "2.4 Silnik metaboliczny", "page": "8", "level": 1},
+        {"title": _METABOLIC_ENGINE_TOC_TITLE, "page": "8", "level": 1},
         {"title": "2.5 Krzywa mocy (PDC)", "page": "10", "level": 1},
         {"title": "3. DIAGNOSTYKA UKŁADÓW", "page": "12", "level": 0},
         {"title": "3.1 Kontrola oddychania", "page": "12", "level": 1},
@@ -621,6 +676,9 @@ def _build_pdf_story(
         {"title": "5.4 Protokół testu", "page": "24", "level": 1},
         {"title": "5.5 Ograniczenia interpretacji", "page": "25", "level": 1},
     ]
+
+    if not include_metabolic_page:
+        section_titles = _contents_without_metabolic_page(section_titles)
 
     story.extend(build_table_of_contents(styles=styles, section_titles=section_titles))
     story.append(PageBreak())
@@ -661,8 +719,7 @@ def _build_pdf_story(
         story.extend(build_page_theory(styles=styles))
         story.append(PageBreak())
 
-    metabolic_data = pdf_data.get("metabolic_strategy", {})
-    if metabolic_data:
+    if include_metabolic_page:
         story.extend(build_page_metabolic_engine(metabolic_data=metabolic_data, styles=styles))
         story.append(PageBreak())
 
