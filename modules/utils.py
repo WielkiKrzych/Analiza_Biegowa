@@ -137,11 +137,15 @@ def _clean_hrv_value(val: str) -> float:
             parts = [float(x) for x in val.split(":") if x]
             return np.mean(parts) if parts else np.nan
         except ValueError:
+            # why: np.nan is this column's explicit "no reading" value; it is
+            # what the blank / "nan" branch above returns too.
             return np.nan
 
     try:
         return float(val)
     except ValueError:
+        # why: same - a value that is not a number has no reading, and np.nan
+        # is how the whole HRV column says so.
         return np.nan
 
 
@@ -184,7 +188,10 @@ def _read_raw_file(file) -> pd.DataFrame:
 
 
 def _process_hrv_column(df: pd.DataFrame) -> pd.DataFrame:
-    """Process and clean HRV column if present."""
+    """Process and clean HRV column if present.
+
+    Mutates df in place.
+    """
     if "hrv" in df.columns:
         df["hrv"] = df["hrv"].astype(str).apply(_clean_hrv_value)
         df["hrv"] = pd.to_numeric(df["hrv"], errors="coerce")
@@ -193,7 +200,10 @@ def _process_hrv_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert known columns to numeric types."""
+    """Convert known columns to numeric types.
+
+    Mutates df in place.
+    """
     numeric_cols = [
         "watts",
         "heartrate",
@@ -234,7 +244,10 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_velocity_units(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert velocity_smooth from km/h to m/s when median exceeds 10."""
+    """Convert velocity_smooth from km/h to m/s when median exceeds 10.
+
+    Mutates df in place.
+    """
     if "velocity_smooth" not in df.columns:
         return df
     vs_median = df["velocity_smooth"].replace(0, np.nan).median()
@@ -244,7 +257,10 @@ def _normalize_velocity_units(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _derive_pace_if_missing(df: pd.DataFrame) -> pd.DataFrame:
-    """Derive pace column from speed_m_s or velocity_smooth when absent."""
+    """Derive pace column from speed_m_s or velocity_smooth when absent.
+
+    Mutates df in place.
+    """
     if "pace" in df.columns:
         return df
     speed_source = None
@@ -258,7 +274,10 @@ def _derive_pace_if_missing(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_cadence(df: pd.DataFrame) -> pd.DataFrame:
-    """Double half-cadence values exported by Intervals.icu (~80 SPM)."""
+    """Double half-cadence values exported by Intervals.icu (~80 SPM).
+
+    Mutates df in place.
+    """
     if "cadence" not in df.columns:
         return df
     cad_median = df["cadence"].median()
@@ -268,7 +287,10 @@ def _normalize_cadence(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_vertical_oscillation(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert verticaloscillation from mm to cm when median exceeds 20."""
+    """Convert verticaloscillation from mm to cm when median exceeds 20.
+
+    Mutates df in place.
+    """
     if "verticaloscillation" not in df.columns:
         return df
     vo_median = df["verticaloscillation"].replace(0, np.nan).median()
@@ -281,7 +303,10 @@ _GCT_COLUMNS = ["stance_time", "ground_contact", "gct", "groundcontacttime"]
 
 
 def _derive_gct(df: pd.DataFrame) -> pd.DataFrame:
-    """Derive GCT from FIT stance_time or estimate from cadence."""
+    """Derive GCT from FIT stance_time or estimate from cadence.
+
+    Mutates df in place.
+    """
     has_gct = any(col in df.columns for col in _GCT_COLUMNS)
     if has_gct:
         for col in _GCT_COLUMNS:
@@ -296,7 +321,10 @@ def _derive_gct(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _derive_stride_length(df: pd.DataFrame) -> pd.DataFrame:
-    """Derive stride_length from pace and cadence when absent."""
+    """Derive stride_length from pace and cadence when absent.
+
+    Mutates df in place.
+    """
     if "stride_length" in df.columns or "pace" not in df.columns or "cadence" not in df.columns:
         return df
     speed = np.where(df["pace"] > 0, 1000.0 / df["pace"], 0.0)

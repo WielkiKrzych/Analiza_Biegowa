@@ -44,6 +44,8 @@ def apply_smoothing(df_resampled: pd.DataFrame) -> pd.DataFrame:
     For linear metrics (watts, HR, cadence, ...) the rolling mean is
     correct. For `pace`, we smooth in the speed domain and convert back
     to avoid the nonlinearity bias.
+
+    Mutates df_resampled in place.
     """
     for col in SMOOTH_COLS:
         if col in df_resampled.columns:

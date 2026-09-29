@@ -80,15 +80,28 @@ def calculate_smo2_slope(
     return slope_per_100w, r_squared
 
 
-def _resolve_time_array(df: pd.DataFrame, time_col: str) -> np.ndarray:
-    """Resolve time column to a numpy array of seconds."""
+def _resolve_time_array(df: pd.DataFrame, time_col: str) -> Optional[np.ndarray]:
+    """Resolve time column to a numpy array of seconds, or None if unusable.
+
+    Returns None when a time column exists but cannot be interpreted as
+    durations. Substituting the row index there handed callers sample numbers
+    dressed up as seconds - the caller cannot tell them apart.
+    """
     if time_col in df.columns:
         return df[time_col].values
     if "time" in df.columns:
+        time_series = df["time"]
+        # why: a numeric `time` column already holds seconds - it is exactly
+        # what time_index.prepare_time_index writes. pd.to_timedelta would read
+        # those numbers as nanoseconds and hand back 0, 1e-9, 2e-9...
+        if pd.api.types.is_numeric_dtype(time_series):
+            return time_series.values
         try:
-            return pd.to_timedelta(df["time"]).dt.total_seconds().values
+            return pd.to_timedelta(time_series).dt.total_seconds().values
         except (ValueError, TypeError):
-            return np.arange(len(df))
+            return None
+    # why: no time column at all - the loader guarantees 1 Hz, so the sample
+    # index IS seconds. That is a stated assumption, not a silent substitute.
     return np.arange(len(df))
 
 
@@ -124,6 +137,8 @@ def calculate_halftime_reoxygenation(
     power = df[power_col].values
     smo2 = df[smo2_col].values
     time = _resolve_time_array(df, time_col)
+    if time is None:
+        return None
 
     peak_idx = int(np.argmax(power))
     if peak_idx >= len(power) - 30:

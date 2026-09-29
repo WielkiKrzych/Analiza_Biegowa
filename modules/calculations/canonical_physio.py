@@ -81,18 +81,25 @@ VO2MAX_SOURCE_PRIORITY = {
 }
 
 
+# Sitko et al. 2021 ACSM formula: VO2max = 16.61 + 8.87 × 5' max power (W/kg).
+# Named so callers that need the terms themselves - e.g. propagating the slope
+# into an uncertainty band - use them instead of copying the literals.
+VO2MAX_ACSM_SLOPE = 8.87  # ml/kg/min per W/kg
+VO2MAX_ACSM_INTERCEPT = 16.61  # ml/kg/min
+
+
 def calculate_vo2max_acsm(power_watts: float, weight_kg: float) -> float:
     """
     Calculate VO2max using Sitko et al. 2021 formula.
 
-    VO2max = 16.61 + 8.87 × 5' max power (W/kg)
+    VO2max = VO2MAX_ACSM_INTERCEPT + VO2MAX_ACSM_SLOPE × 5' max power (W/kg)
 
     This is the CANONICAL formula used throughout the system.
     """
     if power_watts <= 0 or weight_kg <= 0:
         return 0.0
     power_per_kg = power_watts / weight_kg
-    return 16.61 + 8.87 * power_per_kg
+    return VO2MAX_ACSM_INTERCEPT + VO2MAX_ACSM_SLOPE * power_per_kg
 
 
 def select_canonical_vo2max(
@@ -367,4 +374,6 @@ __all__ = [
     "build_canonical_physiology",
     "format_canonical_for_report",
     "VO2MAX_SOURCE_PRIORITY",
+    "VO2MAX_ACSM_SLOPE",
+    "VO2MAX_ACSM_INTERCEPT",
 ]

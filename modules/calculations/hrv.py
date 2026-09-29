@@ -322,6 +322,8 @@ def _parse_colon_separated_rr(val: str) -> float:
         if 300 <= mean_rr <= 2000:
             return mean_rr
     except ValueError:
+        # why: not every part is numeric - the HH:MM:SS reader below is the real
+        # fallback, and a per-sample warning would flood the log on RR data.
         pass
 
     # Fallback: HH:MM:SS interpretation (only for exactly 3 parts)
@@ -334,6 +336,8 @@ def _parse_colon_separated_rr(val: str) -> float:
             if 300 <= total_ms <= 2000:
                 return total_ms
         except ValueError:
+            # why: "brak danych" is the correct answer for an unparseable RR
+            # sample; np.nan below is that same answer, explicitly.
             pass
 
     return np.nan
@@ -362,6 +366,8 @@ def _clean_rr_value(val: object) -> float:
         try:
             return _normalize_numeric_rr(float(val))
         except ValueError:
+            # why: not a plain number - the colon-separated readers below are
+            # the real fallback. Per-sample path, so no logging.
             pass
 
         # Colon-separated formats

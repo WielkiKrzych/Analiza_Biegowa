@@ -38,7 +38,12 @@ def resample_with_pace(df_pd: pd.DataFrame) -> pd.DataFrame:
 
     P2-2: this used to be `_resample_with_pace` (private). Now public so
     it can be unit-tested directly without going through `process_data`.
+
+    Does not mutate *df_pd*: the `_speed_ms` scratch column is written to a
+    copy, so it cannot leak into a caller-owned frame.
     """
+    df_pd = df_pd.copy()
+
     if "pace" in df_pd.columns:
         pace_valid = df_pd["pace"].replace(0, np.nan).replace(-np.inf, np.nan)
         df_pd["_speed_ms"] = 1000.0 / pace_valid
@@ -60,7 +65,10 @@ def resample_with_pace(df_pd: pd.DataFrame) -> pd.DataFrame:
 
 
 def _calculate_gap_if_available(df_resampled: pd.DataFrame) -> pd.DataFrame:
-    """Calculate GAP (Grade-Adjusted Pace) when elevation data is present."""
+    """Calculate GAP (Grade-Adjusted Pace) when elevation data is present.
+
+    Mutates df_resampled in place.
+    """
     if "pace" not in df_resampled.columns:
         return df_resampled
 

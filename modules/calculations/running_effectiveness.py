@@ -115,6 +115,8 @@ def calculate_leg_spring_stiffness(
         ):
             return empty
     except TypeError:
+        # why: a None / non-numeric argument IS missing data, and `empty` is
+        # the explicit "not computable" result this function returns for it.
         return empty
 
     tc = gct_ms / 1000.0

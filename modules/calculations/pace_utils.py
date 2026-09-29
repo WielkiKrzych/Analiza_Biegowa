@@ -73,7 +73,9 @@ def pace_to_seconds(pace_str: str) -> float:
         pace_str: Pace string like "5:00" or "5:30"
 
     Returns:
-        Seconds per kilometer
+        Seconds per kilometer, or NaN when *pace_str* is not a recognisable
+        pace. Unparseable input used to return 0.0, which is a legal pace
+        ("0:00") and so silently reached callers as a real measurement.
     """
     try:
         parts = pace_str.strip().split(":")
@@ -85,7 +87,7 @@ def pace_to_seconds(pace_str: str) -> float:
             return float(parts[0]) * 60  # Assume minutes only
     except (ValueError, IndexError):
         pass
-    return 0.0
+    return float("nan")
 
 
 def seconds_to_pace_str(seconds: float) -> str:

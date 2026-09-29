@@ -17,10 +17,26 @@ logger = logging.getLogger(__name__)
 try:
     import polars as pl
 
+    # Verified against the installed polars 1.38.0
+    # (site-packages/polars/exceptions.py): ColumnNotFoundError derives from
+    # PolarsError, which derives from Exception - it is neither a KeyError nor
+    # a ValueError, so it used to escape every except clause below and made a
+    # missing column behave differently depending on whether Polars is
+    # installed.
+    from polars.exceptions import ColumnNotFoundError
+
     POLARS_AVAILABLE = True
 except ImportError:
     POLARS_AVAILABLE = False
     pl = None
+
+    class ColumnNotFoundError(Exception):
+        """Stand-in so the ``except`` clauses stay valid without Polars.
+
+        Nothing that raises it can run when ``POLARS_AVAILABLE`` is False; the
+        name only has to exist because ``except`` builds its tuple when it
+        matches an exception.
+        """
 
 # Type alias for DataFrame compatibility
 DataFrame = Union[pd.DataFrame, "pl.DataFrame"] if POLARS_AVAILABLE else pd.DataFrame
@@ -150,8 +166,8 @@ def fast_rolling_mean(df: DataFrame, column: str, window: int, min_periods: int 
                 .flatten()
             )
             return result
-        except (ValueError, TypeError, ImportError):
-            pass
+        except (ValueError, TypeError, ColumnNotFoundError, ImportError) as e:
+            logger.warning(f"fast_rolling_mean: Polars path failed, using Pandas fallback: {e}")
 
     # Pandas fallback
     pd_df = to_pandas(df)
@@ -186,8 +202,8 @@ def fast_groupby_agg(
 
             result = pl_df.group_by(group_col).agg(agg_expr)
             return result.to_pandas()
-        except (ValueError, TypeError, ImportError):
-            pass
+        except (ValueError, TypeError, ColumnNotFoundError, ImportError) as e:
+            logger.warning(f"fast_groupby_agg: Polars path failed, using Pandas fallback: {e}")
 
     # Pandas fallback
     pd_df = to_pandas(df)
@@ -213,8 +229,8 @@ def fast_filter(
 
             result = pl_df.filter(expr)
             return result.to_pandas()
-        except (ValueError, TypeError, ImportError):
-            pass
+        except (ValueError, TypeError, ColumnNotFoundError, ImportError) as e:
+            logger.warning(f"fast_filter: Polars path failed, using Pandas fallback: {e}")
 
     # Pandas fallback
     pd_df = to_pandas(df)
@@ -267,8 +283,8 @@ def fast_normalized_power(df: DataFrame, power_column: str = "watts", window: in
 
             # 4th root of mean
             return float(np.power(np.nanmean(pow4), 0.25))
-        except (ValueError, TypeError, ImportError):
-            pass
+        except (ValueError, TypeError, ColumnNotFoundError, ImportError) as e:
+            logger.warning(f"fast_normalized_power: Polars path failed, using Pandas fallback: {e}")
 
     # Pandas fallback
     pd_df = to_pandas(df)
@@ -282,7 +298,10 @@ def fast_power_duration_curve(
 ) -> dict[int, Optional[float]]:
     """Calculate PDC using fastest available method.
 
-    Returns dict mapping duration (seconds) to max mean power.
+    Returns dict mapping duration (seconds) to max mean power. Returns an empty
+    dict when the power column cannot be read at all — a ``{duration: None}``
+    map would be indistinguishable from "this window held no power" (the same
+    idiom ``pace.calculate_pace_duration_curve`` uses for a missing column).
     """
     results = {}
 
@@ -297,9 +316,12 @@ def fast_power_duration_curve(
 
         # Handle NaN values - fill with 0 for rolling mean calculation
         watts = np.nan_to_num(watts, nan=0.0).astype(np.float64)
-    except (ValueError, TypeError, KeyError, ImportError):
-        # Return empty results if data extraction fails
-        return {dur: None for dur in durations}
+    except (ValueError, TypeError, KeyError, ColumnNotFoundError, ImportError) as e:
+        # Not "no power in window" - the power column itself is unreadable.
+        # ColumnNotFoundError is the Polars spelling of that (polars 1.38.0);
+        # it is caught here so both installs report the same empty result.
+        logger.warning(f"fast_power_duration_curve: could not read '{power_column}': {e}")
+        return {}
 
     # Cumsum-based sliding window: O(n) per duration instead of O(n×window)
     for duration in durations:

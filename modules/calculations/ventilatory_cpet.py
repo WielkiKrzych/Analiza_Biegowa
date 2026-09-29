@@ -1283,6 +1283,8 @@ def _find_breakpoint_segmented(
                 best_idx = i
 
         except (ValueError, TypeError):
+            # why: this split point is degenerate (too short / no variance);
+            # skipping it and keeping the best valid split is the scan's job.
             continue
 
     return best_idx
@@ -1301,4 +1303,6 @@ def _calculate_segment_slope(x: np.ndarray, y: np.ndarray) -> float:
         slope, _, _, _, _ = stats.linregress(x[mask], y[mask])
         return slope
     except (ValueError, TypeError):
+        # why: 0.0 is already this function's "no slope" answer - the two
+        # length guards above return it too. Hot inner loop, so no logging.
         return 0.0

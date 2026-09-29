@@ -28,6 +28,9 @@ def prepare_time_index(df_pd: pd.DataFrame) -> pd.DataFrame:
        (pace = 1000 / speed, m/s).
     5. Convert to `timedelta64[ns]` index.
     6. Linear interpolate numeric columns, then ffill/bfill edges.
+
+    Mutates df_pd in place. *df_pd* is the top of the `process_data` pipeline,
+    which owns the frame it passes in.
     """
     if "time" not in df_pd.columns:
         df_pd["time"] = np.arange(len(df_pd)).astype(float)

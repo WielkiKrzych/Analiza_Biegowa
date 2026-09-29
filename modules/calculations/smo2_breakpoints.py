@@ -40,6 +40,22 @@ class SmO2Breakpoints:
             self.notes = []
 
 
+def _validate_breakpoint_input(
+    df: pd.DataFrame, smo2_col: str, power_col: str
+) -> Optional[str]:
+    """Return why *df* cannot be analysed, or None when it is usable.
+
+    The power check exists because idxmax() raises on an empty frame and yields
+    NaN on an all-NaN power column - what `utils._convert_numeric_types`
+    produces for a text power column - which then blows up in the iloc below.
+    """
+    if smo2_col not in df.columns or power_col not in df.columns:
+        return "Missing required columns"
+    if df.empty or df[power_col].isna().all():
+        return "No valid power data"
+    return None
+
+
 def detect_smo2_breakpoints_segmented(
     df: pd.DataFrame,
     smo2_col: str = "smo2",
@@ -72,13 +88,18 @@ def detect_smo2_breakpoints_segmented(
     result = SmO2Breakpoints()
 
     # Validate input
-    if smo2_col not in df.columns or power_col not in df.columns:
-        result.notes.append("Missing required columns")
+    error = _validate_breakpoint_input(df, smo2_col, power_col)
+    if error:
+        result.notes.append(error)
         return result
 
-    # Filter to ramp phase (exclude recovery)
-    max_power_idx = df[power_col].idxmax()
-    df_ramp = df.iloc[:max_power_idx].copy()
+    # Filter to ramp phase (exclude recovery). nanargmax yields a *position*,
+    # which is what iloc wants - idxmax() yields a label, so any index that is
+    # not a 0-based RangeIndex had the label read as a position and pulled the
+    # recovery phase into the ramp. Same NaN handling (skipna) as idxmax, and
+    # identical for a RangeIndex.
+    ramp_end = int(np.nanargmax(df[power_col].to_numpy()))
+    df_ramp = df.iloc[:ramp_end].copy()
 
     if len(df_ramp) < 100:
         result.notes.append("Insufficient data points")
@@ -252,6 +273,8 @@ def _grid_search(
                     best_bp1, best_bp2 = bp1, bp2
                     best_slopes = slopes
             except (ValueError, TypeError, np.linalg.LinAlgError):
+                # why: this (bp1, bp2) pair admits no usable piecewise fit;
+                # skipping the candidate is the grid search's whole job.
                 continue
     return best_rss, best_bp1, best_bp2, best_slopes
 

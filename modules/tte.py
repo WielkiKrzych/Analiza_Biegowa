@@ -141,7 +141,12 @@ def rolling_tte(history: List[Dict], window_days: int = 30) -> Dict[str, float]:
             if isinstance(entry_date, str):
                 try:
                     entry_date = datetime.fromisoformat(entry_date)
-                except ValueError:
+                except ValueError as e:
+                    # The entry stays out of the window - it cannot be placed
+                    # in time - but data dropped here must leave a trace.
+                    logger.warning(
+                        f"rolling_tte: skipping entry with unparseable date {entry_date!r}: {e}"
+                    )
                     continue
             if entry_date >= cutoff:
                 tte = entry.get("tte_seconds", 0)

@@ -175,6 +175,11 @@ def calculate_hr_recovery(
         return None
 
     # FIX: Find peak HR index (not power peak)
+    # Why: idxmax() raises on an empty frame and returns NaN on an all-NaN HR
+    # column (what _convert_numeric_types() produces for a text HR column),
+    # and df.loc[nan, hr_col] then raises KeyError.
+    if df.empty or not df[hr_col].notna().any():
+        return None
     peak_idx = df[hr_col].idxmax()
     peak_hr = df.loc[peak_idx, hr_col]
 

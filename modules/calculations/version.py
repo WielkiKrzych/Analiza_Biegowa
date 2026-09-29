@@ -31,6 +31,8 @@ def get_methodology_info() -> Dict[str, Any]:
             with open(version_file, "r", encoding="utf-8") as f:
                 return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
+        # why: the fallback below says out loud that the file was unreadable,
+        # so the result is distinguishable from a real methodology file.
         pass
 
     # Fallback

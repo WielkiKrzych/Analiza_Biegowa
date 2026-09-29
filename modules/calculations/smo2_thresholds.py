@@ -125,7 +125,7 @@ def _preprocess_signal(
 ) -> Tuple[pd.DataFrame, float, bool, Optional[int]]:
     """Apply median smoothing, assign step numbers, derive basic stats.
 
-    Returns (df, max_power, has_hr, hr_max).
+    Returns (df, max_power, has_hr, hr_max). Mutates df in place.
     """
     window = min(45, max(30, len(df) // 40))
     if window % 2 == 0:

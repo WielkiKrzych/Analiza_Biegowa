@@ -128,16 +128,6 @@ LIMITER_TYPES = {
 }
 
 
-def _safe_float(val: Any, default: float = 0.0) -> float:
-    """Convert a value to float, returning *default* on failure."""
-    if val is None or val == "brak danych":
-        return default
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
-
-
 def _score_vt_ratio(vt1: float, vt2: float) -> int:
     """Return central score based on VT1/VT2 ratio."""
     if vt1 <= 0 or vt2 <= 0:
@@ -359,6 +349,7 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
     try:
         return float(val)
     except (ValueError, TypeError):
+        # why: `default` is the caller's own declared no-data value.
         return default
 
 
@@ -420,8 +411,10 @@ def calculate_confidence_panel(
                 hr_lag -= 30
             elif drift > 3:
                 hr_lag -= 15
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            # Behaviour unchanged: hr_lag keeps its default, exactly as when
+            # pa_hr is absent. Logged so an unparseable value is traceable.
+            logger.warning(f"calculate_confidence_panel: unparseable pa_hr {pa_hr!r}: {e}")
 
     # SmO2 Noise (based on conflict with VT)
     smo2_noise = 85
@@ -475,6 +468,7 @@ def _safe_int(val: Any, default: int = 0) -> int:
     try:
         return int(float(val))
     except (ValueError, TypeError):
+        # why: `default` is the caller's own declared no-data value.
         return default
 
 

@@ -7,6 +7,7 @@ Implements pace zones, pace duration curve, and phenotype classification.
 PERFORMANCE: Uses Numba JIT for speed-critical calculations.
 """
 
+import logging
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -16,6 +17,8 @@ from modules.numba_utils import is_numba_available
 
 from .common import ensure_pandas
 from .pace_utils import format_pace, speed_to_pace
+
+logger = logging.getLogger(__name__)
 
 NUMBA_AVAILABLE = is_numba_available()
 
@@ -171,8 +174,10 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
                 val = results_arr[i]
                 results[duration] = None if np.isnan(val) else _to_pace(float(val))
             return results
-        except (ValueError, TypeError, RuntimeError):
-            pass
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.warning(
+                f"calculate_pace_duration_curve: Numba path failed, using Pandas fallback: {e}"
+            )
 
     results = {}
     speed_s = pd.Series(speed)

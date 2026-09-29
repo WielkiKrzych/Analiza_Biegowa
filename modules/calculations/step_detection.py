@@ -222,6 +222,11 @@ def segment_load_phases(
     if df.empty or power_col not in df.columns:
         return df, pd.DataFrame()
     s_watts = df[power_col].rolling(window=30, center=True).mean().fillna(df[power_col])
+    # Why: idxmax() of an all-NaN power column is NaN (what a text power column
+    # becomes after _convert_numeric_types()), and df.loc[nan, time_col] then
+    # raises KeyError instead of reporting "no ramp".
+    if not s_watts.notna().any():
+        return df, pd.DataFrame()
     peak_time = df.loc[s_watts.idxmax(), time_col]
     df_inc = df[df[time_col] <= peak_time].copy()
     df_dec = df[df[time_col] > peak_time].copy()

@@ -185,6 +185,8 @@ def calculate_trend(x, y):
         p = np.poly1d(z)
         return p(x)
     except (ValueError, TypeError, np.linalg.LinAlgError):
+        # why: None is already this function's explicit "no trend line" answer
+        # - the "fewer than 2 finite points" guard above returns it too.
         return None
 
 

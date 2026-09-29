@@ -552,6 +552,8 @@ def fit_smo2_kinetics(
         }
 
     except (RuntimeError, ValueError):
+        # why: None is the documented "could not fit" result for this Optional
+        # return; callers already branch on it.
         return None
 
 

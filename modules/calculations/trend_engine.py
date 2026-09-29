@@ -167,7 +167,12 @@ def calculate_rate_per_week(values: List[float], dates: List[datetime]) -> float
     # Linear regression
     try:
         slope, intercept = np.polyfit(days, values, 1)
-    except (ValueError, np.linalg.LinAlgError):
+    except (ValueError, np.linalg.LinAlgError) as e:
+        # 0.0 stays the answer: trend_engine.TrendMetric.rate_per_week is typed
+        # float and its consumers (classify_direction, _calculate_engine_map)
+        # do not accept None, so a sentinel here is not an option. Logged so a
+        # failed fit is not silently reported as a genuinely flat trend.
+        logger.warning(f"calculate_rate_per_week: regression failed, reporting 0.0: {e}")
         return 0.0
 
     # Convert to % per week
