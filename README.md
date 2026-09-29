@@ -5,819 +5,281 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Zaawansowana platforma analityczna dla biegaczy (pace-first, GAP, Minetti, D', SmO₂ kinetics, ventilatory thresholds).
-
-## Spis treści
-
-- [🚀 Szybki Start](#-szybki-start)
-- [🏗️ Architektura Systemu](#-architektura-systemu)  → szczegóły w [`docs/architecture.md`](docs/architecture.md)
-- [📊 Główne Zakładki](#-główne-zakładki)
-- [🔄 Pipeline Przetwarzania](#-pipeline-przetwarzania)
-- [📈 Kluczowe Metryki](#-kluczowe-metryki)
-- [🎨 Wykresy Fizjologiczne](#-wykresy-fizjologiczne-vs-tempo)
-- [📦 Struktura Projektu](#-struktura-projektu)
-- [🧪 Testy](#-testy)
-- [📥 Wymagane Dane CSV](#-wymagane-dane-csv)  → format danych w [`docs/data-format.md`](docs/data-format.md)
-- [⚙️ Konfiguracja (Sidebar)](#️-konfiguracja-sidebar)
-- [🚀 Optymalizacje](#-optymalizacje-wydajności)
-- [🔬 Raport Jakości Danych](#-raport-jakości-danych)
-- [🛠️ Technologie](#-technologie)
-- [🤝 Jak Wspierać](#-jak-wspierać)
-- [📋 Changelog](#-changelog)  (historyczny rekord zmian)
-
-Materiały dodatkowe w [`docs/`](docs/): methodology (`physiological_methodology.md`, `power_duration.md`, `ramp_test_premium_report.md`), raporty audytu (`PARITY_GAP_REPORT.md`, `coverage-report.md`, `UI_VERIFICATION_REPORT.md`).
-
-
----
-
-## 📋 Changelog
-
-### 2026-07-26 - Running Analysis Correctness Fixes + Rebrand
-
-**🔴 Krytyczne błędy w logice biegowej (naprawione):**
-
-- 🔴 **GAP: tabela Minetti niezgodna ze źródłem.** Moduł cytował Minetti et al. (2002), ale wpisane ręcznie koszty metaboliczne odbiegały od oryginału o czynnik **1,3–4,6×**. Skutki: podbiegi zawyżane o 13–21% w typowym zakresie ±5–10%, a przy zbiegach stromszych niż ~-15% **odwracał się znak korekty** (5:00/km na -45% raportowane jako GAP 1:00/km). Zastąpione bezpośrednim wyliczeniem z wielomianu z pracy: `Cr(i) = 155,4i⁵ − 30,4i⁴ − 43,3i³ + 46,3i² + 19,5i + 3,6`. Minimum kosztu wypada teraz poprawnie przy ~-20%.
-- 🔴 **PDC wymyślał rekordy z postojów.** Krzywa uśredniała tempo arytmetycznie po surowej kolumnie `pace`, gdzie postój zapisany jest jako `0`. 30 s na światłach w środku równego biegu 5:00/km dawało „najlepsze 60 s" = 2:30/km. Przepisane na przestrzeń prędkości (najlepsze N s = dystans/czas), co przy okazji naprawia drugi błąd — średnia arytmetyczna tempa **nie jest** średnim tempem (interwały 30 s/30 s: 5:00/km zamiast poprawnych 4:27/km).
-- 🔴 **Strefy tempa wrzucały postoje do Z6 Repetition.** `pace == 0` wpadało w przedział 0–75% progu, więc stanie w miejscu liczyło się jako najostrzejsza praca. Teraz `pace <= 0` trafia do Z1 razem z `NaN`.
-- 🟠 **Średnie tempo liczone arytmetycznie.** 30 min @ 4:00 + 30 min @ 6:00 pokazywało 5:00/km zamiast 4:48/km — 12 s/km rozbieżności z zegarkiem. Zmienione na dystans/czas; `min_pace`/`max_pace` pomijają teraz postoje.
-
-**Blast radius:** `gap` zasila `running_power.py` → CP/W′, progi, limitery i fenotyp. Wpisy historyczne w `training_history.db` liczone starym GAP-em są na innej skali niż nowe.
-
-**🎨 Rebranding: `Pro Athlete Dashboard` / `TriDashboard` → `Run Analytics Pro`**
-- Tytuł w sidebarze i karcie przeglądarki (`Config.APP_TITLE`, ikona `🏃`)
-- Watermark eksportu PNG, stopka raportu PDF, nagłówek i stopka DOCX, eksport FIT
-- Nadpisywalne przez `APP_TITLE` / `APP_ICON` w env
-- Nowa ikona aplikacji (macOS squircle, gradient turkus→granat, sylwetka biegacza), pełny `.icns` 16–1024 px
-
-**🚀 Launcher: kolizja portów między projektami**
-- `Analiza_Kolarska` również miała na sztywno `PORT=8502` — launcher biegowej sprawdzał tylko „czy port zajęty" i **otwierał cudzą aplikację**
-- Własna pula portów **8510–8519** + identyfikacja serwera po katalogu roboczym procesu (`lsof` cwd), nie po numerze portu
-- Automatyczny restart, gdy serwer wystartował przed ostatnią zmianą kodu (Streamlit nie przeładowuje niezawodnie zaimportowanych modułów)
-- Ponowne kliknięcie ikony reużywa działającą instancję zamiast dublować
-
-**Walidacja:**
-- ✅ **346/346 testów przechodzi** (było 321 — dodano 25 testów regresyjnych w `tests/calculations/test_running_regressions.py`)
-- ✅ **Ruff: 0 naruszeń**, formatowanie czyste
-- ✅ Aplikacja startuje bez błędów, wszystkie 22 zakładki importują się poprawnie
-
----
-
-
-### 2026-04-05 - Comprehensive Code Quality Refactor
-
-**Critical bug fixes:**
-- 🔴 Fixed 9 undefined name errors (F821): `sqlite3`, `Optional`, `_executor`, `logger`, `numpy as np`, `sys` — all would cause runtime crashes
-- 🔴 Fixed exception chaining (B904): proper `raise ... from err` in persistence layer
-
-**Import organization:**
-- 📦 Consolidated all scattered imports in `app.py` to top of file (16 E402 → 0)
-- 📦 Updated `pyproject.toml` to modern ruff config format (`[tool.ruff.lint]` section)
-- 📦 Removed unused imports (`numba.prange`)
-
-**Complexity reduction (C901: 74 → 0 functions):**
-- 🧩 Extracted 200+ private helper functions across 40+ files
-- 🧩 Top reductions:
-  - `save_ramp_test_report`: **66 → <15** (15 helpers)
-  - `detect_smo2_thresholds_moxy`: **53 → <15** (17 helpers)
-  - `_run_ve_only_mode`: **51 → 2** (13 helpers)
-  - `map_ramp_json_to_pdf_data`: **46 → ~4** (12 helpers)
-  - `render_smo2_tab`: **45 → 7** (18 helpers)
-  - `render_biomech_tab`: **38 → ~3** (10 helpers)
-  - `render_running_tab`: **26 → <15** (10 helpers)
-  - `render_limiters_tab`: **25 → <10** (12 helpers)
-  - `render_threshold_analysis_tab`: **24 → <10** (11 helpers)
-  - `identify_main_limiter`: **25 → 1** (8 helpers)
-  - `generate_training_cards`: **13 → ~2** (10 helpers)
-  - `build_canonical_physiology`: **25 → 1** (8 helpers)
-  - `analyze_thermoregulation`: **21 → ~3** (6 helpers)
-  - `load_data`: **18 → 3** (6 helpers)
-  - + 60 more functions refactored
-
-**Code quality improvements:**
-- ♻️ Eliminated DRY violations (duplicate code blocks consolidated into shared helpers)
-- ♻️ Replaced nested conditionals with guard clauses and early returns
-- ♻️ Converted inner closures to module-level private functions
-- 🛡️ All changes are behavior-preserving — zero breaking changes
-
-**Validation:**
-- ✅ **321/321 tests pass** (0 regressions)
-- ✅ **Ruff C901: 0 violations** (was 74)
-- ✅ **Ruff F821/B007/F401/B904/E402: 0 violations** (was 47)
-- ✅ All public function signatures unchanged
-
----
-
-
-### 2026-04-03 - Phase 1 Cleanup
-
-**Branch cleanup:**
-- Deleted stale branches: `claude/dreamy-dijkstra`, `feature/new-functions`
-- Removed stale worktrees (`.claude/worktrees`, `.worktrees`)
-
-**Code quality:**
-- Added runtime `DeprecationWarning` to 3 deprecated functions
-- Ran ruff + isort cleanup on all source files
-- Added `isort` to dev dependencies
-
-**Project structure:**
-- Moved `init_db.py` and `train_history.py` to `scripts/` directory
-- Created `docs/architecture.md` with architecture overview
-- Created `docs/cleanup-candidates.md` tracking cleanup progress
-
----
-
-### 2026-03-24 - CSV vs FIT Unit Normalization & Sidebar Defaults
-
-**Normalizacja jednostek Intervals.icu CSV vs Garmin FIT:**
-- 🏃 **velocity_smooth**: Auto-detekcja km/h (FIT) vs m/s (CSV) — median > 10 → km/h → konwersja /3.6
-- 📏 **VerticalOscillation**: Auto-detekcja mm (Intervals) vs cm (FIT) — median > 20 → mm → konwersja /10
-- ⏱️ **Kadencja**: Podwajanie half-cadence niezależne od istnienia kolumny `pace` (fix: Intervals eksportuje ~81 strides/min)
-- 🔄 **Priorytet speed_m_s**: Preferowany nad `velocity_smooth` (jawne m/s vs nieznane jednostki)
-- 💓 **HRV DFA**: Obsługa Intervals.icu colon-delimited RR ("493:490", "455:465:451") — wcześniej tylko HH:MM:SS
-
-**Porównanie tego samego treningu (SubT):**
-| Metryka | CSV (Intervals) | FIT (Garmin) | Po normalizacji |
-|---------|-----------------|--------------|-----------------|
-| Tempo | 4:29/km | 4:29/km | ✅ Identyczne |
-| Kadencja | 81→162 SPM | 169 SPM | ✅ Spójne |
-| VO | 93.7mm→9.4cm | 9.4cm | ✅ Identyczne |
-| Watts | 487W (Stryd) | Brak | ✅ Graceful fallback |
-| GCT | Estymowana | 240ms (sensor) | ✅ Oba obsługiwane |
-
-**Sidebar defaults:**
-- ⚙️ Tempo Progowe: 233 s/km (3:53/km), LTHR: 166 bpm, MaxHR: 184 bpm
-
-**Naprawione:**
-- 🐛 Report tab crash `KeyError: 'tymeventilation_smooth'` przy CSV bez Tymewear
-
----
-
-### 2026-03-24 - Security & Code Quality Audit Fixes
-
-**Security Fixes (HIGH):**
-- 🔒 **XSS Prevention**: Fixed XSS vulnerability in `history_import_ui.py` by adding `html.escape()` for filename sanitization before embedding in HTML output
-- 🛡️ **Bare except clauses**: Replaced all 21 bare `except:` clauses with `except Exception:` to prevent catching `KeyboardInterrupt` and `SystemExit`
-- 🔧 **Error handling**: Added try/except around JSON I/O operations in `notes.py`
-- 🔧 **SQLite error handling**: Added try/except around all database operations in `session_store.py`
-- 🔒 **Credentials**: No hardcoded API keys, passwords, or secrets found — app properly uses `python-dotenv` for environment variables
-
-**Code Quality Fixes (HIGH/MEDIUM):**
-- 📝 **Logging migration**: Replaced 91 `print()` statements with proper `logging` across 8 production files:
-  - `modules/reporting/persistence.py` (41 prints → logger calls)
-  - `modules/reporting/pdf/summary_pdf.py` (4 prints → logger.warning)
-  - `modules/reporting/figures/__init__.py` (4 prints → logger calls)
-  - `modules/environment.py` (1 print → logger.warning)
-  - `modules/tte.py` (3 prints → logger.error/warning)
-  - `modules/calculations/pipeline.py` (1 print → logger.warning)
-  - `modules/reports.py` (1 print → logger.error)
-  - `modules/reporting/pdf/builder.py` (1 print → logger.info)
-- 🏗 **File size reduction**: Split `modules/reporting/pdf/layout.py` (4212 lines) into modular components:
-  - `layout_executive.py` (facade, 75 lines)
-  - `layout_executive_summary.py` (276 lines)
-  - `layout_executive_verdict.py` (226 lines)
-  - `layout_formatters.py` (280 lines)
-  - `layout_tables.py` (140 lines)
-  - `layout_title.py` (280 lines)
-- 🔧 **Function refactoring**: Extracted helper functions from large monolithic functions:
-  - `render_vent_tab` in `vent.py` → helper functions for VE/BR/TV sections
-  - `detect_vt_cpet` in `ventilatory.py` → preprocessing and VT1/VT2 detection helpers
-- 🧹 **Dead code removal**: Removed debug artifacts (`importlib.reload` from hrv.py)
-
-**Security Audit Summary:**
-| Category | Status |
-|----------|--------|
-| Hardcoded credentials | ✅ PASS |
-| SQL injection | ✅ PASS (parameterized queries) |
-| Code injection (eval/exec) | ✅ PASS |
-| Path traversal | ✅ PASS |
-| Unsafe deserialization | ✅ PASS |
-| XSS (now fixed) | ✅ FIXED |
-
-**Testy:** 73/73 ✅
-
----
-
-### 2026-03-22 - Advanced Physiological Analytics (20+ new metrics)
-
-**Nowe moduły obliczeniowe:**
-- 🏃 **Running Effectiveness** (`running_effectiveness.py`): RE = speed/specific_power (Coggan/Tredict), GCT Asymmetry Index (Seminati 2020, 3.7% metabolic cost/1% asymmetry), Leg Spring Stiffness kvert (Morin/Dalleau, Sports Med 2024)
-- 🛡️ **Durability** (`durability.py`): Pa:HR Aerobic Decoupling (Friel/TrainingPeaks), Durability Index 0-100 (Jones 2024), Cardiac Drift Rate, Decoupling Onset Detection (Smyth 2025, 82K marathoners)
-- 🫁 **BR Analysis** (`br_analysis.py`): BR zones Z1-Z5 (npj Digital Medicine 2024), VT1/VT2 detection from breathing rate alone, BR:HR ratio, BR decoupling
-- 🩸 **SmO2 Phases** (`smo2_phases.py`): 4-phase temporal model (Contreras-Briceno 2023 PMC10232742): Rise → Desaturation → Plateau → Recovery, SmO2 slope classification sustainable/threshold/unsustainable (Rodriguez 2023 PMC10108753), Recovery half-time
-
-**Rozszerzone moduły:**
-- 🏅 **Race Predictor**: VDOT (Jack Daniels), Critical Speed / D' model (Poole & Jones 2023), Individualized Riegel exponent (George 2017), Multi-model consensus prediction
-- ⏱️ **Pace**: Critical Speed fitting from PDC, W'bal/D'bal real-time (Skiba differential model adapted for running)
-- 💓 **HRV**: DDFA (Dynamic DFA trend — Frontiers 2023), HRV Threshold Detection HRVT1=0.75 / HRVT2=0.50 (Rogers 2021)
-- 🌡️ **Thermal**: Core temp zone classification (<38.0, 38.0-38.5, 38.5-39.0, 39.0-39.5, >39.5°C), Thermal drift rate (°C/h — fitness/hydration marker)
-
-**Nowe sekcje UI:**
-- 📊 **Summary tab**: 5 nowych sekcji — Durability & Decoupling, Race Prediction, BR Analysis, Thermal Analysis, Running Effectiveness & Biomechanics
-- 🏃 **Running tab**: Pa:HR decoupling z EF trend chart i onset detection marker
-- 🩸 **SmO2 tab**: 4-phase model table, recovery halftime, slope classification bar
-- 💓 **HRV tab**: DDFA trend analysis, HRVT1/HRVT2 threshold detection from DFA α1
-- 🌡️ **Thermal tab**: Core temp zone distribution chart, thermal drift rate metric
-- 🫁 **Vent tab**: BR-only analysis path (Garmin/COROS bez VE) — zones, VT detection, time series
-
-**Testy:** 73/73 ✅
-
----
-
-### 2026-03-22 - Garmin-only CSV Support & Data Pipeline Fixes
-
-**Naprawione problemy z brakiem danych w Podsumowaniu:**
-- 🏃 **Pace z predkosci**: Automatyczne wyliczanie pace z `velocity_smooth` lub `speed_m_s` gdy brak kolumny `pace` w CSV
-- 🌬️ **Garmin respiration**: Mapowanie kolumny `respiration` z Garmina na `tymebreathrate` (wczesniej nierozpoznawana)
-- 🫁 **VE/BR niezalezne**: Sekcja oddechow (BR) wyswietla sie niezaleznie od wentylacji (VE) — Garmin BR widoczny bez Tymewear
-- 📏 **Dystans i tempo**: Metryki dystansu, srednie tempo i core temperature dodane do panelu Podsumowania
-- 🔴🔵 **O2Hb/HHb smoothing**: Dodane do pipeline wygladzania (wczesniej pomijane)
-- 🔧 **GAP**: Obliczany z predkosci gdy brak kolumny `pace` (dzialanie z Intervals.icu streams)
-- 🛡️ **Dedup kolumn**: Automatyczne usuwanie zduplikowanych kolumn po normalizacji (np. `HeatStrainIndex`/`heat_strain_index`)
-- 🛡️ **Immutable summary**: Naprawiona mutacja `df_plot.columns` w summary.py
-
-**Nowe aliasy kolumn:**
-- `respiration`, `respiratory_rate`, `resprate` → `tymebreathrate`
-- `verticaloscillation`, `vertical_oscillation` → kanoniczny `verticaloscillation`
-- `heatstrainindex`, `hsi` → kanoniczny `heat_strain_index`
-
-**Testy:** 73/73 ✅
-
----
-
-### 2026-03-17 - Comprehensive Physiological & Code Quality Audit
-
-**Korekty fizjologiczne (CRITICAL):**
-- 🏔️ **GAP**: Zastąpienie aproksymacji wielomianowej tabelą kosztów metabolicznych Minetti (2002) + wygładzanie GPS (20m okno)
-- 📈 **Normalized Pace**: 3-potęgowa normalizacja prędkości (model Skiba) zamiast 4-potęgowej (Coggan/kolarstwo)
-- ⚖️ **RSS**: Liniowy model IF (`IF × h × 100`) zamiast kwadratowego (`IF² × h × 100`)
-- 🧬 **VO2max**: Pełna formuła Jacka Danielsa z komponentem frakcji utylizacji
-- ⏱️ **GCT**: Klasyfikacja znormalizowana tempem biegu
-- 📏 **Stride vs Step**: Poprawna semantyka Garmin SPM (stride = 2 × step)
-- 🩸 **SmO2-HR coupling**: Analiza rate-of-change (pierwsze różnice) zamiast korelacji poziomów absolutnych
-- 🩸 **SmO2 reoxygenation baseline**: Średnia z pierwszych 30 próbek niskiej mocy zamiast `smo2[0]`
-
-**Poprawki jakości kodu (HIGH):**
-- 🛡️ Eliminacja mutacji DataFrame w UI (smo2.py, vent.py, utils.py) — `.copy()` przed modyfikacją
-- ⚡ Wektoryzacja obliczeń stref HR z `pd.cut` zamiast pętli po wierszach
-- 🔄 Kompatybilność pandas 2.2+: `fillna(method='ffill')` → `.ffill()`
-- 🫁 Poprawiona heurystyka jednostki VE (`max < 8` zamiast `mean < 10`)
-- 🔧 Usunięcie bare `except`, zduplikowanych warunków, martwego kodu
-- 📝 Logowanie wyjątków w fallback path session_orchestrator
-- 🧹 Usunięcie artefaktu debugowania `importlib.reload` z hrv.py
-- ⚙️ Konsolidacja stałych do referencji Config (.env override)
-
-**Poprawki wyświetlania UI (MEDIUM):**
-- 🦶 Strefy wizualne GCT dopasowane do etykiet klasyfikacji (200/220/240ms)
-- ⏱️ Format hover tempa: `5:30 /km` zamiast `5:30:00 /km`
-- 📊 Tempo na osi secondary_y w wykresach podsumowania
-- 🫁 Jednostka nachylenia VE: `(L/min)/s` zamiast `L/s`
-- 👟 Jednostka kadencji: dynamiczne SPM/rpm w zależności od sportu
-- 🏃 Running tab: rzeczywisty czas trwania, poprawne etykiety osi PDC
-
-**Testy:** 73/73 ✅
-
----
-
-### 2026-03-12 - Garmin FIT Integration & Running Dynamics
-
-**Nowe źródło danych: pliki .FIT (Garmin)**
-- 🆕 Aplikacja MergeCSV obsługuje teraz pliki `.FIT` obok `.CSV` — automatycznie parsuje dane z Garmin Connect
-- 🆕 Dane z FIT doklejane jako dodatkowe kolumny w pliku wyjściowym CSV
-
-**Nowe metryki z FIT w zakładce Performance > Biomechanika:**
-- 🦶 **Stance Time Balance (L/P)** — balans kontaktu z podłożem z wykresem i klasyfikacją asymetrii
-- 📐 **Vertical Ratio** — stosunek oscylacji do długości kroku z kolorowymi strefami
-- ⏱️ **GCT** — rozpoznaje prawdziwe dane z czujnika Garmin (vs estymacja z kadencji)
-- 📏 **Step Length** — preferuje rzeczywisty pomiar z FIT zamiast obliczania z kadencji/tempa
-
-**Nowe sekcje w zakładce Podsumowanie:**
-- 🦶 **Running Dynamics** — panel metryki (GCT, Balans, VR, Krok) + wykres 4-panelowy
-- 🔴🔵 **O2Hb / HHb** — wykres oksyhemoglobiny i deoksyhemoglobiny z nakładką tempa
-- 💓 **HRV (RMSSD)** — wykres per-sekundowy z nakładką HR + interpretacja
-- 🌡️ **Temperatura** — metryka z danych FIT
-- 📊 Nowe wiersze metryk: Running Dynamics + Dane Dodatkowe (HRV, Temp, O2Hb, HHb)
-
-**Poprawki:**
-- 🐛 Fix wypełnienia wykresu tempa na odwróconej osi Y w Podsumowaniu
-- ⚡ `gap.py`: Wektoryzacja `calculate_grade` dla array/Series
-- 🔧 `utils.py`: Nowe kolumny FIT w konwersji numerycznej, preferowanie rzeczywistego GCT
-
----
-
-### 2026-03-08 - Audit Code Review (P0-P3 Fixes)
-
-**Naprawione błędy P0 (CRITICAL):**
-- 🐛 `session_orchestrator.py`: Deserializacja `_df_clean_pl_bytes` → `_df_clean_pl` w ścieżce cache
-- 🐛 `threshold_analysis_ui.py`: Analiza VT teraz działa bez miernika mocy (pace-based branch)
-- ✅ `hr_zones.py`: Nowy moduł stref HR (Karvonen + LTHR models)
-
-**Naprawione błędy P1 (IMPORTANT):**
-- 🐛 `cardio_advanced.py`: HR Recovery używa HR peak zamiast power peak
-- 🐛 `heart_rate.py`: Usunięte `inplace=True` - unikanie mutacji DataFrame
-- 🐛 `smo2.py`: Zmienione wygładzanie z 5s mean na 15s median (bardziej odporne na outliery)
-- 🐛 `smo2.py`, `vent.py`: Poprawione etykiety wykresów "Tempo" → "Moc" (Watts)
-
-**Naprawione błędy P2 (MEDIUM):**
-- ✅ `hrv.py`: Dodany pNN50 (% RR intervals >50ms different)
-- ✅ `metrics.py`: Dodane TRIMP i hrTSS (training load bez power meter)
-
-**Naprawione błędy P3 (LOW):**
-- 🐛 `report.py`, `kpi.py`: Kadencja "RPM" → "SPM" (steps/min dla biegania)
-
-**Already Fixed (z poprzedniego audit):**
-- 🐛 `pace.py` via `data_processing.py`: Resampling tempa przez konwersję speed→mean→pace
-- 🐛 `data_processing.py`: GAP (Grade-Adjusted Pace) calculation aktywowany
-- 🐛 `metrics.py`: Pace:HR Decoupling dla biegaczy (speed/HR efficiency factor)
-- 🐛 `pace.py`: Z1 upper limit = infinity (catches all ultra-slow)
-- 🐛 `dual_mode.py`: NP division by zero protection
-- 🐛 `running_dynamics.py`: Stride length bez ×2 (Garmin SPM is dual-step)
-- 🐛 `app.py`: MD5 hash dla plików zamiast name+size
-- 🐛 `app.py`: `metrics.get()` zamiast `metrics.pop()` (cache mutation)
-- 🐛 `app.py`: Duration z kolumny time, nie len(df)
-- 🐛 `app.py`: Cumulative distance z time×speed
-- 🐛 `dual_mode.py`: IF capped at 2.0
-- 🐛 `metrics.py`: Durability index harmonic mean dla pace
-- 🐛 `hrv.py`: Logger import dodany
-- 🐛 `cardiac_drift.py`: Efficiency Factor formula fixed
-
----
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/Streamlit-1.30+-red?style=for-the-badge&logo=streamlit" alt="Streamlit">
-  <img src="https://img.shields.io/badge/Tests-321%2F321-green?style=for-the-badge" alt="Tests">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Performance-⚡_Optimized-brightgreen?style=flat-square">
-  <img src="https://img.shields.io/badge/Tempo-📊_Based-blue?style=flat-square">
-  <img src="https://img.shields.io/badge/Numba-JIT-orange?style=flat-square">
-  <img src="https://img.shields.io/badge/Polars-Fast-purple?style=flat-square">
-</p>
-
----
-
-## 🚀 Szybki Start
+Biegowa platforma analityczna, w której intensywność wyraża **tempo, nie waty** — SmO₂, wentylacja i tętno są odnoszone do tempa (albo GAP), a progi, obciążenie i limiterzy liczone są na modelach właściwych dla biegania.
+
+## 🧭 Spis treści
+
+- [Czym to jest](#-czym-to-jest)
+- [Szybki start](#-szybki-start)
+- [Dane wejściowe](#-dane-wejściowe)
+- [Co dostajesz](#-co-dostajesz)
+- [Metodyka i metryki](#-metodyka-i-metryki)
+- [Architektura](#-architektura)
+- [Struktura projektu](#-struktura-projektu)
+- [Testy i jakość](#-testy-i-jakość)
+- [Konfiguracja](#-konfiguracja)
+- [Stack technologiczny](#-stack-technologiczny)
+- [Współpraca](#-współpraca)
+- [Licencja](#-licencja)
+- [Autor](#-autor)
+
+## 🏃 Czym to jest
+
+Run Analytics Pro to lokalna aplikacja do analizy sesji biegowych z pliku CSV/TXT: wczytuje jeden trening, przelicza go na spójny zbiór metryk i pokazuje w 18 zakładkach dashboardu. Powstała z potrzeby, której nie zaspokajają platformy „power-first”: biegacz bez miernika mocy (albo z miernikiem, ale analizujący głównie tempo) potrzebuje progów, dryfu i limiterów policzonych na tempie, GAP i tętnie, a nie na watach. Dlatego Normalized Pace używa normalizacji 3. potęgą prędkości w modelu Skiby (a nie 4. potęgi Coggana), GAP liczy koszt metaboliczny z modelu Minettiego, a zamiast CP/W′ pojawiają się Critical Speed i D′. Sygnały fizjologiczne — saturacja mięśniowa SmO₂, wentylacja VE, częstość oddechów BR, tętno — są zestawiane z osią tempa, bo to ona jest dla biegacza sterowalna i powtarzalna. Narzędzie jest jednoosobowe: analizuje pliki jednego zawodnika (Twoje albo podopiecznego), a wyniki trzyma lokalnie w bazie SQLite. Prognozy formy (PMC, Banister) liczą się z historii zapisanych sesji, nie z chmury.
+
+## 🚀 Szybki start
+
+Wymagany Python ≥ 3.10.
 
 ```bash
-# Klonowanie repozytorium
 git clone https://github.com/WielkiKrzych/Analiza_Biegowa.git
 cd Analiza_Biegowa
 
-# Instalacja zależności
 pip install -r requirements.txt
 
-# Uruchomienie aplikacji
-streamlit run app.py
+python3 -m streamlit run app.py
 ```
 
-### 🖥️ Aplikacja natywna na macOS
+Streamlit wypisze adres aplikacji w terminalu. Wgraj plik CSV/TXT w sidebarze i ustaw parametry biegacza (patrz [Konfiguracja](#-konfiguracja)).
+
+### Aplikacja natywna na macOS
 
 ```bash
-# Zbuduj "Analiza Biegowa.app" i dodaj do Docka
 bash build_biegowa_app.sh
 ```
 
-Tworzy applet (`osacompile`) w `/Applications`, wgrywa ikonę i dopina go do Docka.
-Kliknięcie ikony wywołuje `launcher.sh`, który:
+Skrypt buduje applet AppleScript (`osacompile`) w `/Applications`, wstawia ikonę (`icon.png` → `AppIcon.icns`), podpisuje ad-hoc i dopina do Docka. Kliknięcie ikony uruchamia `launcher.sh`, który zarządza cyklem życia serwera Streamlit:
 
 | Krok | Zachowanie |
 |------|-----------|
 | 1 | Szuka serwera Streamlit, którego **katalog roboczy** to ten projekt (pula portów `8510–8519`) |
-| 2 | Jeśli serwer wystartował **przed** ostatnią zmianą kodu — restartuje go |
-| 3 | Jeśli jest aktualny — reużywa i tylko otwiera przeglądarkę |
-| 4 | Jeśli nie ma żadnego — startuje na pierwszym wolnym porcie z puli |
+| 2 | Jeśli serwer wystartował przed ostatnią zmianą kodu — restartuje go |
+| 3 | Jeśli jest aktualny — reużywa i otwiera przeglądarkę |
+| 4 | Jeśli żadnego nie ma — startuje na pierwszym wolnym porcie z puli |
 
-> ⚠️ Identyfikacja po katalogu roboczym, a nie po numerze portu, jest celowa — kilka projektów
-> Streamlit obok siebie (`Analiza_Biegowa`, `Analiza_Kolarska`, `Tri_Dashboard`) potrafiło
-> nawzajem przejmować sobie porty i otwierać cudzą aplikację.
+Identyfikacja po katalogu roboczym (a nie po numerze portu) jest celowa: obok siebie bywa kilka projektów Streamlit i sama zajętość portu nie mówi, czyja aplikacja na nim stoi. Log uruchomienia: `/tmp/analiza_biegowa_launch.log`.
 
-Log uruchomienia: `/tmp/analiza_biegowa_launch.log`
+## 📥 Dane wejściowe
 
----
+Wgrywany plik to **CSV lub TXT** (separator przecinek albo średnik). Wczytywanie idzie najpierw przez Polars, z fallbackiem na Pandas/pyarrow; pliki powyżej 100 000 wierszy czytane są w chunkach. Nazwy kolumn są sprowadzane do małych liter i mapowane z aliasów (np. `hr`, `bpm`, `tętno` → `heartrate`; `power`, `pwr`, `moc` → `watts`; `ve`, `ventilation` → `tymeventilation`), a brakujące wielkości są doliczane: `pace` z `speed_m_s`/`velocity_smooth`, `gct` z `stance_time` (albo z kadencji), `stride_length` z tempa i kadencji.
 
-## 🎯 Kluczowa Zmiana: Tempo zamiast Mocy
+Co odrzuca plik: brak co najmniej jednej kolumny danych, mniej niż 10 rekordów, kolumna `time` nienumeryczna, a także wartości ponad limity sanity (99. percentyl: 3000 W, 250 bpm, 250 rpm). Kolumna `time` jest wymagana przez walidator, ale gdy jej nie ma, loader generuje ją z numeru wiersza. Kolumny liczbowe z pojedynczymi śmieciami są rzutowane na liczby; kolumna nienumeryczna jest pomijana z ostrzeżeniem w logu.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   PRZED                           PO                        │
-│   ─────                           ──                        │
-│                                                             │
-│   SmO2 vs ⚡ Moc                  SmO2 vs ⏱️ Tempo          │
-│   VE vs ⚡ Moc                    VE vs ⏱️ Tempo            │
-│   HR vs ⚡ Moc                    HR vs ⏱️ Tempo            │
-│                                                             │
-│   ┌──────────┐                    ┌──────────┐             │
-│   │    ⚡    │                    │   ⏱️    │             │
-│   │  Power   │  ───────────────▶  │  Pace   │             │
-│   │   [W]    │                    │ [min/km]│             │
-│   └──────────┘                    └──────────┘             │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+### Minimum do podstawowej analizy
 
-**Dlaczego tempo?**
-- 🏃 Tempo to naturalny wskaźnik dla biegaczy (min/km)
-- 📊 Lepsza korelacja z fizjologią (HR, SmO2, VE)
-- 🎯 Bezpośrednie odniesienie do doświadczenia z treningu
-- ⚡ Format: `m:ss` (np. `4:30` zamiast `4.5`)
+| Kolumna | Jednostka | Rola |
+|---------|-----------|------|
+| `time` | s | oś czasu; generowana, jeśli brak |
+| `pace` | s/km | tempo — intensywność bez miernika mocy |
+| `speed_m_s` / `velocity_smooth` | m/s | prędkość; `pace` liczony automatycznie |
+| `heartrate` | bpm | tętno (aliasy: `hr`, `heartrate`, `bpm`, `pulse`) |
+| `cadence` | SPM | kadencja (aliasy: `cad`, `rpm`); dodatnia mediana < 120 jest podwajana (eksport Intervals.icu) |
+| `distance` | m | dystans |
+| `watts` / `power` | W | miernik mocy; gdy brak — moc szacowana z tempa/GAP |
 
-### 🕐 Format Czasu: hh:mm:ss
+### Do pełnej analizy (fizjologia i biomechanika)
 
-Wszystkie wykresy czasowe wyświetlają teraz oś X w formacie **hh:mm:ss** (godziny:minuty:sekundy) zamiast minut dziesiętnych.
+| Kolumna | Jednostka | Skąd w kodzie wiadomo, co to jest |
+|---------|-----------|-----------------------------------|
+| `tymeventilation` | L/min | VE; obsługiwana też jako `ve` / `ventilation` |
+| `tymebreathrate` | /min | BR; aliasy `br`, `rr`, `respiration` |
+| `smo2` | % | saturacja mięśniowa (NIRS: Moxy / TrainRed / Humon Hex) |
+| `thb` | g/dL | hemoglobina całkowita (`total_hemoglobin`) |
+| `o2hb`, `hhb` | a.u. | oksy- i deoksyhemoglobina |
+| `verticaloscillation` | cm | oscylacja pionowa; mm → cm, gdy mediana > 20 |
+| `stance_time` | ms | czas kontaktu z podłożem (GCT) |
+| `vertical_ratio` | % | stosunek oscylacji do długości kroku |
+| `step_length` | m | długość kroku |
+| `core_temperature`, `skin_temperature` | °C | temperatura rdzenia / skóry |
+| `temperature` | °C | temperatura otoczenia |
+| `elevation` / `altitude` | m | wysokość — potrzebna do GAP |
+| `hrv` | ms | odstępy R-R z zegarka; aliasy `rr_interval`, `ibi` (wartości `a:b:c` są uśredniane) |
 
-```
-PRZED:                    PO:
-0, 5, 10, 15 min         00:00:00, 00:05:00, 00:10:00
+Gdy w pliku nie ma mierzonej mocy, aplikacja szacuje ją z tempa/GAP i **mówi o tym wprost** (flaga `power_is_estimated` + komunikat w UI). Dotyczy to też metryk pochodnych, np. decoupling liczony jest na `watts_smooth`.
 
-5.5 min                  00:05:30
-```
+## 📊 Co dostajesz
 
-**Korzyści:**
-- ✅ Czytelniejszy format dla długich treningów (>1h)
-- ✅ Łatwiejsze śledzenie interwałów
-- ✅ Zgodność z konwencjami sportowymi
+Dashboard grupuje 18 zakładek w cztery sekcje: **Overview**, **Performance**, **Intelligence**, **Physiology**. Zakładki ładują się leniwie (`importlib`) i każda ma własną granicę błędów — wyjątek w jednej nie wywala pozostałych.
 
----
+| Sekcja | Zakładka | Co pokazuje | Czego wymaga w danych |
+|--------|----------|-------------|------------------------|
+| Overview | Raport z KPI | podsumowanie sesji + KPI: szczyty MMP, dryf i zmienność, rozkład tętna, kolumny SmO₂ i VE | `watts` (KPI/MMP) lub `pace`; HR/SmO₂/VE opcjonalnie |
+| Overview | Podsumowanie | zagregowane wykresy: przebieg treningu, VE i BR, SmO₂ vs THb, dynamika biegowa, HRV, szacunek VO₂max z CI95% | dane sesji; VE/BR, SmO₂, HRV opcjonalnie |
+| Performance | Running | analiza wg tempa: strefy tempa, krzywa PDC, GAP, tempo średnie | `pace` (albo prędkość) |
+| Performance | Biomechanika | stres biomechaniczny: kadencja, GCT, oscylacja pionowa, vertical ratio, długość kroku | `cadence` i `verticaloscillation` |
+| Performance | Model | dopasowanie modelu CS/D′ (Critical Speed) do sesji + R² | `pace` |
+| Performance | HR | tętno w wybranym oknie czasowym: średnie/min/max plus przebieg (średnia 10 s) | `heartrate` |
+| Performance | Hematology | profil hemodynamiczny: SmO₂ i THb w czasie, szukanie rozjazdu | `smo2` (`thb` rozszerza analizę) |
+| Performance | Drift Maps | rozrzut tempo–HR–SmO₂ i dryf przy stałym tempie + eksport JSON | `pace` i HR |
+| Performance | Wytrzymałość | indeks durability liczony równolegle z tempa i z mocy | `pace` lub `watts` |
+| Performance | TTE | najdłuższy ciągły odcinek utrzymany w oknie ±% tempa progowego (lub ±% CP) + eksport JSON | `pace` lub `watts` |
+| Intelligence | Nutrition | kalkulator spalania glikogenu: tempo spalania, węgle spalone i uzupełnione, wynik końcowy | `watts` lub `pace` |
+| Intelligence | Limiters | limiterzy fizjologiczni (podejście INSCYD-style) | `pace` (tryb biegowy) lub `watts` |
+| Intelligence | Obciążenie (PMC) | CTL/ATL/TSB, ramp rate, planowanie tygodnia, historia sesji | zapisane sesje w bazie |
+| Intelligence | Banister | prognoza formy modelem impuls–odpowiedź i planowanie taperu | dane PMC (zapisane sesje) |
+| Physiology | HRV | RMSSD, pNN50, SDNN i DFA α1 w oknach, z walidacją jakości | kolumna odstępów R-R: `hrv`, `rr_interval`, `ibi` |
+| Physiology | SmO₂ | dynamika oksygenacji mięśniowej względem tempa, THb, fazy | `smo2` |
+| Physiology | Ventilation | VE i BR względem tempa, detekcja progów, interwały | `tymeventilation` lub `tymebreathrate` |
+| Physiology | Thermal | koszt termiczny i wydajność chłodzenia, Heat Strain Index, dryf HR vs temperatura | `core_temperature` (pełna analiza: też HR/moc) |
 
-## 🏗️ Architektura Systemu
+## 📐 Metodyka i metryki
 
-> Pełna architektura (diagramy ASCII + opis warstw) przeniesiona do [`docs/architecture.md`](docs/architecture.md). Ten plik pozostaje historycznym changelogiem.
----------|-------|------|-----------|
-| **Tempo** | ⏱️ | Główny wskaźnik intensywności | min/km |
-| **Normalized Pace** | 📈 | Algorytm 3-potęgowy (Skiba) | min/km |
-| **Critical Speed** | 🎯 | Prędkość krytyczna | m/s |
-| **D'** | 🔋 | Pojemność anaerobowa | m |
-| **RSS** | ⚖️ | Running Stress Score | punkty |
-| **GAP** | 🏔️ | Grade-Adjusted Pace | min/km |
-| **Cadence** | 👟 | Kadencja kroków | SPM |
-| **GCT** | 🦶 | Ground Contact Time | ms |
-| **VO** | 📊 | Vertical Oscillation | cm |
-| **RE** | 💪 | Running Effectiveness | % |
-| **VR** | 📐 | Vertical Ratio | % |
-| **Balance** | ⚖️ | Stance Time Balance (L/P) | % |
-| **Step Length** | 📏 | Długość kroku (FIT) | m |
-| **HRV** | 💓 | RMSSD per sekundę | ms |
-| **O2Hb** | 🔴 | Oksyhemoglobina | a.u. |
-| **HHb** | 🔵 | Deoksyhemoglobina | a.u. |
+Model, na którym stoi aplikacja, jest opisany w [`docs/physiological_methodology.md`](docs/physiological_methodology.md) (progi i hierarchia sygnałów), [`docs/power_duration.md`](docs/power_duration.md) (krzywa PDC) i [`methodology/ramp_test/`](methodology/ramp_test/) (specyfikacja testu rampowego, 13 numerowanych dokumentów).
 
-### 🏷️ Ikony w Tooltipach Wykresów
+| Metryka | Jednostka | Model / miejsce w kodzie |
+|---------|-----------|--------------------------|
+| Tempo | s/km | `calculations/pace_utils.py`; wartości średnie liczone w domenie prędkości, nie jako średnia tempa |
+| GAP | s/km | Minetti et al. (2002), koszt metaboliczny — `calculations/gap.py` |
+| Normalized Pace | s/km | Skiba, normalizacja 3. potęgą prędkości — `calculations/dual_mode.py` |
+| rTSS / RSS | punkty | `rTSS = IF × czas[h] × 100`, gdzie `IF = tempo_progowe / NP` (obcięte do 2.0); IF liniowe, nie IF² jak u Coggana |
+| Critical Speed i D′ | m/s i m | dopasowanie modelu 2-parametrowego — `pace.fit_critical_speed_from_pdc`, `race_predictor.fit_critical_speed` |
+| W′ balance | J | Skiba, uzupełnianie wykładnicze — `calculations/w_prime.py` |
+| Decoupling i EF | % i W/bpm | EF = `watts_smooth` / HR; decoupling = spadek EF między połówkami — `metrics.calculate_advanced_kpi` |
+| Heat Strain Index | 0–10 | kompozyt z temperatury rdzenia i HR; 7–10 = wysokie obciążenie cieplne — `calculations/thermal.py` |
+| VO₂max (szacunek) | ml/kg/min | Sitko et al. (2021): `16.61 + 8.87 × MMP5′[W/kg]` — `metrics.calculate_vo2max` |
+| VT1 / VT2 | L/min (VE) | regresja segmentowa na VE/VO₂ i VE/VCO₂ — `calculations/ventilatory_cpet.py` |
+| DFA α1 | – | HRV w oknach z walidacją jakości — `calculations/hrv.py` |
+| Kadencja, GCT, VO, VR | SPM, ms, cm, % | `calculations/running_dynamics.py` |
+| Running Effectiveness | – | prędkość / moc właściwa [W/kg] — `calculations/running_effectiveness.py` |
+| Durability Index | punkty 0–100 | kompozyt: decoupling (0.4), CV tempa (0.3), dryf HR (0.3) — `calculations/durability.py` |
+| TTE | mm:ss | najdłuższy ciąg w oknie ±% progu — `modules/tte.py` |
+| CTL, ATL, TSB | punkty | EWMA z historii sesji — `calculations/pmc.py` |
+| Banister | punkty | Banister et al. (1975), parametry Busso/Morton (1990) — `calculations/banister.py` |
 
-Wszystkie wykresy w aplikacji używają spójnych ikon emoji w tooltipach (po najechaniu kursorem):
+## 🏗️ Architektura
 
-| Ikona | Metryka | Pliki UI |
-|-------|---------|----------|
-| ⏱️ | Tempo / Pace | `summary_timeline`, `summary_charts`, `kpi`, `model`, `summary` |
-| ❤️ | HR (Tętno) | `summary_timeline`, `summary_charts`, `kpi`, `heart_rate` |
-| 🩸 | SmO₂ / THb | `summary_timeline`, `summary_charts`, `hemo`, `kpi` |
-| 🫁 | VE / VT (Wentylacja) | `summary_timeline`, `vent_charts`, `kpi`, `summary` |
-| 🌬️ | BR (Częstość oddechów) | `vent_charts`, `kpi`, `summary` |
-| 🦶 | GCT (Kontakt z podłożem) | `biomech`, `summary_charts` |
-| 👟 | Cadence (Kadencja) | `biomech`, `summary_charts` |
-| ⚖️ | Balance (Balans) | `biomech`, `summary_charts` |
-| 📐 | VR (Vertical Ratio) | `biomech` |
-| 📊 | VO (Oscylacja pionowa) | `biomech`, `summary_charts` |
-| 📏 | Step Length (Długość kroku) | `biomech` |
-| 💪 | RE (Running Effectiveness) | `biomech` |
-| 🔴 | O2Hb (Oksyhemoglobina) | `summary_charts` |
-| 🔵 | HHb (Deoksyhemoglobina) | `summary_charts` |
-| 💓 | HRV / RMSSD | `summary_charts`, `hrv` |
-| 🌡️ | Temperature (Temperatura) | `thermal`, `summary_analysis` |
-| 🕐 | Czas (Time) | `vent_charts`, `hemo`, `heart_rate`, `nutrition` |
-| 📦 | Zapas (Reserve) | `nutrition` |
-| 🔥 | Spalanie (Burn rate) | `nutrition` |
-| 📈 | Trend | `vent_charts`, `kpi` |
-| 🏷️ | Zone (Strefa) | `threshold_analysis_ui` |
-
-**Przebieg Treningu** — ujednolicony tooltip (`hovermode="x unified"`):
-
-```
-🕐 00:25:30
-⏱️ Tempo: 4:15
-❤️ HR: 162 bpm
-🩸 SmO₂: 68.5%
-🫁 VE: 58.2 L/min
+```mermaid
+flowchart LR
+    A["CSV / TXT"] --> B["load_data<br/>normalizacja kolumn"]
+    B --> C["validate_dataframe<br/>czas · zakresy · długość"]
+    C --> D["process_data<br/>resampling 1 s · GAP"]
+    D --> E["metryki sesji<br/>NP · RSS · CS/D' · HSI"]
+    E --> F["zakładki dashboardu"]
+    E --> G[("SQLite<br/>historia sesji")]
+    G --> H["PMC · Banister"]
+    H --> F
 ```
 
----
+`app.py` jest tylko routerem: ustawia motyw, renderuje sidebar i header, a potem woła zakładki przez `TabRegistry` (18 wpisów, lazy import, wspólna granica błędów). Warstwa `services/` orkiestruje przetwarzanie — walidacja wejścia (`data_validation`), pipeline sesji (`session_orchestrator`, z cache `st.cache_data` na godzinę), metryki rozszerzone (`session_analysis`) i render nagłówka z metrykami (`dashboard_renderer`). `modules/calculations/` to silnik domenowy: 58 modułów liczących tempo, GAP, progi, SmO₂, wentylację, trwałość i PMC, niezależnych od Streamlit. `modules/frontend/` trzyma powłokę aplikacji (motyw, CSS, sidebar, stan sesji), a `modules/ui/` to 37 modułów widoków — wyłącznie warstwa prezentacji, wołana przez rejestr zakładek. Po wczytaniu pliku sesja jest zapisywana do `data/training_history.db` (`SessionStore`), z czego liczą się PMC i Banister. Szczegółowy opis warstw i przepływów: [`docs/architecture.md`](docs/architecture.md); inwentarz modułów niepodłączonych do UI: [`docs/DEAD_CODE_INVENTORY.md`](docs/DEAD_CODE_INVENTORY.md).
 
-## 🎨 Wykresy Fizjologiczne (vs Tempo)
+## 📁 Struktura projektu
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  🩸 SmO2 vs Tempo              🫁 VE vs Tempo                │
-│                                                             │
-│  SmO2 [%]                       VE [L/min]                  │
-│     │                              │                        │
-│  80 ┤    ╭─╮                    100┤      ╭──╮              │
-│     │   ╱   ╲                      │     ╱    ╲             │
-│  60 ┤──╱     ╲──                60 ┤────╱      ╲───         │
-│     │ ╱       ╲                    │  ╱          ╲          │
-│  40 ┤╱         ╲─               30 ┤╱            ╲──        │
-│     └────────────                  └────────────────        │
-│       3:00  5:00                    3:00  5:00  7:00        │
-│       ⏱️ min/km                     ⏱️ min/km               │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│  ❤️ HR vs Tempo                🩸 THb vs Tempo               │
-│                                                             │
-│  HR [bpm]                       THb [g/dL]                  │
-│     │                              │                        │
-│ 180 ┤        ╭─                 95 ┤        ╭──╮            │
-│     │       ╱                      │       ╱    ╲           │
-│ 150 ┤──────╱                    85 ┤──────╱      ╲──        │
-│     │     ╱                        │     ╱                   │
-│ 120 ┤────╱                      75 ┤────╱                    │
-│     └────────────                  └────────────────        │
-│       3:00  5:00                    3:00  5:00  7:00        │
-│       ⏱️ min/km                     ⏱️ min/km               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📦 Struktura Projektu
-
-```
-📁 Analiza_Biegowa/
-│
-├── 🚀 app.py                          ← Główny punkt wejścia
-├── 📦 pyproject.toml                  ← Zależności
-├── 📖 README.md                       ← Dokumentacja
-│
-├── 📁 scripts/                        ← Utility scripts
-│   ├── 🗄️ init_db.py                ← Database initialization
-│   └── 🧠 train_history.py           ← AI Coach batch training
-│
-├── 📁 modules/
-│   │
-│   ├── 🧮 calculations/              ← 43 moduły obliczeniowe
-│   │   ├── ⏱️ pace.py               ← Strefy tempa, PDC
-│   │   ├── 🔋 d_prime.py            ← Model D'
-│   │   ├── 🫁 ventilatory.py        ← VT1/VT2 detection
-│   │   ├── 💪 power.py              ← Metryki mocy
-│   │   ├── ❤️ hrv.py                ← HRV (DFA α1)
-│   │   ├── 🩸 smo2_advanced.py      ← SmO2 kinetics
-│   │   └── ⚡ polars_adapter.py      ← Szybkie I/O
-│   │
-│   ├── 🎨 ui/                        ← 29 komponentów UI
-│   │   ├── 🏃 running.py            ← Zakładka Running
-│   │   ├── 🦶 biomech.py            ← Biomechanika
-│   │   ├── 🩸 smo2.py               ← SmO2 z tempo
-│   │   ├── 🫁 vent.py               ← Wentylacja z tempo
-│   │   └── 🗺️ drift_maps_ui.py      ← Mapy driftu
-│   │
-│   ├── 🎭 frontend/                  ← Theme & layout
-│   ├── 🏷️ domain/                    ← Modele typów
-│   └── 🗄️ db/                        ← SQLite
-│
-├── 🔧 services/
-│   ├── ⚡ session_orchestrator.py   ← Pipeline
-│   └── ✅ data_validation.py        ← Walidacja
-│
-└── 🧪 tests/                         ← 346 testów
-    ├── 📐 calculations/             ← Unit tests + regresje biegowe
-    ├── 📡 signals/                  ← Preprocessing / konflikty sygnałów
-    ├── 🗄️ db/                       ← Session store
-    ├── 📄 reporting/                ← Persistence
-    ├── 🔧 services/                 ← Walidacja danych
-    └── 🔗 integration/              ← Testy integracyjne
+```text
+Analiza_Biegowa/
+├── app.py                     # router + layout: 4 sekcje, 18 zakładek w TabRegistry
+├── requirements.txt           # zależności runtime
+├── pyproject.toml             # metadane, ruff/black/pytest/mypy
+├── build_biegowa_app.sh       # budowa .app (macOS)
+├── launcher.sh                # cykl życia serwera Streamlit (pula portów 8510–8519)
+├── style.css
+├── data/
+│   └── training_history.db    # historia sesji (Config.DB_PATH)
+├── modules/
+│   ├── calculations/          #  58 plików .py — silnik obliczeń
+│   ├── ui/                    #  37 plików .py — widoki zakładek
+│   ├── reporting/             #   7 plików .py (+ figures/: 10, pdf/: 9)
+│   ├── frontend/              #   4 pliki .py — theme, layout, state, components
+│   ├── domain/                #   1 plik .py — typy sesji
+│   ├── db/                    #  SessionStore nad SQLite
+│   ├── config.py              #  Config: wszystkie wartości domyślne i progi
+│   └── utils.py               #  wczytywanie i normalizacja plików
+├── services/                  # 4 pliki .py — walidacja, pipeline, metryki, render
+├── scripts/
+│   ├── init_db.py             # inicjalizacja bazy (opcjonalnie --reset)
+│   └── train_history.py       # wsad treningowy dla modelu AI
+├── tests/                     # 27 plików testowych / 339 testów
+│   ├── calculations/          # 10 plików
+│   ├── integration/           #  3 pliki (m.in. CSV → sesja end-to-end)
+│   ├── reporting/             #  3 pliki
+│   ├── services/              #  3 pliki (walidacja, orkiestracja)
+│   ├── ui/                    #  2 pliki
+│   ├── db/                    #  1 plik
+│   └── (5 plików w katalogu głównym tests/)
+├── docs/                      # architektura, metodyka, PDF, raporty audytów
+├── methodology/ramp_test/     # 16 plików — specyfikacja metodyki testu rampowego
+└── assets/                    # grafiki dla (niepodłączonego) generatora PDF
 ```
 
----
-
-## 🧪 Testy
+## 🧪 Testy i jakość
 
 ```bash
-# Uruchom wszystkie testy
-pytest tests/ -v
-
-# Testy z pokryciem
-pytest --cov=modules tests/
+python3 -m pytest -q        # 339 testów, 0 failures, 0 errors (≈14 s)
+python3 -m ruff check .     # All checks passed
+python3 -m pytest -q --cov=modules --cov=services --cov-report=term   # pokrycie: 35.1%
 ```
 
-**Status:** `346/346 ✅`
+CI (`.github/workflows/test.yml`) uruchamia `ruff check .`, `pytest -q --tb=short` (bez coverage) i `mypy modules/ services/ models/` na Pythonie 3.10, 3.11 i 3.12.
 
-| Kategoria | Testy | Status |
-|-----------|-------|:------:|
-| 📐 Obliczenia (pace, d_prime, pipeline, pace_utils) | 30 | ✅ |
-| 🏃 **Regresje logiki biegowej** (GAP/Minetti, PDC, strefy, avg pace) | **25** | ✅ |
-| 🔗 Integracja (running pipeline) | 5 | ✅ |
-| 🗄️ Session store | 49 | ✅ |
-| 📡 Sygnały (preprocessing, conflicts, validation) | 167 | ✅ |
-| 📄 Reporting / persistence | 32 | ✅ |
-| ✅ Walidacja danych | 30 | ✅ |
-| 🩸 SmO2 / Resaturation | 3 | ✅ |
-| ⚙️ Settings | 3 | ✅ |
-| 🔄 Repeatability | 1 | ✅ |
-| 🗺️ State Machine | 1 | ✅ |
+Co pokrywają testy: regresje logiki biegowej (`GAP` zgodny z wielomianem Minettiego, monotoniczność pod górę, PDC nie wymyślające najlepszych odcinków po postojach, średnie tempo jako dystans/czas), obliczenia tempa i D′, walidację danych wejściowych, `SessionStore`, warstwę raportowania i przepływ end-to-end z pliku CSV.
 
-> 🏃 `tests/calculations/test_running_regressions.py` przypina każdy błąd znaleziony
-> w audycie z 2026-07-26 — m.in. zgodność współczynnika GAP z wielomianem Minettiego,
-> brak fikcyjnych rekordów PDC po postojach i średnie tempo liczone jako dystans/czas.
+Pokrycie nie jest równomierne — i lepiej wiedzieć o tym przed zmianą:
 
----
+| Warstwa | Pokrycie |
+|---------|----------|
+| `services/data_validation.py` | 94.7% |
+| `modules/db/` | 96.8% |
+| `services/session_orchestrator.py` | 77.0% |
+| `modules/reporting/` | 72.1% |
+| `modules/calculations/` | 38.9% |
+| `modules/ui/` | 10.7% |
 
-## 📥 Wymagane Dane CSV
+Logika krytyczna (walidacja, sesje, reporting, baza) jest pokryta dobrze; warstwa widoków prawie wcale, więc zmiany w `modules/ui/` weryfikuj uruchamiając aplikację, a nie tylko testami.
 
-### Minimalne (podstawowa analiza)
+## ⚙️ Konfiguracja
 
-```
-┌──────────────────────────────────────────────────────┐
-│  ✅ WYMAGANE (jedno z ponizszych)                    │
-│  • pace              [s/km]  ← Tempo                 │
-│  • velocity_smooth   [m/s]   ← Predkosc (auto→pace) │
-│  • speed_m_s         [m/s]   ← Predkosc (auto→pace) │
-│                                                      │
-│  ⚡ OPCJONALNE                                       │
-│  • distance          [m]     ← Dystans               │
-│  • heartrate         [bpm]   ← Tetno                 │
-│  • cadence           [SPM]   ← Kadencja              │
-└──────────────────────────────────────────────────────┘
-```
+Parametry biegacza ustawia się w sidebarze. Wszystkie wartości domyślne pochodzą z `Config` (`modules/config.py`) i każdą można nadpisać zmienną środowiskową lub plikiem `.env` (`python-dotenv`).
 
-### Zaawansowane (pełna analiza)
+| Parametr | Jednostka | Domyślnie | Klucz w `Config` |
+|----------|-----------|-----------|------------------|
+| Waga | kg | 75.0 | `DEFAULT_BODY_WEIGHT_KG` |
+| Wzrost | cm | 180 | `DEFAULT_RUNNER_HEIGHT_CM` |
+| Wiek | lata | 30 | `DEFAULT_RUNNER_AGE_YEARS` |
+| Płeć („Mężczyzna?”) | – | tak | `DEFAULT_IS_MALE` |
+| Tempo progowe | s/km | 233 (3:53/km) | `DEFAULT_THRESHOLD_PACE_SEC_PER_KM` |
+| LTHR | bpm | 166 | `DEFAULT_LTHR_BPM` |
+| MaxHR | bpm | 184 | `DEFAULT_MAX_HR_BPM` |
+| VT1 | L/min | 0 (brak) | pole sidebaru |
+| VT2 | L/min | 0 (brak) | pole sidebaru |
 
-| Kolumna | Opis | Urządzenie | Ikona |
-|---------|------|------------|-------|
-| `tymeventilation` | Wentylacja [L/min] | Tymewear | 🫁 |
-| `tymebreathrate` | Częstość oddechów [/min] | Tymewear / Garmin (`respiration`) | 🌬️ |
-| `smo2` | Saturacja mięśniowa [%] | TrainRed / Moxy | 🩸 |
-| `thb` | Hemoglobina całkowita [g/dL] | TrainRed / Moxy | 🩸 |
-| `verticaloscillation` | Oscylacja pionowa [cm] | Garmin HRM-Run, Stryd | 📊 |
-| `core_temperature` | Temperatura ciała [°C] | Core | 🌡️ |
-| `skin_temperature` | Temperatura skóry [°C] | Core | 🌡️ |
+Waga ≤ 0 albo tempo progowe ≤ 0 zatrzymują analizę z komunikatem błędu. VT1/VT2 z sidebaru są rysowane jako linie odniesienia na wykresie wentylacji (Raport, KPI) i skalują oś VE w Limiters — nie wpływają na automatyczną detekcję progów.
 
-### Garmin FIT (automatycznie z MergeCSV)
+## 🛠️ Stack technologiczny
 
-| Kolumna | Opis | Źródło |
-|---------|------|--------|
-| `stance_time` | Ground Contact Time [ms] | Garmin HRM-Run / Watch |
-| `stance_time_balance` | Balans L/P kontaktu [%] | Garmin HRM-Run |
-| `stance_time_percent` | Duty cycle [%] | Garmin HRM-Run |
-| `vertical_ratio` | Oscylacja / krok [%] | Garmin HRM-Run |
-| `step_length` | Długość kroku [m] | Garmin HRM-Run |
-| `temperature` | Temperatura [°C] | Garmin Watch |
-| `o2hb` | Oksyhemoglobina [a.u.] | TrainRed via CIQ |
-| `hhb` | Deoksyhemoglobina [a.u.] | TrainRed via CIQ |
-| `hrv` | HRV RMSSD per sekundę [ms] | Garmin Watch |
-| `speed_m_s` | Prędkość [m/s] | Garmin Watch |
+Wersje z `requirements.txt` (instalowane jako minima). Warstwa obliczeniowa nie zna Streamlit — to zwykłe funkcje na Pandas/Polars.
 
----
+| Technologia | Zastosowanie | Wersja |
+|-------------|--------------|--------|
+| Python | runtime | ≥ 3.10 (`pyproject.toml`) |
+| Streamlit | UI dashboardu | ≥ 1.30.0 |
+| Pandas | ramki danych w całym pipeline | ≥ 2.0.0 |
+| Polars | szybkie wczytywanie i operacje kolumnowe | ≥ 0.20.0 |
+| NumPy | obliczenia wektorowe | ≥ 1.26.0 |
+| SciPy | statystyka i filtry | ≥ 1.11.0 |
+| Plotly | wykresy | ≥ 5.18.0 |
+| Numba | JIT dla HRV (DFA α1), W′ balance oraz pętli SmO₂ i PDC | ≥ 0.59.0 |
+| NeuroKit2 | zadeklarowana w `requirements.txt`; brak wywołań w kodzie | ≥ 0.2.7 |
+| statsmodels | zadeklarowana w `requirements.txt`; brak wywołań w kodzie | ≥ 0.14.0 |
+| pyarrow | I/O kolumnowe i cache sesji | ≥ 14.0.0 |
+| requests | jedyny import w `modules/environment.py`, niewołanym z UI | ≥ 2.31.0 |
+| matplotlib | wykresy do PDF i raportów | ≥ 3.8.0 |
+| reportlab | budowa PDF | ≥ 4.0.0 |
+| python-docx | dokumenty DOCX | ≥ 1.1.0 |
+| Pillow | obrazy (ikona, grafiki do PDF) | ≥ 10.0.0 |
+| kaleido | eksport wykresów Plotly do PNG (`to_image`) | == 0.2.1 |
+| python-dotenv | konfiguracja z `.env` | ≥ 1.0.0 |
+| pytest, pytest-timeout | testy | ≥ 8.0.0, ≥ 2.2.0 |
+| ruff, black, mypy, pytest-cov, isort, pre-commit | narzędzia deweloperskie (`pyproject.toml`, extra `dev`) | – |
 
-## ⚙️ Konfiguracja (Sidebar)
+`matplotlib`, `reportlab`, `python-docx` i `kaleido` obsługują generowanie PDF/DOCX i eksport PNG, ale te ścieżki (`modules/reporting/pdf/`, `modules/reporting/figures/`, `modules/reports.py`, `modules/chart_exporters.py`) nie są wołane z UI — stan warstw niepodłączonych opisuje [`docs/DEAD_CODE_INVENTORY.md`](docs/DEAD_CODE_INVENTORY.md).
 
-```
-┌─────────────────────────────────────────────────────┐
-│  ⚙️  PARAMETRY BIEGACZA                            │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  🏃 PODSTAWOWE                                      │
-│  ├── Waga:      [ 75 ] kg                          │
-│  ├── Wzrost:    [180 ] cm                          │
-│  ├── Wiek:      [ 30 ] lat                         │
-│  └── Płeć:      [ M / K ]                          │
-│                                                     │
-│  🎯 PROGOWE                                         │
-│  ├── Tempo:     [300 ] s/km  (5:00 min/km)         │
-│  ├── LTHR:      [170 ] bpm                         │
-│  └── MaxHR:     [185 ] bpm                         │
-│                                                     │
-│  🫁 WENTYLACJA                                      │
-│  ├── VT1:       [ 35 ] L/min                       │
-│  └── VT2:       [ 65 ] L/min                       │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
+## 🤝 Współpraca
 
----
-
-## 🚀 Optymalizacje Wydajności
-
-| Optymalizacja | Przed | Po | Przyspieszenie |
-|--------------|-------|-----|----------------|
-| **Cache Streamlit** | Brak | `@st.cache_data` TTL=1h | ~10x |
-| **Numba JIT** | Tylko W' | PDC + pace.py | ~5-10x |
-| **Polars** | Pandas | Polars first | ~10-100x |
-| **Indeksy DB** | Brak | 4 indeksy | Szybsze query |
-
----
-
-## 🔬 Raport Jakości Danych
-
-```
-┌─────────────────────────────────────────────────────┐
-│  📊 RAPORT JAKOŚCI DANYCH                          │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  ✅ DOSTĘPNE METRYKI (67%)                          │
-│  ├─ ⏱️ pace                                         │
-│  ├─ 📏 distance                                     │
-│  ├─ ❤️ heartrate                                    │
-│  ├─ 👟 cadence                                      │
-│  └─ 📊 verticaloscillation                          │
-│                                                     │
-│  ❌ BRAKUJĄCE                                       │
-│  ├─ 🫁 tymeventilation  → Ventilation tab          │
-│  ├─ 🩸 smo2            → SmO2 tab                  │
-│  └─ 🌡️ core_temperature → Thermal tab              │
-│                                                     │
-│  💡 REKOMENDACJE                                    │
-│  └─ Rozważ czujnik VO2 Master dla pełnej analizy   │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ Technologie
-
-| Technologia | Zastosowanie | Wersja | Ikona |
-|-------------|--------------|--------|-------|
-| **Python** | Backend | 3.10+ | 🐍 |
-| **Streamlit** | UI Framework | 1.30+ | 🎈 |
-| **Pandas** | Data processing | 2.0+ | 📊 |
-| **Polars** | Fast I/O | 0.20+ | ⚡ |
-| **NumPy** | Numerical computing | 1.26+ | 🔢 |
-| **SciPy** | Scientific computing | 1.11+ | 🧮 |
-| **Plotly** | Interactive charts | 5.18+ | 📈 |
-| **Numba** | JIT compilation | 0.59+ | ⚡ |
-| **pytest** | Testing | 8.0+ | 🧪 |
-
----
-
-## 🤝 Jak Wspierać
-
-```bash
-# 1. Fork repozytorium
-git fork https://github.com/WielkiKrzych/Analiza_Biegowa.git
-
-# 2. Utwórz branch
-git checkout -b feature/TwojaFunkcja
-
-# 3. Commit zmiany
-git commit -m "Dodaj: TwojaFunkcja"
-
-# 4. Push do branch
-git push origin feature/TwojaFunkcja
-
-# 5. Otwórz Pull Request
-```
-
----
+Zasady pracy są w [`CONTRIBUTING.md`](CONTRIBUTING.md): docstringi po angielsku, typy w stylu PEP 604, `ruff check .` i `ruff format .` przed commitem, hooki z `.pre-commit-config.yaml`. Testy dodaje się w `tests/` w układzie lustrzanym do pakietu. Uwaga na dwie konwencje domenowe: tempa nigdy nie uśrednia się arytmetycznie (tylko w domenie prędkości), a SmO₂ jest sygnałem lokalnym (jedna grupa mięśniowa), więc moduluje progi wentylacyjne, a nie zastępuje ich.
 
 ## 📄 Licencja
 
-MIT License - zobacz plik `LICENSE` dla szczegółów.
-
----
+MIT — [`LICENSE`](LICENSE).
 
 ## 👤 Autor
 
-**WielkiKrzych**
-
-<p align="center">
-  <a href="https://github.com/WielkiKrzych">
-    <img src="https://img.shields.io/badge/GitHub-WielkiKrzych-black?style=for-the-badge&logo=github" alt="GitHub">
-  </a>
-</p>
-
----
-
-<p align="center">
-  <sub>🏃 Zbudowane dla biegaczy | ⚡ Powered by Python | 📅 2026</sub>
-</p>
-
----
-
-## 📋 Project Audit — Changelog
-
-### Phase Summary
-
-| Phase | Commit | Description | Tests |
-|-------|--------|-------------|-------|
-| 1 — Cleanup & Baseline | `e27db33` | Branch cleanup, deprecation warnings, script reorg, ruff/isort fix (52 issues), architecture docs | 66 |
-| 2.1 — layout.py split | `6b956c3` | 3027→2023 lines, re-exports from 6 split modules | 101 |
-| 2.2-2.6 — Module splits | `84f62cc` | Split ventilatory, summary, persistence, smo2_advanced, vent (5 modules, 17 new files) | 289 |
-| 3 — Tests & CI | `6b956c3` + `b912ce1` | 49 session_store, 120 signal, 20 persistence tests; GitHub Actions CI; coverage report | 321 |
-| 4 — Code Quality | `b912ce1` | Ruff: 873 issues auto-fixed (1009→136 remaining), import sorting, formatting | 321 |
-
-### Module Size Reductions (Phase 2)
-
-| Module | Before | After | New Files |
-|--------|--------|-------|-----------|
-| `layout.py` | 3027 lines | 2023 lines | 6 |
-| `ventilatory.py` | 1546 lines | 40 lines | 2 |
-| `summary.py` | 1600 lines | 323 lines | 4 |
-| `persistence.py` | 1111 lines | 37 lines | 5 |
-| `smo2_advanced.py` | 1056 lines | 25 lines | 3 |
-| `vent.py` | 988 lines | 25 lines | 5 |
-
-### Test Growth
-
-```
-66 → 101 → 289 → 321  (5x increase from baseline)
-```
+Wielki Krzych — [github.com/WielkiKrzych/Analiza_Biegowa](https://github.com/WielkiKrzych/Analiza_Biegowa).
