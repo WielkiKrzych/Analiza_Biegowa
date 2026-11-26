@@ -57,6 +57,9 @@ dev = [
 where = ["."]
 include = ["modules*", "services*", "models*"]
 
+[tool.setuptools.package-data]
+"modules.reporting" = ["DejaVuSans.ttf", "LICENSE-DejaVu.txt"]
+
 [tool.black]
 line-length = 100
 target-version = ['py310']

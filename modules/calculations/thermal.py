@@ -1,6 +1,6 @@
 """Recorded CORE heat strain and core temperature statistics."""
 
-from typing import Optional, TypedDict, Union
+from typing import TypedDict, Union
 
 import numpy as np
 import pandas as pd
@@ -128,110 +128,10 @@ def calculate_core_temp_zones_time(
     return {k: round(v, 2) for k, v in zone_seconds.items()}
 
 
-def calculate_thermal_drift_rate(
-    core_temp_series: Union[pd.Series, np.ndarray, list],
-    time_series: Optional[Union[pd.Series, np.ndarray, list]] = None,
-    steady_state_only: bool = True,
-    pace_series: Optional[Union[pd.Series, np.ndarray, list]] = None,
-) -> dict:
-    """Calculate the rate of core-temperature rise during activity.
-
-    Uses ordinary-least-squares regression of temperature vs elapsed time
-    (in minutes).  When *steady_state_only* is ``True`` and a *pace_series*
-    is provided, only segments where the coefficient of variation of pace is
-    below 10 % are included.
-
-    Args:
-        core_temp_series: Core-temperature readings (Celsius).
-        time_series: Elapsed-time values (seconds).  If ``None`` a 1 Hz
-            sample rate is assumed (i.e. index == seconds).
-        steady_state_only: When ``True``, restrict analysis to steady-state
-            segments (pace CV < 10 %).
-        pace_series: Pace values (e.g. min/km or m/s) used for the
-            steady-state filter.
-
-    Returns:
-        dict with drift metrics -- see module docstring for full schema.
-    """
-    temps = np.asarray(core_temp_series, dtype=np.float64)
-
-    if time_series is not None:
-        times_s = np.asarray(time_series, dtype=np.float64)
-    else:
-        times_s = np.arange(len(temps), dtype=np.float64)
-
-    # Build a boolean mask for valid data
-    valid_mask = np.isfinite(temps) & np.isfinite(times_s)
-
-    # Steady-state filtering (rolling window CV of pace < 10 %)
-    if steady_state_only and pace_series is not None:
-        paces = np.asarray(pace_series, dtype=np.float64)
-        if len(paces) == len(temps):
-            window = min(60, len(paces))
-            pace_pd = pd.Series(paces)
-            rolling_mean = pace_pd.rolling(window, min_periods=max(1, window // 2)).mean()
-            rolling_std = pace_pd.rolling(window, min_periods=max(1, window // 2)).std()
-            cv = (rolling_std / rolling_mean).fillna(0).values
-            steady_mask = cv < 0.10
-            valid_mask = valid_mask & steady_mask
-
-    temps_f = temps[valid_mask]
-    times_f = times_s[valid_mask]
-
-    _empty_result = {
-        "drift_c_per_min": 0.0,
-        "drift_c_per_hour": 0.0,
-        "r_squared": 0.0,
-        "start_temp": float(temps[0]) if len(temps) > 0 else 0.0,
-        "end_temp": float(temps[-1]) if len(temps) > 0 else 0.0,
-        "total_rise": 0.0,
-        "classification": "normal",
-        "interpretation": "Insufficient data for drift analysis.",
-    }
-
-    if len(temps_f) < 60:
-        return _empty_result
-
-    # Convert seconds to minutes for regression
-    times_min = times_f / 60.0
-
-    slope, intercept, r_value, _p_value, _std_err = linregress(times_min, temps_f)
-    r_squared = r_value**2
-
-    start_temp = float(temps_f[0])
-    end_temp = float(temps_f[-1])
-    total_rise = end_temp - start_temp
-
-    drift_c_per_min = slope
-    drift_c_per_hour = slope * 60.0
-
-    # Classification based on hourly drift
-    abs_drift_h = abs(drift_c_per_hour)
-    if abs_drift_h < 0.5:
-        classification = "well_adapted"
-        interpretation = (
-            f"Thermal drift of {drift_c_per_hour:+.2f} C/h indicates good heat adaptation."
-        )
-    elif abs_drift_h < 1.0:
-        classification = "normal"
-        interpretation = (
-            f"Thermal drift of {drift_c_per_hour:+.2f} C/h is within "
-            "the normal range for endurance activity."
-        )
-    else:
-        classification = "heat_sensitive"
-        interpretation = (
-            f"Thermal drift of {drift_c_per_hour:+.2f} C/h suggests "
-            "elevated heat sensitivity -- consider heat acclimation protocols."
-        )
-
-    return {
-        "drift_c_per_min": round(drift_c_per_min, 5),
-        "drift_c_per_hour": round(drift_c_per_hour, 3),
-        "r_squared": round(r_squared, 4),
-        "start_temp": round(start_temp, 2),
-        "end_temp": round(end_temp, 2),
-        "total_rise": round(total_rise, 2),
-        "classification": classification,
-        "interpretation": interpretation,
-    }
+def calculate_thermal_drift_rate(temperature: pd.Series, time_sec: pd.Series) -> float | None:
+    """Return the slope in Celsius per hour when the recording is long enough."""
+    valid = np.isfinite(temperature) & np.isfinite(time_sec)
+    time = time_sec[valid]
+    if len(time) < 60 or time.iloc[-1] <= time.iloc[0]:
+        return None
+    return float(linregress(time, temperature[valid]).slope * 3600)

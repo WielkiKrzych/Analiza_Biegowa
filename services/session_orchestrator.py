@@ -12,8 +12,7 @@ PERFORMANCE OPTIMIZATIONS:
 
 import logging
 import pickle
-from datetime import date
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import pandas as pd
 import pyarrow
@@ -113,33 +112,3 @@ def process_uploaded_session(
         if error_msg:
             return None, None, None, error_msg
         return df_plot, df_plot_resampled, metrics, None
-
-
-def prepare_session_record(
-    filename: str,
-    df_plot: pd.DataFrame,
-    metrics: Dict[str, Any],
-    np_header: float,
-    if_header: float,
-    tss_header: float,
-    session_date: Optional[date] = None,
-) -> Dict[str, Any]:
-    """Prepare session data for database storage.
-
-    Args:
-        session_date: Date of the session. Defaults to today if not provided.
-    """
-    return {
-        "date": (session_date or date.today()).isoformat(),
-        "filename": filename,
-        "duration_sec": len(df_plot),
-        "tss": tss_header,
-        "np": np_header,
-        "if_factor": if_header,
-        "avg_watts": metrics.get("avg_watts", 0),
-        "avg_hr": metrics.get("avg_hr", 0),
-        "max_hr": df_plot["heartrate"].max() if "heartrate" in df_plot.columns else 0,
-        "work_kj": metrics.get("work_kj", 0),
-        "avg_cadence": metrics.get("avg_cadence", 0),
-        "avg_rmssd": metrics.get("avg_rmssd"),
-    }

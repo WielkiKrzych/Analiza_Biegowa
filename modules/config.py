@@ -68,11 +68,6 @@ class Config:
     ML_EPOCHS = int(os.getenv("ML_EPOCHS", "200"))
     ML_LEARNING_RATE = float(os.getenv("ML_LEARNING_RATE", "0.02"))
 
-    # --- Database ---
-    DATA_DIR = BASE_DIR / "data"
-    DB_NAME = os.getenv("DB_NAME", "training_history.db")
-    DB_PATH = DATA_DIR / DB_NAME
-
     # --- UI Colors ---
     COLOR_POWER = os.getenv("COLOR_POWER", "#00cc96")
     COLOR_HR = os.getenv("COLOR_HR", "#ef553b")
@@ -124,12 +119,6 @@ class Config:
                 f"BASE_CONFIDENCE ({cls.BASE_CONFIDENCE}) must be < "
                 f"MAX_CONFIDENCE ({cls.MAX_CONFIDENCE})"
             )
-
-        if not isinstance(cls.DB_PATH, Path):
-            raise ValueError(f"DB_PATH must be a Path object, got {type(cls.DB_PATH)}")
-
-        if not isinstance(cls.DATA_DIR, Path):
-            raise ValueError(f"DATA_DIR must be a Path object, got {type(cls.DATA_DIR)}")
 
     @classmethod
     def validate(cls) -> None:

@@ -29,7 +29,15 @@ class StateManager:
 
 def clear_file_selections() -> None:
     """Reset file-specific ranges and widgets when the upload changes."""
-    for key in ("df_dfa", "dfa_error", "thb_chart", "hr_start_sec", "hr_end_sec"):
+    for key in (
+        "df_dfa",
+        "dfa_error",
+        "thb_chart",
+        "hr_start_sec",
+        "hr_end_sec",
+        "summary_pdf_key",
+        "summary_pdf_bytes",
+    ):
         st.session_state.pop(key, None)
     for channel in ("smo2", "vent", "br", "tv"):
         for suffix in ("start_sec", "end_sec", "manual_start", "manual_end", "chart"):

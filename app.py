@@ -8,8 +8,8 @@ from modules.frontend.layout import AppLayout
 from modules.frontend.state import StateManager
 from modules.frontend.theme import ThemeManager
 from modules.notes import TrainingNotes
+from modules.ui.summary_download import invalidate_summary_pdf, render_summary_download
 from services.dashboard_renderer import (
-    auto_save_session,
     process_and_cache_session,
     render_header_and_metrics,
 )
@@ -167,6 +167,7 @@ def main() -> None:
         st.stop()
 
     if uploaded_file is None:
+        invalidate_summary_pdf(None)
         st.sidebar.info("Wgraj plik.")
         return
 
@@ -176,7 +177,8 @@ def main() -> None:
     df_plot, df_plot_resampled, metrics, quality = result
     render_header_and_metrics(metrics)
     render_data_quality(quality)
-    auto_save_session(uploaded_file, df_plot, metrics, metrics["normalized_pace"] or 0.0)
+    pdf_key = (st.session_state["current_file_hash"], runner_weight, threshold_pace_input)
+    invalidate_summary_pdf(pdf_key)
 
     training_notes = TrainingNotes()
     selected = select_tab()
@@ -198,6 +200,8 @@ def main() -> None:
         "aerobic_efficiency": (df_plot,),
     }
     TabRegistry.render(selected, *args[selected])
+    if selected == "summary":
+        render_summary_download(df_plot, metrics, pdf_key)
 
 
 if __name__ == "__main__":

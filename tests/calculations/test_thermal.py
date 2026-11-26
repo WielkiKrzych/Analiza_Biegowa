@@ -5,7 +5,11 @@ import io
 import pandas as pd
 import pytest
 
-from modules.calculations.thermal import HSI_LABELS, summarize_core_hsi
+from modules.calculations.thermal import (
+    HSI_LABELS,
+    calculate_thermal_drift_rate,
+    summarize_core_hsi,
+)
 from modules.utils import load_data
 from services.session_orchestrator import process_uploaded_session
 
@@ -49,3 +53,10 @@ def test_hsi_only_sensor_data_is_available_without_core_temperature_or_hr():
     assert metrics["heat_strain"]["zone_seconds"][HSI_LABELS[2]] == 80
     assert plot["heat_strain_index"].iloc[0] == 3
     assert pd.isna(plot["heat_strain_index"].iloc[1])
+
+
+def test_core_temperature_drift_distinguishes_missing_and_measured_slope():
+    time = pd.Series(range(100))
+    temperature = 37 + time / 1800
+    assert calculate_thermal_drift_rate(temperature, time) == pytest.approx(2.0)
+    assert calculate_thermal_drift_rate(temperature.iloc[:30], time.iloc[:30]) is None

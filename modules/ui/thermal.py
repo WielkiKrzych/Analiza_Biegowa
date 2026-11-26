@@ -29,8 +29,8 @@ def _render_core_temperature(df: pd.DataFrame) -> None:
     st.plotly_chart(figure, use_container_width=True)
 
     drift = calculate_thermal_drift_rate(series, df.loc[series.index, "time"])
-    if drift["is_valid"]:
-        st.metric("Zmiana temperatury centralnej", f"{drift['drift_c_per_hour']:+.2f} °C/h")
+    if drift is not None:
+        st.metric("Zmiana temperatury centralnej", f"{drift:+.2f} °C/h")
 
 
 def _render_core_hsi(df: pd.DataFrame, hsi: HeatStrain | None) -> None:
