@@ -27,7 +27,7 @@ if NUMBA_AVAILABLE:
 
 
 def calculate_pace_zones_time(
-    df_pl: Union[pd.DataFrame, Any], threshold_pace: float, zones: dict = None
+    df_pl: Union[pd.DataFrame, Any], threshold_pace: float, zones: dict | None = None
 ) -> dict:
     """
     Calculate time spent in each pace zone.
@@ -133,7 +133,7 @@ if NUMBA_AVAILABLE:
         return results
 
 
-def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: list = None) -> dict:
+def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: list | None = None) -> dict:
     """Calculate Pace Duration Curve (best pace for each duration).
 
     Similar to Power Duration Curve but for pace.
@@ -290,7 +290,7 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     )
 
     # Find highest scoring phenotype
-    phenotype = max(scores, key=scores.get)
+    phenotype = max(scores, key=scores.__getitem__)
 
     if scores[phenotype] == 0:
         return "unknown"
@@ -385,7 +385,7 @@ def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float = 0.0) -> float
     return round(vo2max, 1)
 
 
-def calculate_fatigue_resistance_index_pace(pdc: Dict[int, float]) -> float:
+def calculate_fatigue_resistance_index_pace(pdc: Dict[int, float | None]) -> float:
     """
     Calculate Fatigue Resistance Index for pace.
 

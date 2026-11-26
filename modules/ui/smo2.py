@@ -6,10 +6,12 @@ from scipy import stats
 
 from modules.calculations.quality import check_signal_quality
 from modules.calculations.smo2_phases import (
+    SmO2PhaseResult,
     calculate_smo2_recovery_halftime,
     classify_smo2_slope,
     detect_smo2_phases,
 )
+from modules.notes import TrainingNotes
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -82,7 +84,7 @@ def _prepare_dataframe(target_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _render_notes_section(
-    training_notes: object,
+    training_notes: TrainingNotes,
     uploaded_file_name: str,
     max_time_min: float,
     mid_time_min: float,
@@ -468,7 +470,7 @@ def _render_phase_model(target_df: pd.DataFrame) -> None:
     _render_slope_classification(smo2_valid)
 
 
-def _render_phase_table(phase_result: object) -> None:
+def _render_phase_table(phase_result: SmO2PhaseResult) -> None:
     """Render the phase data table."""
     phase_rows = []
     for p in phase_result.phases:
@@ -718,7 +720,7 @@ def _render_theory_section() -> None:
 
 def _compute_interval_stats(
     interval_data: pd.DataFrame,
-) -> tuple[float, float, float, float | None, float, float, str]:
+) -> tuple[float, float, float | None, float, float, str]:
     """Return ``(avg_pace_min, avg_smo2, avg_thb_or_none, slope, intercept, trend_desc)``."""
     avg_pace = interval_data["pace"].mean() if "pace" in interval_data.columns else 0
     avg_pace_min = avg_pace / 60.0 if avg_pace > 0 else 0
@@ -747,7 +749,7 @@ def _compute_interval_stats(
 
 def render_smo2_tab(
     target_df: pd.DataFrame | None,
-    training_notes: object,
+    training_notes: TrainingNotes,
     uploaded_file_name: str,
 ) -> None:
     """Main SmO2 analysis tab renderer."""

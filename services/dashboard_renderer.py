@@ -34,6 +34,7 @@ from modules.calculations.pace_utils import format_pace
 from modules.db import SessionRecord, SessionStore
 from modules.domain import classify_session_type
 from modules.frontend.components import UIComponents
+from modules.frontend.state import clear_file_selections
 from modules.utils import load_data, validate_data_completeness
 from services import prepare_session_record, prepare_sticky_header_data
 from services.session_orchestrator import process_uploaded_session
@@ -74,6 +75,7 @@ def process_and_cache_session(
             cached_hash = st.session_state.get("current_file_hash")
 
             if cached_hash != current_file_hash:
+                clear_file_selections()
                 session_type = classify_session_type(df_raw, uploaded_file.name)
                 st.session_state["session_type"] = session_type
                 st.session_state["current_file_hash"] = current_file_hash
@@ -107,7 +109,7 @@ def process_and_cache_session(
                 st.error(f"Błąd analizy: {error_msg}")
                 st.stop()
 
-            if metrics.get("power_is_estimated"):
+            if metrics and metrics.get("power_is_estimated"):
                 st.info(
                     "🏃 **Tryb biegowy (tempo + HR):** brak miernika mocy, więc intensywność "
                     "liczona jest z **tempa/GAP** (moc w watach w zakładkach to wartość *szacowana* "

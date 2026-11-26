@@ -305,7 +305,7 @@ def calculate_running_effectiveness_from_vo(
 
     # Calculate effectiveness score (0-100)
     if vo_percent_height < 5:
-        score = 100
+        score = 100.0
     elif vo_percent_height < 10:
         score = 100 - (vo_percent_height - 5) * 10
     else:

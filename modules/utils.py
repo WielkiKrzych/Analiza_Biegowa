@@ -135,7 +135,7 @@ def _clean_hrv_value(val: str) -> float:
     if ":" in val:
         try:
             parts = [float(x) for x in val.split(":") if x]
-            return np.mean(parts) if parts else np.nan
+            return float(np.mean(parts)) if parts else np.nan
         except ValueError:
             # why: np.nan is this column's explicit "no reading" value; it is
             # what the blank / "nan" branch above returns too.

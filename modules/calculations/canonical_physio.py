@@ -146,7 +146,7 @@ def select_canonical_vo2max(
 
     # Select best candidate based on priority
     best_source = None
-    best_priority = -1
+    best_priority = -1.0
 
     for source, _value in alternatives.items():
         priority = VO2MAX_SOURCE_PRIORITY.get(source, 0.3)

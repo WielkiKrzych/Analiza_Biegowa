@@ -432,38 +432,6 @@ html {
     scroll-behavior: smooth;
 }
 
-/* ========================================
-   WYKRESY PLOTLY - Zapobieganie obcinaniu
-   ======================================== */
-/* Kontener Streamlit dla Plotly */
-[data-testid="stPlotlyChart"],
-.stPlotlyChart {
-    overflow: visible !important;
-}
-
-/* Główny kontener Plotly */
-.js-plotly-plot,
-.plotly {
-    overflow: visible !important;
-}
-
-/* Warstwa SVG i canvas */
-.js-plotly-plot .plotly .main-svg,
-.js-plotly-plot .plotly .svg-container {
-    overflow: visible !important;
-}
-
-/* Legenda i tytuły */
-.js-plotly-plot .plotly .gtitle,
-.js-plotly-plot .plotly .legend {
-    overflow: visible !important;
-}
-
-/* Margines na górze dla tytułów */
-.stPlotlyChart>div {
-    padding-top: 10px;
-}
-
 /* Ekspandery - poprawka overflow */
 [data-testid="stExpander"] {
     overflow: visible !important;

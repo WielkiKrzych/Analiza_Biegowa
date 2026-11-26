@@ -15,7 +15,7 @@ class UIComponents:
     """Namespace for reusable UI components."""
 
     @staticmethod
-    def show_breadcrumb(group: str, section: str = None) -> None:
+    def show_breadcrumb(group: str, section: str | None = None) -> None:
         """Render a breadcrumb navigation aid."""
         if section:
             html = f"""

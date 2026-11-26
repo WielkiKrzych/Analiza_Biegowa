@@ -309,7 +309,7 @@ def calculate_durability_index(df_pl: Union[pd.DataFrame, Any], pace_col: str = 
 def calculate_trimp(
     df: pd.DataFrame,
     hr_col: str = "hr",
-    duration_sec: float = None,
+    duration_sec: float | None = None,
     hr_max: float = 200.0,
     hr_rest: float = 60.0,
     gender: str = "male",
@@ -365,7 +365,7 @@ def calculate_trimp(
 def calculate_hrtss(
     df: pd.DataFrame,
     hr_col: str = "hr",
-    duration_sec: float = None,
+    duration_sec: float | None = None,
     lthr: float = 175.0,
     hr_max: float = 200.0,
     hr_rest: float = 60.0,

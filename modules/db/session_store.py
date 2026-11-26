@@ -149,7 +149,7 @@ class SessionStore:
                     ),
                 )
                 conn.commit()
-                return cursor.lastrowid
+                return cursor.lastrowid if cursor.lastrowid is not None else -1
         except sqlite3.Error as e:
             logger.error(f"Failed to add session: {e}")
             return -1

@@ -62,7 +62,7 @@ def _validate_column_range(
 
 def _validate_numeric_columns(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], List[str]]:
     """Validate and coerce numeric columns; returns (df, failure_messages)."""
-    failures: List[str] = []
+    failures: List[str | None] = []
 
     # These three block the import when they cannot be coerced (unchanged).
     for col in ("watts", "heartrate", "cadence"):

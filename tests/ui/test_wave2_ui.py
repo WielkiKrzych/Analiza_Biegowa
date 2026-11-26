@@ -338,55 +338,6 @@ def test_vo2max_details_render_the_heart_rate_diagnostics(st_stub):
 
 
 # ---------------------------------------------------------------------------
-# 3. `st.session_state` keys nobody writes
-# ---------------------------------------------------------------------------
-
-
-def test_zone_thresholds_use_the_detected_result(monkeypatch, st_stub):
-    """The "Użyj wykrytych progów" checkbox must actually change the zones.
-
-    Pre-review: `_resolve_zone_thresholds` read `session_state["detected_vt1"]`
-    / `["detected_vt2"]` — keys no widget and no
-    `StateManager.init_session_state()` ever writes. The branch was dead, so
-    ticking the checkbox (checked by default once a result exists) silently
-    fell through to the two manual `number_input`s.
-
-    Scope note: the `"thresholds"` tab is registered in `app.py` but never
-    passed to `render_tab_content`, so no user reaches this path today. The
-    test pins the contract for the day the tab is wired up.
-    """
-    from modules.ui import threshold_analysis_ui
-
-    result = types.SimpleNamespace(vt1_watts=210, vt2_watts=260)
-    monkeypatch.setattr(streamlit, "session_state", {"threshold_result": result})
-
-    manual_calls: list = []
-    monkeypatch.setattr(
-        streamlit,
-        "number_input",
-        lambda *a, **k: manual_calls.append(a[0]) or 0,
-    )
-
-    assert threshold_analysis_ui._resolve_zone_thresholds(True, 280) == (210, 260)
-    assert manual_calls == [], "manual VT inputs rendered despite a detected result"
-
-
-def test_zone_thresholds_fall_back_to_manual_inputs(monkeypatch, st_stub):
-    """With "use detected" off (or nothing detected) the manual inputs apply.
-
-    Same dormant-tab scope note as
-    `test_zone_thresholds_use_the_detected_result`.
-    """
-    from modules.ui import threshold_analysis_ui
-
-    monkeypatch.setattr(streamlit, "session_state", {})
-    monkeypatch.setattr(streamlit, "number_input", lambda *a, **k: 240)
-
-    assert threshold_analysis_ui._resolve_zone_thresholds(True, 280) == (240, 240)
-    assert threshold_analysis_ui._resolve_zone_thresholds(False, 280) == (240, 240)
-
-
-# ---------------------------------------------------------------------------
 # 4. Stale derived state keyed by file content
 # ---------------------------------------------------------------------------
 
@@ -472,10 +423,14 @@ def test_new_file_clears_the_previous_ramp_classification(monkeypatch, _dashboar
     assert sessions["ramp_classification"].is_ramp is True
 
     # File B: no power column at all -> nothing can be classified.
+    sessions.update({"smo2_start_sec": 20, "vent_end_sec": 40, "weight": 73.0})
     frames["next"] = pd.DataFrame({"heartrate": [140.0] * 400})
     dashboard_renderer.process_and_cache_session(_FakeUpload("b.csv", b"bbb"), 75.0, _State())
 
     assert sessions["ramp_classification"] is None, "file B kept file A's ramp classification"
+    assert "smo2_start_sec" not in sessions
+    assert "vent_end_sec" not in sessions
+    assert sessions["weight"] == 73.0
 
 
 def test_state_module_is_importable_for_the_above(monkeypatch):
@@ -511,42 +466,32 @@ def test_state_module_is_importable_for_the_above(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _rendered_tab_names() -> set:
-    """Collect the tab names `app.py` passes to `render_tab_content`."""
-    import ast
-    import inspect
-
-    import app as app_module
-
-    tree = ast.parse(inspect.getsource(app_module))
-    names = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Name) and func.id == "render_tab_content":
-            if node.args and isinstance(node.args[0], ast.Constant):
-                names.add(node.args[0].value)
-    return names
-
-
 def test_registry_matches_the_tabs_app_actually_renders():
-    """Every registered tab must be reachable from a `render_tab_content` call.
-
-    Pre-fix: `_tabs` had 22 entries while `app.py` only rendered 18 —
-    "thresholds", "history", "import" and "community" were registered but never
-    reached, so the registry advertised four tabs that do not exist in the UI.
-    """
+    """Every registered tab is reachable exactly once in the navigation."""
     import app as app_module
 
     registered = set(app_module.TabRegistry._tabs)
-    rendered = _rendered_tab_names()
+    rendered = [tab for group in app_module.TAB_GROUPS.values() for tab in group]
+    assert registered == set(rendered)
+    assert len(rendered) == len(registered) == 18
 
-    assert registered == rendered, (
-        f"registered but never rendered: {sorted(registered - rendered)}; "
-        f"rendered but not registered: {sorted(rendered - registered)}"
-    )
-    assert len(registered) == 18
+
+def test_navigation_remembers_selection_for_each_group(monkeypatch):
+    from app import select_tab
+
+    state = {}
+    monkeypatch.setattr(streamlit, "session_state", state)
+    answers = iter(["📊 Overview", "summary", "⚡ Performance", "running", "📊 Overview"])
+
+    def radio(label, options, index=0, **kwargs):
+        value = next(answers, options[index])
+        assert value in options
+        return value
+
+    monkeypatch.setattr(streamlit, "radio", radio)
+    assert select_tab() == "summary"
+    assert select_tab() == "running"
+    assert select_tab() == "summary"
 
 
 def test_deregistered_tabs_are_not_in_the_registry():

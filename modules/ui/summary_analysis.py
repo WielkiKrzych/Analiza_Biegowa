@@ -21,11 +21,6 @@ from modules.calculations.durability import (
     detect_decoupling_onset,
 )
 from modules.calculations.race_predictor import format_time, multi_model_predict
-from modules.calculations.running_effectiveness import (
-    calculate_gct_asymmetry_index,
-    calculate_leg_spring_stiffness,
-    calculate_running_effectiveness,
-)
 from modules.calculations.thermal import (
     calculate_core_temp_zones_time,
     calculate_thermal_drift_rate,
@@ -36,7 +31,6 @@ __all__ = [
     "_render_race_prediction_section",
     "_render_br_analysis_section",
     "_render_thermal_analysis_section",
-    "_render_running_effectiveness_section",
 ]
 
 
@@ -327,76 +321,3 @@ def _render_thermal_analysis_section(df_plot):
 
     st.caption(f"Interpretacja: {drift.get('interpretation', '')}")
     st.markdown("---")
-
-
-def _render_running_effectiveness_section(df_plot, rider_weight):
-    """Section 12: Running Effectiveness, GCT Asymmetry, Leg Spring Stiffness."""
-    st.subheader("1️⃣2️⃣ Efektywnosc Biegu i Biomechanika")
-
-    has_any = False
-
-    # Running Effectiveness (needs power + speed)
-    if "watts" in df_plot.columns and (
-        "velocity_smooth" in df_plot.columns or "pace" in df_plot.columns
-    ):
-        has_any = True
-        speed_col = "velocity_smooth" if "velocity_smooth" in df_plot.columns else None
-        if speed_col:
-            avg_speed = df_plot[speed_col].mean()
-        else:
-            pace_valid = df_plot["pace"].replace(0, np.nan).dropna()
-            avg_speed = (1000.0 / pace_valid).mean() if len(pace_valid) > 0 else 0
-
-        avg_power = df_plot["watts"].mean()
-        re = calculate_running_effectiveness(avg_speed, avg_power, rider_weight)
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric(
-            "Running Effectiveness",
-            f"{re:.3f}" if re > 0 else "--",
-            help="RE = speed (m/s) / specific power (W/kg). Higher = more efficient.",
-        )
-        c2.metric("AVG Speed", f"{avg_speed:.2f} m/s")
-        c3.metric("AVG Power", f"{avg_power:.0f} W ({avg_power / rider_weight:.1f} W/kg)")
-
-    # GCT Asymmetry
-    if "stance_time_balance" in df_plot.columns:
-        has_any = True
-        asym = calculate_gct_asymmetry_index(df_plot["stance_time_balance"])
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric(
-            "GCT Balance",
-            f"{asym['mean_balance']:.1f}%",
-            help="50% = perfect symmetry",
-        )
-        c2.metric(
-            "Asymmetry",
-            f"{asym['asymmetry_pct']:.1f}%",
-            delta=asym["classification"],
-            delta_color="off",
-        )
-        c3.metric(
-            "Est. Metabolic Cost",
-            f"+{asym['metabolic_cost_pct']:.1f}%",
-            help="Szacowany dodatkowy koszt metaboliczny z asymetrii (Seminati 2020)",
-        )
-
-    # Leg Spring Stiffness
-    if "stance_time" in df_plot.columns and "verticaloscillation" in df_plot.columns:
-        has_any = True
-        gct_mean = df_plot["stance_time"].mean()
-        vo_mean = df_plot["verticaloscillation"].mean()
-        lss = calculate_leg_spring_stiffness(gct_mean, vo_mean, rider_weight)
-
-        c1, c2 = st.columns(2)
-        c1.metric(
-            "Vertical Stiffness (kvert)",
-            f"{lss['kvert_kn_m']:.1f} kN/m",
-            delta=lss["classification"],
-            delta_color="off",
-        )
-        c2.metric("GCT / VO", f"{gct_mean:.0f} ms / {vo_mean:.1f} cm")
-
-    if not has_any:
-        st.info("Brak danych biomechy (moc, stance_time, balance).")

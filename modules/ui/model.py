@@ -55,7 +55,7 @@ def _compute_actual_pdc(pace_data: pd.Series, n_points: int) -> tuple[list[int],
             val = pace_data.rolling(t).mean().min()
             if pd.notna(val):
                 y_actual.append(val)
-                x_actual.append(t)
+                x_actual.append(int(t))
 
     return x_actual, y_actual
 

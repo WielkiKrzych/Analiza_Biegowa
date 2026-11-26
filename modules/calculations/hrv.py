@@ -597,7 +597,7 @@ def _find_sustained_crossing(
             if candidate_idx is None:
                 candidate_idx = int(beat_idx)
                 candidate_time = t
-            elif t - candidate_time >= sustained_sec:
+            elif candidate_time is not None and t - candidate_time >= sustained_sec:
                 return candidate_idx, candidate_time
         else:
             candidate_idx = None

@@ -201,7 +201,7 @@ def find_peaks_numba(arr: np.ndarray, min_height: float, min_distance: int) -> n
     Returns indices of peaks.
     """
     n = len(arr)
-    peaks = []
+    peaks: list[float] = []
 
     for i in range(1, n - 1):
         # Check if peak

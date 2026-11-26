@@ -10,21 +10,16 @@ Split into submodules:
 - summary_analysis: durability, race prediction, BR, thermal, running effectiveness
 """
 
-from typing import Optional
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from modules.calculations.smo2_advanced import detect_smo2_thresholds_moxy
-from modules.calculations.thresholds import analyze_step_test
-
 from .summary_analysis import (
     _render_br_analysis_section,
     _render_durability_section,
     _render_race_prediction_section,
-    _render_running_effectiveness_section,
     _render_thermal_analysis_section,
 )
 from .summary_charts import (
@@ -53,48 +48,10 @@ __all__ = [
     "_render_race_prediction_section",
     "_render_br_analysis_section",
     "_render_thermal_analysis_section",
-    "_render_running_effectiveness_section",
     "_hash_dataframe",
     "_calculate_np",
     "_estimate_cp_wprime",
 ]
-
-
-def _resolve_hr_column(df_plot: pd.DataFrame) -> Optional[str]:
-    for alias in ["hr", "heartrate", "heart_rate", "bpm"]:
-        if alias in df_plot.columns:
-            return alias
-    return None
-
-
-def _run_threshold_detection(
-    df_plot: pd.DataFrame,
-    hr_col: Optional[str],
-    cp_input: int,
-) -> None:
-    threshold_result = analyze_step_test(
-        df_plot,
-        power_column="watts",
-        ve_column="tymeventilation" if "tymeventilation" in df_plot.columns else None,
-        smo2_column="smo2" if "smo2" in df_plot.columns else None,
-        hr_column=hr_col,
-        time_column="time",
-    )
-
-    if "smo2" in df_plot.columns:
-        hr_max = int(df_plot[hr_col].max()) if hr_col else None
-        detect_smo2_thresholds_moxy(
-            df=df_plot,
-            step_duration_sec=180,
-            smo2_col="smo2",
-            power_col="watts",
-            hr_col=hr_col,
-            time_col="time",
-            cp_watts=cp_input if cp_input > 0 else None,
-            hr_max=hr_max,
-            vt1_watts=threshold_result.vt1_watts,
-            rcp_onset_watts=threshold_result.vt2_watts,
-        )
 
 
 def _add_ve_trace(
@@ -261,9 +218,6 @@ def render_summary_tab(
 
     df_plot = df_plot.rename(columns={c: str(c).lower().strip() for c in df_plot.columns})
 
-    hr_col = _resolve_hr_column(df_plot)
-    _run_threshold_detection(df_plot, hr_col, cp_input)
-
     st.subheader("1️⃣ Przebieg Treningu")
     fig_training = _build_training_timeline_chart(df_plot)
     if fig_training is not None:
@@ -291,4 +245,3 @@ def render_summary_tab(
     _render_race_prediction_section(df_plot, rider_weight)
     _render_br_analysis_section(df_plot)
     _render_thermal_analysis_section(df_plot)
-    _render_running_effectiveness_section(df_plot, rider_weight)

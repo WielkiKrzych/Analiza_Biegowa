@@ -60,7 +60,7 @@ def _mean_pace(series: pd.Series) -> float:
 
 def calculate_pace_summary_stats(df: pd.DataFrame, threshold_pace: float) -> Dict:
     """Calculate summary statistics for pace data."""
-    stats = {}
+    stats: Dict = {}
 
     if "pace" in df.columns:
         paces = df["pace"].dropna()

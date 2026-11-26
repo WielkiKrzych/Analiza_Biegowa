@@ -165,7 +165,7 @@ def rolling_tte(history: List[Dict], window_days: int = 30) -> Dict[str, float]:
     }
 
 
-def compute_trend_data(history: List[Dict], windows: List[int] = None) -> Dict[int, Dict]:
+def compute_trend_data(history: List[Dict], windows: List[int] | None = None) -> Dict[int, Dict]:
     """Compute trend data for multiple rolling windows.
 
     Args:
@@ -375,7 +375,7 @@ def _collect_future_results(
 
 def batch_compute_tte_for_all_sessions(
     ftp: float,
-    target_pcts: List[float] = None,
+    target_pcts: List[float] | None = None,
     tol_pct: float = 5.0,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> Tuple[int, int]:

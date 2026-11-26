@@ -21,7 +21,7 @@ MMP_WINDOWS = {"5s": 5, "1m": 60, "5m": 300, "20m": 1200, "60m": 3600}
 
 
 @st.cache_data
-def _calculate_mmp_peaks(watts_series: pd.Series, windows: Dict[str, int]) -> Dict[str, float]:
+def _calculate_mmp_peaks(watts_series: pd.Series, windows: Dict[str, int]) -> Dict[str, float | None]:
     """Calculate Mean Maximal Power for multiple windows in a single pass.
 
     OPTIMIZATION: Single rolling calculation approach, caching results.
