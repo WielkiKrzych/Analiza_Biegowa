@@ -14,7 +14,6 @@ from modules.ui.vent_charts import (
     _render_tidal_volume_section,
     _render_ve_section,
 )
-from modules.ui.vent_legacy import _render_legacy_tools
 from modules.ui.vent_utils import _format_time, _parse_time_to_seconds
 
 _VENT_THEORY_MD = """
@@ -147,15 +146,15 @@ def _check_ve_quality(ve_series: pd.Series) -> None:
             st.caption(f"❌ {issue}")
 
 
-def _init_vent_session_state() -> None:
+def _init_vent_session_state(max_time: int) -> None:
     """Set default session_state values for vent / BR / TV chart ranges."""
     defaults: dict[str, int] = {
-        "vent_start_sec": 600,
-        "vent_end_sec": 1200,
-        "br_start_sec": 600,
-        "br_end_sec": 1200,
-        "tv_start_sec": 600,
-        "tv_end_sec": 1200,
+        "vent_start_sec": 0,
+        "vent_end_sec": min(1200, max_time),
+        "br_start_sec": 0,
+        "br_end_sec": min(1200, max_time),
+        "tv_start_sec": 0,
+        "tv_end_sec": min(1200, max_time),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -278,9 +277,6 @@ def _render_interval_analysis(
     st.markdown("---")
     _render_tidal_volume_section(target_df)
 
-    st.markdown("---")
-    _render_legacy_tools(interval_data)
-
 
 def _compute_ve_slope(
     interval_data: pd.DataFrame,
@@ -334,7 +330,7 @@ def render_vent_tab(target_df, training_notes, uploaded_file_name):
     # 2. Prepare data
     target_df = _prepare_vent_data(target_df)
     _check_ve_quality(target_df["tymeventilation"])
-    _init_vent_session_state()
+    _init_vent_session_state(int(target_df["time"].max()))
 
     # 3. Notes
     _render_vent_notes(target_df, training_notes, uploaded_file_name)
@@ -361,7 +357,7 @@ def _show_missing_vent_info(target_df: pd.DataFrame) -> None:
     available = [
         f"`{col}`"
         for col in target_df.columns
-        if col in ["watts", "heartrate", "smo2", "cadence", "core_temperature"]
+        if col in ["pace", "heartrate", "smo2", "cadence", "core_temperature"]
     ]
     st.info(
         """

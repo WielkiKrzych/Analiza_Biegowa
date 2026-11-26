@@ -21,6 +21,7 @@ def valid_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "time": np.arange(100, dtype=float),
+            "pace": 300.0,
             "watts": np.full(100, 200.0),
             "heartrate": np.full(100, 150.0),
         }
@@ -33,6 +34,7 @@ def valid_df_minimal() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "heartrate": np.full(20, 140.0),
         }
     )
@@ -44,6 +46,7 @@ def valid_df_with_cadence() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "time": np.arange(50, dtype=float),
+            "pace": 300.0,
             "cadence": np.full(50, 180.0),
         }
     )
@@ -80,6 +83,7 @@ def test_dataframe_with_smo2_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(30, dtype=float),
+            "pace": 300.0,
             "smo2": np.full(30, 75.0),
         }
     )
@@ -92,6 +96,7 @@ def test_dataframe_with_power_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(30, dtype=float),
+            "pace": 300.0,
             "power": np.full(30, 250.0),
         }
     )
@@ -104,6 +109,7 @@ def test_dataframe_exactly_at_min_length_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(10, dtype=float),  # MIN_DF_LENGTH = 10
+            "pace": 300.0,
             "watts": np.full(10, 200.0),
         }
     )
@@ -168,6 +174,7 @@ def test_too_few_records_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(5, dtype=float),  # Less than MIN_DF_LENGTH (10)
+            "pace": 300.0,
             "watts": np.full(5, 200.0),
         }
     )
@@ -186,6 +193,7 @@ def test_non_numeric_time_column_fails() -> None:
     df = pd.DataFrame(
         {
             "time": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o"],
+            "pace": 300.0,
             "watts": np.full(15, 200.0),
         }
     )
@@ -199,6 +207,7 @@ def test_all_nan_time_column_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.full(15, np.nan),
+            "pace": 300.0,
             "watts": np.full(15, 200.0),
         }
     )
@@ -212,6 +221,7 @@ def test_non_numeric_watts_converts_or_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(15, dtype=float),
+            "pace": 300.0,
             "watts": ["100", "200", "300"] * 5,
         }
     )
@@ -227,6 +237,7 @@ def test_non_numeric_heartrate_converts_or_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(15, dtype=float),
+            "pace": 300.0,
             "heartrate": ["140", "150", "160"] * 5,
         }
     )
@@ -240,6 +251,7 @@ def test_non_numeric_cadence_converts_or_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(15, dtype=float),
+            "pace": 300.0,
             "cadence": ["170", "180", "190"] * 5,
         }
     )
@@ -253,24 +265,12 @@ def test_non_numeric_cadence_converts_or_fails() -> None:
 # =============================================================================
 
 
-def test_watts_exceeds_max_limit_fails() -> None:
-    """Watts exceeding VALIDATION_MAX_WATTS should fail."""
-    df = pd.DataFrame(
-        {
-            "time": np.arange(20, dtype=float),
-            "watts": np.full(20, 5000.0),  # Exceeds VALIDATION_MAX_WATTS (3000)
-        }
-    )
-    is_valid, message = validate_dataframe(df)
-    assert is_valid is False
-    assert "moc" in message.lower() or "watts" in message.lower() or "przekracza" in message.lower()
-
-
 def test_heartrate_exceeds_max_limit_fails() -> None:
     """Heartrate exceeding VALIDATION_MAX_HR should fail."""
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "heartrate": np.full(20, 300.0),  # Exceeds VALIDATION_MAX_HR (250)
         }
     )
@@ -284,6 +284,7 @@ def test_cadence_exceeds_max_limit_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "cadence": np.full(20, 300.0),  # Exceeds VALIDATION_MAX_CADENCE (250)
         }
     )
@@ -297,6 +298,7 @@ def test_watts_at_max_limit_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "watts": np.full(20, 3000.0),  # Exactly VALIDATION_MAX_WATTS
         }
     )
@@ -309,6 +311,7 @@ def test_heartrate_at_max_limit_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "heartrate": np.full(20, 250.0),  # Exactly VALIDATION_MAX_HR
         }
     )
@@ -321,6 +324,7 @@ def test_cadence_at_max_limit_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "cadence": np.full(20, 250.0),  # Exactly VALIDATION_MAX_CADENCE
         }
     )
@@ -338,6 +342,7 @@ def test_dataframe_with_some_nan_values_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "watts": [200.0, np.nan, 210.0, np.nan] * 5,
         }
     )
@@ -350,6 +355,7 @@ def test_dataframe_with_negative_watts_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "watts": [-10.0, 0.0, 50.0] + [200.0] * 17,
         }
     )
@@ -362,6 +368,7 @@ def test_dataframe_with_zero_heartrate_passes() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "heartrate": [0.0, 150.0] * 10,
         }
     )
@@ -374,28 +381,14 @@ def test_multiple_validation_failures_reported() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(20, dtype=float),
+            "pace": 300.0,
             "watts": np.full(20, 5000.0),  # Exceeds max
             "heartrate": np.full(20, 300.0),  # Exceeds max
         }
     )
     is_valid, message = validate_dataframe(df)
     assert is_valid is False
-    # Should report both failures
-    assert "watts" in message.lower() or "moc" in message.lower()
     assert "heartrate" in message.lower() or "tętno" in message.lower()
-
-
-def test_all_invalid_watts_fails() -> None:
-    """Watts column with all invalid (non-convertible) values should fail."""
-    df = pd.DataFrame(
-        {
-            "time": np.arange(15, dtype=float),
-            "watts": ["invalid", "data", "here"] * 5,
-        }
-    )
-    is_valid, message = validate_dataframe(df)
-    assert is_valid is False
-    assert "watts" in message.lower() and "nieprawidłow" in message.lower()
 
 
 def test_all_invalid_heartrate_fails() -> None:
@@ -403,6 +396,7 @@ def test_all_invalid_heartrate_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(15, dtype=float),
+            "pace": 300.0,
             "heartrate": ["N/A", "N/A", "N/A"] * 5,
         }
     )
@@ -416,6 +410,7 @@ def test_all_invalid_cadence_fails() -> None:
     df = pd.DataFrame(
         {
             "time": np.arange(15, dtype=float),
+            "pace": 300.0,
             "cadence": ["--", "--", "--"] * 5,
         }
     )

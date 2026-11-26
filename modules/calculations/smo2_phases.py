@@ -181,8 +181,8 @@ def classify_smo2_slope(
 ) -> pd.Series:
     """Classify SmO2 slope as sustainable or unsustainable intensity.
 
-    Positive slope → delivery > extraction → sustainable (below CS/CP)
-    Negative slope → extraction > delivery → unsustainable (above CS/CP)
+    Positive slope indicates rising local oxygenation.
+    Negative slope indicates falling local oxygenation.
     Near-zero → at threshold
 
     Args:

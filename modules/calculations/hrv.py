@@ -4,7 +4,7 @@ SRP: Moduł odpowiedzialny za analizę HRV i DFA Alpha-1.
 
 import logging
 from collections import OrderedDict
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -156,73 +156,6 @@ def _fast_dfa_loop(time_values, rr_values, window_sec, step_sec):
 # ============================================================
 # DFA Quality Validation
 # ============================================================
-
-
-def validate_dfa_quality(
-    window_sec: int,
-    data_quality: float,
-    mean_alpha1: Optional[float],
-    windows_analyzed: int,
-    min_window_sec: int = 120,
-) -> Tuple[bool, List[str], str]:
-    """
-    Validate DFA-a1 result quality and determine uncertainty.
-
-    DFA-a1 is HIGHLY SENSITIVE to artifacts in RR data.
-    If conditions are not met, result should be marked as "uncertain".
-
-    Args:
-        window_sec: Window size used for DFA
-        data_quality: Ratio of valid samples (0-1)
-        mean_alpha1: Mean Alpha-1 value
-        windows_analyzed: Number of windows analyzed
-        min_window_sec: Minimum required window (default: 120s)
-
-    Returns:
-        Tuple of (is_uncertain, uncertainty_reasons, quality_grade)
-    """
-    is_uncertain = False
-    reasons = []
-    quality_grade = "A"
-
-    # Check 1: Minimum window length
-    if window_sec < min_window_sec:
-        is_uncertain = True
-        reasons.append(f"Okno {window_sec}s < minimum {min_window_sec}s")
-        quality_grade = "D"
-
-    # Check 2: Data quality (artifacts)
-    if data_quality < 0.9:
-        is_uncertain = True
-        reasons.append(f"Jakość danych {data_quality:.0%} < 90% (za dużo artefaktów)")
-        quality_grade = "D" if quality_grade != "D" else "F"
-    elif data_quality < 0.95:
-        reasons.append(f"Jakość danych {data_quality:.0%} - umiarkowana ilość artefaktów")
-        quality_grade = max("C", quality_grade)
-
-    # Check 3: Alpha1 range at moderate intensity
-    if mean_alpha1 is not None:
-        if mean_alpha1 < 0.5 or mean_alpha1 > 1.5:
-            is_uncertain = True
-            reasons.append(f"Alpha1 = {mean_alpha1:.2f} poza typowym zakresem [0.5-1.5]")
-            quality_grade = "D"
-
-    # Check 4: Minimum windows analyzed
-    if windows_analyzed < 3:
-        is_uncertain = True
-        reasons.append(f"Za mało okien ({windows_analyzed} < 3)")
-        quality_grade = "F"
-
-    # Determine final grade if not already set
-    if not is_uncertain and quality_grade == "A":
-        if data_quality >= 0.98 and windows_analyzed >= 10:
-            quality_grade = "A"
-        elif data_quality >= 0.95:
-            quality_grade = "B"
-        else:
-            quality_grade = "C"
-
-    return is_uncertain, reasons, quality_grade
 
 
 # Cache for DFA results with max size to prevent memory leak
@@ -597,7 +530,7 @@ def _find_sustained_crossing(
             if candidate_idx is None:
                 candidate_idx = int(beat_idx)
                 candidate_time = t
-            elif t - candidate_time >= sustained_sec:
+            elif candidate_time is not None and t - candidate_time >= sustained_sec:
                 return candidate_idx, candidate_time
         else:
             candidate_idx = None

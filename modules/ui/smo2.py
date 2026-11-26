@@ -6,10 +6,12 @@ from scipy import stats
 
 from modules.calculations.quality import check_signal_quality
 from modules.calculations.smo2_phases import (
+    SmO2PhaseResult,
     calculate_smo2_recovery_halftime,
     classify_smo2_slope,
     detect_smo2_phases,
 )
+from modules.notes import TrainingNotes
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -82,7 +84,7 @@ def _prepare_dataframe(target_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _render_notes_section(
-    training_notes: object,
+    training_notes: TrainingNotes,
     uploaded_file_name: str,
     max_time_min: float,
     mid_time_min: float,
@@ -190,9 +192,7 @@ def _render_manual_metrics(
         m3.metric("Śr. THb", f"{avg_thb:.2f} g/dL")
     else:
         cadence = interval_data["cadence"].mean() if "cadence" in interval_data.columns else 0
-        sport_type = st.session_state.get("sport_type", "unknown")
-        cad_unit = "SPM" if sport_type == "running" or "pace" in interval_data.columns else "rpm"
-        m3.metric("Śr. Kadencja", f"{cadence:.0f} {cad_unit}")
+        m3.metric("Śr. Kadencja", f"{cadence:.0f} SPM")
 
     trend_color = "inverse" if slope_smo2 < -0.01 else "normal"
     m4.metric("Trend SmO2 (Slope)", trend_desc, delta=trend_desc, delta_color=trend_color)
@@ -402,7 +402,7 @@ def _render_thb_chart(
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig_thb, use_container_width=True, key="thb_chart")
+    st.plotly_chart(fig_thb, width="stretch", key="thb_chart")
 
 
 # ---------------------------------------------------------------------------
@@ -468,7 +468,7 @@ def _render_phase_model(target_df: pd.DataFrame) -> None:
     _render_slope_classification(smo2_valid)
 
 
-def _render_phase_table(phase_result: object) -> None:
+def _render_phase_table(phase_result: SmO2PhaseResult) -> None:
     """Render the phase data table."""
     phase_rows = []
     for p in phase_result.phases:
@@ -484,7 +484,7 @@ def _render_phase_table(phase_result: object) -> None:
                 "R²": f"{p['r_squared']:.2f}",
             }
         )
-    st.dataframe(pd.DataFrame(phase_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(phase_rows), width="stretch", hide_index=True)
 
 
 def _render_recovery_halftime(smo2_valid: pd.Series) -> None:
@@ -514,61 +514,19 @@ def _render_slope_classification(smo2_valid: pd.Series) -> None:
     col_s1.metric(
         "Sustainable",
         f"{sus_pct:.0f}%",
-        help="Slope > 0: dostawa > zużycie (poniżej CS/CP)",
+        help="Slope > 0: dostawa > zużycie (przy malejącym obciążeniu)",
     )
     col_s2.metric("Threshold", f"{thr_pct:.0f}%", help="Slope ≈ 0: na progu")
     col_s3.metric(
         "Unsustainable",
         f"{unsus_pct:.0f}%",
-        help="Slope < 0: zużycie > dostawa (powyżej CS/CP)",
+        help="Slope < 0: zużycie > dostawa (przy rosnącym obciążeniu)",
     )
 
 
 # ---------------------------------------------------------------------------
 # Legacy tools
 # ---------------------------------------------------------------------------
-
-
-def _render_legacy_tools(interval_data: pd.DataFrame) -> None:
-    """Render the legacy scatter-plot and interval-THb sections."""
-    with st.expander("🔧 Szczegółowa Analiza (Legacy Tools)", expanded=False):
-        st.markdown("### Surowe Dane i Korelacje")
-        _render_scatter_watts(interval_data)
-        _render_interval_thb(interval_data)
-
-
-def _render_scatter_watts(interval_data: pd.DataFrame) -> None:
-    """SmO2 vs Watts scatter plot (legacy)."""
-    if "watts" not in interval_data.columns:
-        return
-
-    interval_time_str = pd.to_datetime(interval_data["time"], unit="s").dt.strftime("%H:%M:%S")
-    fig_scatter = go.Figure()
-    fig_scatter.add_trace(
-        go.Scatter(
-            x=interval_data["watts"],
-            y=interval_data["smo2"],
-            customdata=interval_time_str,
-            mode="markers",
-            marker=dict(
-                size=6,
-                color=interval_data["time"],
-                colorscale="Viridis",
-                showscale=True,
-                colorbar=dict(title="Czas (s)"),
-            ),
-            name="SmO2 vs Power",
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
-        )
-    )
-    fig_scatter.update_layout(
-        title="Korelacja: SmO2 vs Moc",
-        xaxis_title="Moc [W]",
-        yaxis_title="SmO2 (%)",
-        height=400,
-        hovermode="closest",
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
 
 
 def _render_interval_thb(interval_data: pd.DataFrame) -> None:
@@ -598,7 +556,7 @@ def _render_interval_thb(interval_data: pd.DataFrame) -> None:
         height=300,
         hovermode="x unified",
     )
-    st.plotly_chart(fig_thb, use_container_width=True)
+    st.plotly_chart(fig_thb, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -718,7 +676,7 @@ def _render_theory_section() -> None:
 
 def _compute_interval_stats(
     interval_data: pd.DataFrame,
-) -> tuple[float, float, float, float | None, float, float, str]:
+) -> tuple[float, float, float | None, float, float, str]:
     """Return ``(avg_pace_min, avg_smo2, avg_thb_or_none, slope, intercept, trend_desc)``."""
     avg_pace = interval_data["pace"].mean() if "pace" in interval_data.columns else 0
     avg_pace_min = avg_pace / 60.0 if avg_pace > 0 else 0
@@ -747,7 +705,7 @@ def _compute_interval_stats(
 
 def render_smo2_tab(
     target_df: pd.DataFrame | None,
-    training_notes: object,
+    training_notes: TrainingNotes,
     uploaded_file_name: str,
 ) -> None:
     """Main SmO2 analysis tab renderer."""
@@ -768,9 +726,9 @@ def render_smo2_tab(
 
     # Initialise session_state defaults
     if "smo2_start_sec" not in st.session_state:
-        st.session_state.smo2_start_sec = 600
+        st.session_state.smo2_start_sec = 0
     if "smo2_end_sec" not in st.session_state:
-        st.session_state.smo2_end_sec = 1200
+        st.session_state.smo2_end_sec = min(1200, int(target_df["time"].max()))
 
     # Notes
     n_rows = len(target_df)
@@ -814,7 +772,7 @@ def render_smo2_tab(
     )
     selected = st.plotly_chart(
         fig_smo2,
-        use_container_width=True,
+        width="stretch",
         key="smo2_chart",
         on_select="rerun",
         selection_mode="box",
@@ -832,7 +790,7 @@ def render_smo2_tab(
     st.markdown("---")
 
     # Legacy tools
-    _render_legacy_tools(interval_data)
+    _render_interval_thb(interval_data)
 
     # Theory
     _render_theory_section()

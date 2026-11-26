@@ -4,7 +4,6 @@ from modules.calculations.pace_utils import (
     format_pace,
     pace_to_seconds,
     pace_to_speed,
-    seconds_to_pace_str,
     speed_to_pace,
 )
 
@@ -46,9 +45,3 @@ def test_pace_to_seconds():
     assert pace_to_seconds("5:00") == 300
     assert pace_to_seconds("4:30") == 270
     assert pace_to_seconds("6:15") == 375
-
-
-def test_seconds_to_pace_str():
-    """Test converting seconds to mm:ss string."""
-    assert seconds_to_pace_str(300) == "5:00"
-    assert seconds_to_pace_str(270) == "4:30"

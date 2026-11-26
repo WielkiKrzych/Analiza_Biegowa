@@ -44,7 +44,7 @@ jobs:
         # Tighten `[tool.mypy]` incrementally as the codebase is annotated.
         run: |
           if command -v mypy &> /dev/null; then
-            mypy modules/ services/ models/ --config-file pyproject.toml
+            mypy modules/ services/ --config-file pyproject.toml
           else
             echo "mypy not found, skipping type-check (install with: pip install mypy)"
           fi

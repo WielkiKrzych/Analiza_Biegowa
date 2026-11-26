@@ -35,7 +35,7 @@ def _render_scatter_plots(df_plot: pd.DataFrame, has_smo2: bool) -> None:
     with col1:
         fig_pace_hr = scatter_pace_hr(df_plot, title="Tempo vs HR")
         if fig_pace_hr:
-            st.plotly_chart(fig_pace_hr, use_container_width=True)
+            st.plotly_chart(fig_pace_hr, width="stretch")
         else:
             st.info("Za mało danych do wygenerowania wykresu Tempo vs HR.")
 
@@ -43,7 +43,7 @@ def _render_scatter_plots(df_plot: pd.DataFrame, has_smo2: bool) -> None:
         if has_smo2:
             fig_pace_smo2 = scatter_pace_smo2(df_plot, title="Tempo vs SmO₂")
             if fig_pace_smo2:
-                st.plotly_chart(fig_pace_smo2, use_container_width=True)
+                st.plotly_chart(fig_pace_smo2, width="stretch")
             else:
                 st.info("Za mało danych SmO₂ do wygenerowania wykresu.")
         else:
@@ -81,7 +81,7 @@ def _render_manual_pace_drift(df_plot: pd.DataFrame) -> None:
     )
 
     if fig_drift:
-        st.plotly_chart(fig_drift, use_container_width=True)
+        st.plotly_chart(fig_drift, width="stretch")
         _display_drift_metrics(drift_metrics)
     else:
         pace_min = pace_target_sec / 60.0
@@ -116,7 +116,7 @@ def _render_segment_drift(df_plot: pd.DataFrame, segments: list) -> None:
     )
 
     if fig_drift:
-        st.plotly_chart(fig_drift, use_container_width=True)
+        st.plotly_chart(fig_drift, width="stretch")
         _display_drift_metrics(drift_metrics)
     else:
         st.warning("Nie można obliczyć dryfu dla wybranego segmentu.")

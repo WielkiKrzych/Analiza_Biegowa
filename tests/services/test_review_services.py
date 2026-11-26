@@ -34,6 +34,7 @@ def _text_typed_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "time": [float(i) for i in range(n)],
+            "pace": 300.0,
             "watts": [str(200 + i % 10) for i in range(n)],
             "heartrate": ["150"] * n,
         }
@@ -78,7 +79,8 @@ def test_power_column_survives_processing_when_source_was_text():
         "reported as pace-estimated even though it carried real power"
     )
     assert processed["watts"].sum() > 0
-    assert pd.api.types.is_numeric_dtype(processed["watts_smooth"])
+    assert pd.api.types.is_numeric_dtype(processed["watts"])
+    assert processed["watts"].tolist() == df["watts"].tolist()
 
 
 def test_numeric_frames_are_not_copied_by_validation():
@@ -86,6 +88,7 @@ def test_numeric_frames_are_not_copied_by_validation():
     df = pd.DataFrame(
         {
             "time": [float(i) for i in range(60)],
+            "pace": 300.0,
             "watts": [200.0] * 60,
             "heartrate": [150] * 60,
         }
@@ -128,13 +131,14 @@ def test_declared_data_columns_are_coerced_not_dropped() -> None:
     assert pd.api.types.is_numeric_dtype(df["speed"])
 
 
-def test_non_numeric_pace_is_logged_not_rejected(caplog) -> None:
-    """Pace as "4:30" must not block the import (it did not before, either)."""
+def test_bad_pace_is_logged_and_speed_remains_usable(caplog) -> None:
+    """Keep usable speed when some exporters provide unparseable pace."""
     df = pd.DataFrame(
         {
             "time": [float(i) for i in range(60)],
             "watts": [200.0] * 60,
-            "pace": ["4:30"] * 60,
+            "pace": ["bad"] * 60,
+            "speed": 4.0,
         }
     )
 
@@ -143,3 +147,4 @@ def test_non_numeric_pace_is_logged_not_rejected(caplog) -> None:
 
     assert is_valid, error
     assert any("pace" in record.getMessage() for record in caplog.records)
+    assert (df["pace"] == 250.0).all()

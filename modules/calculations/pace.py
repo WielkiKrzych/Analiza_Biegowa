@@ -8,26 +8,20 @@ PERFORMANCE: Uses Numba JIT for speed-critical calculations.
 """
 
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
 import numpy as np
 import pandas as pd
-
-from modules.numba_utils import is_numba_available
+from numba import njit
 
 from .common import ensure_pandas
 from .pace_utils import format_pace, speed_to_pace
 
 logger = logging.getLogger(__name__)
 
-NUMBA_AVAILABLE = is_numba_available()
-
-if NUMBA_AVAILABLE:
-    from numba import njit
-
 
 def calculate_pace_zones_time(
-    df_pl: Union[pd.DataFrame, Any], threshold_pace: float, zones: dict = None
+    df_pl: Union[pd.DataFrame, Any], threshold_pace: float, zones: dict | None = None
 ) -> dict:
     """
     Calculate time spent in each pace zone.
@@ -93,47 +87,47 @@ def calculate_pace_zones_time(
 DEFAULT_PDC_DURATIONS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200]
 
 
-if NUMBA_AVAILABLE:
+@njit(cache=True)
+def _calculate_pdc_numba(speed: np.ndarray, durations: np.ndarray) -> np.ndarray:
+    """Best mean SPEED for each duration, via a sliding-window sum.
 
-    @njit(cache=True)
-    def _calculate_pdc_numba(speed: np.ndarray, durations: np.ndarray) -> np.ndarray:
-        """Best mean SPEED for each duration, via a sliding-window sum.
+    Works in speed space on purpose: the best N-second pace is
+    distance / time, i.e. the harmonic mean of pace, which equals the
+    arithmetic mean of speed. Averaging pace directly would report a
+    pace the athlete never actually held.
+    """
+    n = len(speed)
+    m = len(durations)
+    results = np.empty(m, dtype=np.float64)
 
-        Works in speed space on purpose: the best N-second pace is
-        distance / time, i.e. the harmonic mean of pace, which equals the
-        arithmetic mean of speed. Averaging pace directly would report a
-        pace the athlete never actually held.
-        """
-        n = len(speed)
-        m = len(durations)
-        results = np.empty(m, dtype=np.float64)
+    for i in range(m):
+        duration = int(durations[i])
+        if n < duration or duration <= 0:
+            results[i] = np.nan
+            continue
 
-        for i in range(m):
-            duration = int(durations[i])
-            if n < duration or duration <= 0:
-                results[i] = np.nan
-                continue
+        window_sum = 0.0
+        for j in range(duration):
+            window_sum += speed[j]
+        best_sum = window_sum
 
-            window_sum = 0.0
-            for j in range(duration):
-                window_sum += speed[j]
-            best_sum = window_sum
+        for j in range(duration, n):
+            window_sum += speed[j] - speed[j - duration]
+            if window_sum > best_sum:
+                best_sum = window_sum
 
-            for j in range(duration, n):
-                window_sum += speed[j] - speed[j - duration]
-                if window_sum > best_sum:
-                    best_sum = window_sum
+        best_speed = best_sum / duration
+        if best_speed <= 0.0:
+            results[i] = np.nan
+        else:
+            results[i] = best_speed
 
-            best_speed = best_sum / duration
-            if best_speed <= 0.0:
-                results[i] = np.nan
-            else:
-                results[i] = best_speed
-
-        return results
+    return results
 
 
-def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: list = None) -> dict:
+def calculate_pace_duration_curve(
+    df_pl: Union[pd.DataFrame, Any], durations: list | None = None
+) -> dict:
     """Calculate Pace Duration Curve (best pace for each duration).
 
     Similar to Power Duration Curve but for pace.
@@ -164,7 +158,7 @@ def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: li
             return None
         return float(1000.0 / best_speed)
 
-    if NUMBA_AVAILABLE and n > 100:
+    if n > 100:
         try:
             durations_arr = np.array(durations, dtype=np.float64)
             results_arr = _calculate_pdc_numba(speed, durations_arr)
@@ -290,7 +284,7 @@ def classify_running_phenotype(pdc: dict, weight: float = 0.0) -> str:
     )
 
     # Find highest scoring phenotype
-    phenotype = max(scores, key=scores.get)
+    phenotype = max(scores, key=scores.__getitem__)
 
     if scores[phenotype] == 0:
         return "unknown"
@@ -385,7 +379,7 @@ def estimate_vo2max_from_pace(vvo2max_pace: float, weight: float = 0.0) -> float
     return round(vo2max, 1)
 
 
-def calculate_fatigue_resistance_index_pace(pdc: Dict[int, float]) -> float:
+def calculate_fatigue_resistance_index_pace(pdc: Dict[int, float | None]) -> float:
     """
     Calculate Fatigue Resistance Index for pace.
 
@@ -437,11 +431,17 @@ def get_fri_interpretation_pace(fri: float) -> str:
 _CS_DURATIONS = [120, 180, 300, 600, 900, 1200]
 
 
-def fit_critical_speed_from_pdc(
-    df: pd.DataFrame,
-    pace_col: str = "pace",
-    time_col: str = "time",
-) -> Dict[str, object]:
+class CriticalSpeedFit(TypedDict):
+    cs_m_s: float
+    cs_pace_s_km: float
+    cs_pace_str: str
+    d_prime_m: float
+    r_squared: float
+    data_points: int
+    is_valid: bool
+
+
+def fit_critical_speed_from_pdc(df: pd.DataFrame) -> CriticalSpeedFit:
     """Fit Critical Speed (CS) and D' from best efforts in activity data.
 
     Uses the linear distance-time model: distance = CS * time + D'.
@@ -460,7 +460,7 @@ def fit_critical_speed_from_pdc(
         times.append(dur)
         distances.append(speed * dur)  # meters
 
-    if len(times) < 2:
+    if len(times) < 3:
         return {
             "cs_m_s": 0.0,
             "cs_pace_s_km": 0.0,
@@ -489,54 +489,5 @@ def fit_critical_speed_from_pdc(
         "d_prime_m": round(d_prime, 1),
         "r_squared": round(r_sq, 4),
         "data_points": len(times),
-        "is_valid": r_sq > 0.95 and cs > 0,
+        "is_valid": r_sq > 0.95 and cs > 0 and intercept > 0,
     }
-
-
-def calculate_wbal_running(
-    pace_series: pd.Series,
-    cs_pace: float,
-    d_prime_m: float,
-    time_col: Optional[pd.Series] = None,
-) -> pd.Series:
-    """W'bal equivalent for running (D'bal) using Skiba's differential model.
-
-    Depletes D' when speed exceeds CS and reconstitutes when below.
-    tau = 546 * exp(-0.01 * (CS - speed)) + 316  (Skiba 2015).
-
-    Args:
-        pace_series: Pace in s/km (1 Hz assumed).
-        cs_pace: Critical Speed expressed as pace in s/km.
-        d_prime_m: D' capacity in metres.
-        time_col: Unused, kept for API compatibility.
-
-    Returns:
-        pd.Series of D'bal values (metres remaining).
-    """
-    pace_arr = pace_series.values.astype(np.float64)
-    n = len(pace_arr)
-
-    # Convert pace (s/km) -> speed (m/s); guard against zero / nan
-    with np.errstate(divide="ignore", invalid="ignore"):
-        speed_arr = np.where((pace_arr > 0) & np.isfinite(pace_arr), 1000.0 / pace_arr, 0.0)
-
-    cs_speed = 1000.0 / cs_pace if cs_pace > 0 else 0.0
-    dt = 1.0  # 1 Hz sampling
-
-    dbal = np.empty(n, dtype=np.float64)
-    dbal[0] = d_prime_m
-
-    for i in range(1, n):
-        speed = speed_arr[i]
-        prev = dbal[i - 1]
-
-        if speed > cs_speed:
-            # Depletion
-            dbal[i] = max(prev - (speed - cs_speed) * dt, 0.0)
-        else:
-            # Reconstitution (Skiba 2015 tau model)
-            diff = cs_speed - speed
-            tau = 546.0 * np.exp(-0.01 * diff) + 316.0
-            dbal[i] = prev + (d_prime_m - prev) * (1.0 - np.exp(-diff * dt / tau))
-
-    return pd.Series(dbal, index=pace_series.index, name="dbal")

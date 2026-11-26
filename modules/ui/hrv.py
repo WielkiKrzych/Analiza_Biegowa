@@ -38,22 +38,13 @@ def _render_trigger_button(df_clean_pl: Any) -> None:
 
 
 def _interpolate_columns(df_dfa: Any, df_clean_pl: Any) -> Any:
-    """Add interpolated watts/hr and time_min columns to df_dfa."""
+    """Add interpolated HR and time_min columns to df_dfa."""
     df_clean = df_clean_pl.to_pandas() if hasattr(df_clean_pl, "to_pandas") else df_clean_pl
 
     orig_times = df_clean["time"].values
-    orig_watts = (
-        df_clean["watts_smooth"].values
-        if "watts_smooth" in df_clean.columns
-        else np.zeros(len(orig_times))
-    )
     orig_hr = (
-        df_clean["heartrate_smooth"].values
-        if "heartrate_smooth" in df_clean.columns
-        else np.zeros(len(orig_times))
+        df_clean["heartrate"].values if "heartrate" in df_clean else np.full(len(df_clean), np.nan)
     )
-
-    df_dfa["watts"] = np.interp(df_dfa["time"], orig_times, orig_watts)
     df_dfa["hr"] = np.interp(df_dfa["time"], orig_times, orig_hr)
     df_dfa["time_min"] = df_dfa["time"] / 60.0
     return df_dfa, df_clean
@@ -115,12 +106,12 @@ def _render_dfa_chart(df_dfa: Any) -> None:
     fig_dfa.add_trace(
         go.Scatter(
             x=df_dfa["time_min"],
-            y=df_dfa["watts"],
-            name="Moc",
+            y=df_dfa["hr"],
+            name="Tętno",
             yaxis="y2",
             fill="tozeroy",
             line=dict(width=0.5, color="rgba(255,255,255,0.1)"),
-            hovertemplate="Moc: %{y:.0f} W<extra></extra>",
+            hovertemplate="Tętno: %{y:.0f} bpm<extra></extra>",
         )
     )
 
@@ -160,13 +151,13 @@ def _render_dfa_chart(df_dfa: Any) -> None:
             ticktext=tick_text,
         ),
         yaxis=dict(title="Indeks HRV (Alpha-1)", range=[0.2, 1.4]),
-        yaxis2=dict(title="Moc [W]", overlaying="y", side="right", showgrid=False),
+        yaxis2=dict(title="Tętno [bpm]", overlaying="y", side="right", showgrid=False),
         height=500,
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1.05, x=0),
     )
 
-    st.plotly_chart(fig_dfa, use_container_width=True)
+    st.plotly_chart(fig_dfa, width="stretch")
 
 
 def _render_rmssd_chart(df_dfa: Any) -> None:
@@ -189,12 +180,12 @@ def _render_rmssd_chart(df_dfa: Any) -> None:
     fig_rmssd.add_trace(
         go.Scatter(
             x=df_dfa["time_min"],
-            y=df_dfa["watts"],
-            name="Moc",
+            y=df_dfa["hr"],
+            name="Tętno",
             yaxis="y2",
             fill="tozeroy",
             line=dict(width=0.5, color="rgba(255,255,255,0.1)"),
-            hovertemplate="Moc: %{y:.0f} W<extra></extra>",
+            hovertemplate="Tętno: %{y:.0f} bpm<extra></extra>",
         )
     )
     time_vals = (
@@ -215,12 +206,12 @@ def _render_rmssd_chart(df_dfa: Any) -> None:
             ticktext=tick_text,
         ),
         yaxis=dict(title="RMSSD [ms]"),
-        yaxis2=dict(title="Moc [W]", overlaying="y", side="right", showgrid=False),
+        yaxis2=dict(title="Tętno [bpm]", overlaying="y", side="right", showgrid=False),
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1.05, x=0),
     )
-    st.plotly_chart(fig_rmssd, use_container_width=True)
+    st.plotly_chart(fig_rmssd, width="stretch")
 
 
 def _render_poincare_plot(df_clean: Any) -> None:
@@ -292,7 +283,7 @@ def _render_poincare_plot(df_clean: Any) -> None:
 
     c_p1, c_p2 = st.columns([2, 1])
     with c_p1:
-        st.plotly_chart(fig_poincare, use_container_width=True)
+        st.plotly_chart(fig_poincare, width="stretch")
     with c_p2:
         st.info(f"""
         **📊 Interpretacja Kliniczna:**
@@ -377,16 +368,10 @@ def _render_ddfa_and_thresholds(df_dfa: Any) -> None:
 
 def _render_hrv_thresholds(df_dfa: Any) -> None:
     """Detect and render HRVT1/HRVT2 threshold metrics."""
-    if "hr" not in df_dfa.columns and "watts" not in df_dfa.columns:
+    if "hr" not in df_dfa or not (df_dfa["hr"] > 0).any():
+        st.info("Brak tętna do analizy progów HRV.")
         return
-
-    intensity_col = "watts" if "watts" in df_dfa.columns and df_dfa["watts"].sum() > 0 else None
-    if intensity_col is None and "hr" in df_dfa.columns:
-        intensity_col = "hr"
-
-    if not intensity_col:
-        return
-
+    intensity_col = "hr"
     thresholds = detect_hrv_thresholds(df_dfa["alpha1"], df_dfa[intensity_col])
     if not thresholds.get("hrvt1_intensity"):
         st.info(
@@ -395,7 +380,7 @@ def _render_hrv_thresholds(df_dfa: Any) -> None:
         return
 
     col_t1, col_t2 = st.columns(2)
-    unit = "W" if intensity_col == "watts" else "bpm"
+    unit = "bpm"
     col_t1.metric(
         "HRVT1 (α1=0.75)",
         f"{thresholds['hrvt1_intensity']:.0f} {unit}",

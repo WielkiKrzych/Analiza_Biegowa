@@ -7,9 +7,11 @@ Handles DataFrame validation logic for uploaded training files.
 import logging
 from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from modules.config import Config
+from modules.utils import derive_pace
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +64,10 @@ def _validate_column_range(
 
 def _validate_numeric_columns(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], List[str]]:
     """Validate and coerce numeric columns; returns (df, failure_messages)."""
-    failures: List[str] = []
+    failures: List[str | None] = []
 
     # These three block the import when they cannot be coerced (unchanged).
-    for col in ("watts", "heartrate", "cadence"):
+    for col in ("heartrate", "cadence"):
         df, err = _ensure_numeric(df, col)
         if err is not None:
             return None, [err]
@@ -76,22 +78,17 @@ def _validate_numeric_columns(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame],
     # dashboard lost e.g. `pace` without a word. Coercion here keeps them. A column
     # that is genuinely non-numeric (pace as "4:30") only gets logged: rejecting the
     # whole file would block imports that work today.
-    for col in (*Config.VALIDATION_DATA_COLS, "hr"):
-        if col in ("watts", "heartrate", "cadence") or col not in df.columns:
+    for col in ("watts", "pace", "speed", "speed_m_s", "velocity_smooth", "smo2", "hr"):
+        if col not in df.columns:
             continue
         if pd.api.types.is_numeric_dtype(df[col]):
             continue
         coerced = pd.to_numeric(df[col], errors="coerce")
         if coerced.isna().all():
-            logger.warning(
-                "Kolumna '%s' nie jest liczbowa i zostanie pominieta w analizie.", col
-            )
+            logger.warning("Kolumna '%s' nie jest liczbowa i zostanie pominieta w analizie.", col)
             continue
         df[col] = coerced
 
-    failures.append(
-        _validate_column_range(df, "watts", Config.VALIDATION_MAX_WATTS, "Moc maksymalna", "W")
-    )
     failures.append(
         _validate_column_range(df, "heartrate", Config.VALIDATION_MAX_HR, "Tętno maksymalne", "bpm")
     )
@@ -108,8 +105,14 @@ def _validate_time_column(df: pd.DataFrame) -> Optional[str]:
         return None
     if not pd.api.types.is_numeric_dtype(df["time"]):
         return "Kolumna 'time' musi być liczbowa."
-    if df["time"].isnull().all():
+    time = df["time"]
+    if time.isna().all():
         return "Kolumna 'time' zawiera same wartości puste (NaN)."
+    if not np.isfinite(time).all() or not time.is_monotonic_increasing:
+        return "Kolumna 'time' musi zawierać uporządkowane, skończone sekundy."
+    elapsed = time.iloc[-1] - time.iloc[0]
+    if not 0 < elapsed <= 7 * 24 * 3600:
+        return "Sprawdź jednostkę czasu [s] i odstęp między pierwszą i ostatnią próbką."
     return None
 
 
@@ -136,16 +139,8 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     cols = df.columns
 
     # 2. Required Columns
-    for req in Config.VALIDATION_REQUIRED_COLS:
-        if req not in cols:
-            return False, f"Brak wymaganej kolumny: '{req}'"
-
-    # 3. Data Presence
-    if not any(col in cols for col in Config.VALIDATION_DATA_COLS):
-        return (
-            False,
-            f"Brak wymaganych kolumn danych. Oczekiwane przynajmniej jedna z: {Config.VALIDATION_DATA_COLS}",
-        )
+    if "time" not in cols:
+        return False, "Brak wymaganej kolumny: 'time'"
 
     # 4. Length Check
     if len(df) < Config.MIN_DF_LENGTH:
@@ -163,5 +158,9 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
 
     if validation_failures:
         return False, "Błędy walidacji danych:\n" + "\n".join(validation_failures)
+
+    derive_pace(df)
+    if "pace" not in df or not df["pace"].gt(0).any():
+        return False, "Brak użytecznych danych tempa [s/km] lub prędkości [m/s]."
 
     return True, ""

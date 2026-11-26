@@ -6,12 +6,10 @@ Charts, metrics, and visualizations for running analysis.
 
 from typing import Dict
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from modules.calculations.dual_mode import calculate_normalized_pace, calculate_running_stress_score
 from modules.calculations.pace import (
     calculate_fatigue_resistance_index_pace,
     calculate_pace_duration_curve,
@@ -22,24 +20,6 @@ from modules.calculations.pace import (
 )
 from modules.calculations.pace_utils import format_pace
 from modules.plots import apply_chart_style
-
-
-def get_pace_zone_color(pace: float, threshold_pace: float) -> str:
-    """Get color for pace zone."""
-    if threshold_pace <= 0:
-        return "#808080"
-    ratio = pace / threshold_pace
-
-    if ratio > 1.15:
-        return "#3498db"  # Blue - Recovery
-    elif ratio > 1.05:
-        return "#2ecc71"  # Green - Aerobic
-    elif ratio > 0.95:
-        return "#f1c40f"  # Yellow - Tempo
-    elif ratio > 0.88:
-        return "#e67e22"  # Orange - Threshold
-    else:
-        return "#e74c3c"  # Red - Interval/Repetition
 
 
 def _mean_pace(series: pd.Series) -> float:
@@ -60,7 +40,7 @@ def _mean_pace(series: pd.Series) -> float:
 
 def calculate_pace_summary_stats(df: pd.DataFrame, threshold_pace: float) -> Dict:
     """Calculate summary statistics for pace data."""
-    stats = {}
+    stats: Dict = {}
 
     if "pace" in df.columns:
         paces = df["pace"].dropna()
@@ -77,138 +57,6 @@ def calculate_pace_summary_stats(df: pd.DataFrame, threshold_pace: float) -> Dic
         stats["time_in_zones"] = calculate_pace_zones_time(df, threshold_pace)
 
     return stats
-
-
-def render_pace_chart(df: pd.DataFrame, threshold_pace: float):
-    """Render pace chart with zones."""
-    if "pace" not in df.columns:
-        st.warning("Brak danych tempa")
-        return
-
-    PACE_CAP = 600
-    fig = go.Figure()
-
-    pace_data = df["pace"].clip(upper=PACE_CAP)
-
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=[PACE_CAP] * len(df),
-            mode="lines",
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=pace_data,
-            name="Tempo",
-            fill="tonexty",
-            fillcolor="rgba(52, 152, 219, 0.3)",
-            line=dict(color="#3498db", width=1.5),
-            hovertemplate="Tempo: %{customdata}<extra></extra>",
-            customdata=[format_pace(p) for p in pace_data],
-        )
-    )
-
-    if "gap" in df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df["gap"].clip(upper=PACE_CAP),
-                mode="lines",
-                name="GAP",
-                line=dict(color="#2ecc71", width=2, dash="dash"),
-            )
-        )
-
-    fig.add_hline(
-        y=threshold_pace,
-        line_dash="dot",
-        line_color="red",
-        annotation_text=f"Próg ({format_pace(threshold_pace)})",
-    )
-
-    pace_min_val = max(120, int(pace_data.min() // 30 * 30))
-    y_tickvals = list(range(pace_min_val, PACE_CAP + 1, 30))
-    y_ticktext = [format_pace(v) for v in y_tickvals]
-
-    fig.update_layout(
-        title="Tempo podczas biegu",
-        xaxis_title="Czas",
-        yaxis=dict(
-            title="Tempo [min/km]",
-            autorange="reversed",
-            tickvals=y_tickvals,
-            ticktext=y_ticktext,
-            range=[PACE_CAP, pace_min_val],
-        ),
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_pace_zones_bar(time_in_zones: Dict[str, int]):
-    """Render bar chart of time in pace zones."""
-    if not time_in_zones:
-        return
-
-    zones = list(time_in_zones.keys())
-    times = [time_in_zones[z] / 60 for z in zones]
-
-    colors = ["#3498db", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c", "#9b59b6"]
-
-    fig = go.Figure(data=[go.Bar(x=zones, y=times, marker_color=colors[: len(zones)])])
-
-    fig.update_layout(title="Czas w strefach tempa", yaxis_title="Czas (min)", xaxis_title="Strefa")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_running_metrics_cards(
-    avg_pace: float, threshold_pace: float, distance_km: float, rss: float
-):
-    """Render running metrics cards."""
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric(
-            "Srednie tempo",
-            format_pace(avg_pace),
-            help=f"Prog: {format_pace(threshold_pace)}",
-        )
-
-    with col2:
-        st.metric("Dystans", f"{distance_km:.2f} km")
-
-    with col3:
-        st.metric("RSS", f"{rss:.0f}", help="Running Stress Score")
-
-    with col4:
-        if threshold_pace > 0:
-            intensity = threshold_pace / avg_pace if avg_pace > 0 else 0
-            st.metric("IF", f"{intensity:.2f}", help="Intensity Factor")
-
-
-# ===========================================================================
-# MAIN TAB RENDERER
-# ===========================================================================
-
-
-def _format_duration(seconds: int) -> str:
-    """Format seconds to human-readable duration."""
-    if seconds < 60:
-        return f"{seconds}s"
-    elif seconds < 3600:
-        mins = seconds // 60
-        secs = seconds % 60
-        return f"{mins}:{secs:02d}" if secs else f"{mins}min"
-    else:
-        hours = seconds // 3600
-        mins = (seconds % 3600) // 60
-        return f"{hours}h{mins:02d}" if mins else f"{hours}h"
 
 
 # ===========================================================================
@@ -237,7 +85,7 @@ def _build_time_x_ticks(x_data: "pd.Series | pd.Index") -> tuple[list[int], list
 
 def _render_pace_chart(df_plot: pd.DataFrame, threshold_pace: float) -> None:
     """Render Section 1: Pace chart with D' balance, GAP overlay, and interpretation."""
-    st.subheader("🏃 Wykres Tempa i D' Balance")
+    st.subheader("Tempo i GAP")
 
     fig_pace = go.Figure()
 
@@ -245,7 +93,7 @@ def _render_pace_chart(df_plot: pd.DataFrame, threshold_pace: float) -> None:
     x_data = df_plot[time_col] if isinstance(time_col, str) else time_col
 
     PACE_CAP = 600  # 10:00/km
-    pace_smooth = df_plot["pace"].rolling(window=10, min_periods=1, center=True).mean()
+    pace_smooth = df_plot.get("pace_smooth", df_plot["pace"]).where(df_plot["pace"].gt(0))
     pace_clipped = pace_smooth.clip(upper=PACE_CAP)
 
     fig_pace.add_trace(
@@ -314,7 +162,7 @@ def _render_pace_chart(df_plot: pd.DataFrame, threshold_pace: float) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
         height=450,
     )
-    st.plotly_chart(apply_chart_style(fig_pace), use_container_width=True)
+    st.plotly_chart(apply_chart_style(fig_pace), width="stretch")
 
     st.info("""
     **💡 Interpretacja: Zarządzanie Tempem**
@@ -394,54 +242,6 @@ def _render_pace_zones(df_plot: pd.DataFrame, threshold_pace: float) -> None:
     """)
 
 
-def _render_key_metrics(
-    df_plot: pd.DataFrame,
-    threshold_pace: float,
-    duration_sec: float,
-) -> tuple[float, dict[int, float | None] | None]:
-    """Render Section 3: RSS + key pace metrics.
-
-    Returns (distance_km, pdc) so downstream sections can reuse them.
-    """
-    st.subheader("📊 Kluczowe Metryki Biegowe")
-
-    np_pace = calculate_normalized_pace(df_plot)
-    rss = calculate_running_stress_score(df_plot, threshold_pace, duration_sec)
-
-    distance_km = 0.0
-    if "distance" in df_plot.columns and df_plot["distance"].max() > 0:
-        distance_km = float(df_plot["distance"].max()) / 1000.0
-
-    avg_pace = duration_sec / distance_km if distance_km > 0 else float(df_plot["pace"].mean())
-    intensity_factor = threshold_pace / np_pace if np_pace > 0 else 0
-
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric(
-        "Tempo Normalizowane",
-        format_pace(np_pace),
-        help="Tempo znormalizowane algorytmem 4-potęgowym (jak NP dla mocy)",
-    )
-    col_m2.metric("RSS", f"{rss:.0f}", help=f"Running Stress Score (IF: {intensity_factor:.2f})")
-    col_m3.metric("Średnie Tempo", format_pace(avg_pace))
-    col_m4.metric("Dystans", f"{distance_km:.2f} km")
-
-    # ==================== 4. PACE DURATION CURVE ====================
-    st.subheader("📈 Pace Duration Curve (PDC)")
-
-    pdc = calculate_pace_duration_curve(df_plot)
-    if not pdc:
-        st.info("Brak wystarczających danych do obliczenia PDC.")
-        return distance_km, None
-
-    valid_pdc = {d: p for d, p in pdc.items() if p is not None}
-    if not valid_pdc:
-        st.info("Brak wystarczających danych do obliczenia PDC.")
-        return distance_km, None
-
-    _render_pdc_metrics_and_chart(pdc, valid_pdc, threshold_pace)
-    return distance_km, pdc
-
-
 def _render_pdc_metrics_and_chart(
     pdc: dict[int, float | None],
     valid_pdc: dict[int, float],
@@ -501,7 +301,7 @@ def _render_pdc_metrics_and_chart(
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(apply_chart_style(fig_pdc), use_container_width=True)
+    st.plotly_chart(apply_chart_style(fig_pdc), width="stretch")
 
     fri = calculate_fatigue_resistance_index_pace(pdc)
     if fri > 0:
@@ -509,123 +309,9 @@ def _render_pdc_metrics_and_chart(
         st.info(f"**Fatigue Resistance Index (FRI):** {fri:.3f} — {fri_interp}")
 
 
-def _render_durability(
-    df_plot: pd.DataFrame,
-    duration_sec: float,
-    has_pace: bool,
-) -> None:
-    """Render Section 5: Durability & Decoupling (Pa:HR) with EF trend."""
-    st.subheader("🛡️ Wytrzymalosc i Decoupling (Pa:HR)")
-
-    min_duration_min = 20
-    has_hr = "heartrate" in df_plot.columns
-
-    if duration_sec < min_duration_min * 60:
-        st.info(f"Potrzeba minimum {min_duration_min} minut biegu z HR do analizy decoupling.")
-        return
-
-    if has_pace and has_hr:
-        _render_durability_full(df_plot)
-    elif has_pace:
-        _render_durability_simple(df_plot)
-    else:
-        st.info(f"Potrzeba minimum {min_duration_min} minut biegu z HR do analizy decoupling.")
-
-
-def _render_durability_full(df_plot: pd.DataFrame) -> None:
-    """Render full durability analysis with HR data (Pa:HR, EF trend)."""
-    from modules.calculations.durability import (
-        calculate_aerobic_decoupling,
-        calculate_durability_index,
-        detect_decoupling_onset,
-    )
-
-    decoupling = calculate_aerobic_decoupling(df_plot["pace"], df_plot["heartrate"])
-    dur_idx = calculate_durability_index(df_plot["pace"], df_plot["heartrate"])
-    onset = detect_decoupling_onset(df_plot["pace"], df_plot["heartrate"])
-
-    col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-    col_d1.metric(
-        "Pa:HR Decoupling",
-        f"{decoupling['decoupling_pct']:.1f}%",
-        delta=decoupling["classification"],
-        delta_color="off",
-        help="<5% = excellent aerobic base (Friel/TrainingPeaks)",
-    )
-    col_d2.metric(
-        "Durability Score",
-        f"{dur_idx['durability_score']:.0f}/100",
-        delta=dur_idx["classification"],
-        delta_color="off",
-        help="Jones 2024 — composite fatigue resistance metric",
-    )
-    col_d3.metric("Pace CV", f"{dur_idx['pace_cv_pct']:.1f}%")
-    onset_str = (
-        f"{onset.get('onset_time_sec', 0) // 60:.0f} min" if onset.get("onset_time_sec") else "brak"
-    )
-    col_d4.metric("Onset Driftu", onset_str, help="Smyth 2025 — moment rozpoczęcia driftu")
-
-    # EF trend chart
-    if "ef_series" in onset and onset["ef_series"] is not None:
-        ef_s = onset["ef_series"].dropna()
-        if len(ef_s) > 60:
-            _render_ef_trend_chart(ef_s, onset)
-
-    st.caption(f"{decoupling.get('interpretation', '')}")
-
-
-def _render_ef_trend_chart(ef_s: "pd.Series", onset: dict) -> None:
-    """Render the Efficiency Factor trend chart with optional onset marker."""
-    fig_ef = go.Figure()
-    t_min = np.arange(len(ef_s)) / 60.0
-    fig_ef.add_trace(
-        go.Scatter(
-            x=t_min,
-            y=ef_s.values,
-            name="EF (speed/HR)",
-            line=dict(color="#3498db", width=2),
-        )
-    )
-    if onset.get("onset_time_sec"):
-        fig_ef.add_vline(
-            x=onset["onset_time_sec"] / 60,
-            line_dash="dash",
-            line_color="#E74C3C",
-            annotation_text="Onset",
-        )
-    fig_ef.update_layout(
-        template="plotly_dark",
-        height=250,
-        xaxis_title="Czas [min]",
-        yaxis_title="Efficiency Factor",
-        margin=dict(l=20, r=20, t=30, b=20),
-    )
-    st.plotly_chart(fig_ef, use_container_width=True)
-
-
-def _render_durability_simple(df_plot: pd.DataFrame) -> None:
-    """Render simplified durability: pace split comparison without HR."""
-    half = len(df_plot) // 2
-    avg_pace_first = df_plot["pace"].iloc[:half].mean()
-    avg_pace_second = df_plot["pace"].iloc[half:].mean()
-    durability = (avg_pace_first / avg_pace_second) * 100 if avg_pace_first > 0 else 100.0
-
-    col_d1, col_d2, col_d3 = st.columns(3)
-    delta_color = "normal" if durability >= 97 else "inverse"
-    col_d1.metric(
-        "Durability",
-        f"{durability:.1f}%",
-        delta=f"{durability - 100:.1f}%",
-        delta_color=delta_color,
-    )
-    col_d2.metric("1. polowa", format_pace(avg_pace_first))
-    col_d3.metric("2. polowa", format_pace(avg_pace_second))
-
-
 def _render_phenotype(
     pdc: dict[int, float | None] | None,
     runner_weight: float,
-    df_plot: pd.DataFrame | None = None,
 ) -> None:
     """Render Section 6: Runner phenotype classification with VO2max estimation."""
     st.subheader("🧬 Profil Biegacza (Fenotyp)")
@@ -650,21 +336,6 @@ def _render_phenotype(
         unsafe_allow_html=True,
     )
 
-    # VO2max — Sitko et al. 2021 (power-based) for consistency across all tabs
-    from modules.calculations.canonical_physio import calculate_vo2max_acsm
-
-    if df_plot is not None and "watts" in df_plot.columns and runner_weight > 0:
-        rolling_5min = df_plot["watts"].rolling(window=300, min_periods=300).mean()
-        mmp_5min = rolling_5min.max()
-        if not pd.isna(mmp_5min):
-            vo2max_est = calculate_vo2max_acsm(mmp_5min, runner_weight)
-            if vo2max_est > 0:
-                st.metric(
-                    "Est. VO2max",
-                    f"{vo2max_est:.1f} ml/kg/min",
-                    help="Estymacja modelowa (Sitko et al. 2021): VO2max = 16.61 + 8.87 × 5' max power (W/kg)",
-                )
-
     with st.expander("📚 Jak interpretować fenotyp biegacza?"):
         st.markdown("""
         ### Typy biegaczy
@@ -677,14 +348,6 @@ def _render_phenotype(
         | 🦶 Ultra-biegacz | Niesamowita wytrzymałość | Wytrwałość, psychika | Objętość, back-to-back |
         | 🔄 Wszechstronny | Zbalansowany profil | Adaptacja | Periodyzacja |
 
-        ### VO2max — poziomy
-        | VO2max (ml/kg/min) | Mężczyźni | Kobiety |
-        |---|---|---|
-        | 75+ | Światowa klasa | Światowa klasa |
-        | 60-75 | Bardzo dobry | Elitarny |
-        | 50-60 | Dobry amator | Bardzo dobry |
-        | 40-50 | Przeciętny | Dobry |
-        | <40 | Początkujący | Przeciętny |
         """)
 
 
@@ -709,25 +372,21 @@ def render_running_tab(df_plot, threshold_pace, runner_weight):
         )
         return
 
-    # 1. Pace chart + D' balance
+    # Pace chart and zones
     _render_pace_chart(df_plot, threshold_pace)
 
     # 2. Pace zones
     _render_pace_zones(df_plot, threshold_pace)
 
-    # 3. Key metrics + 4. PDC
-    duration_sec: float = len(df_plot)
-    if "time" in df_plot.columns and len(df_plot) > 1:
-        duration_sec = float(df_plot["time"].iloc[-1] - df_plot["time"].iloc[0])
+    stats = calculate_pace_summary_stats(df_plot, threshold_pace)
+    if stats.get("avg_pace"):
+        st.metric("Średnie tempo", format_pace(stats["avg_pace"]) + " /km")
 
-    _distance_km, pdc = _render_key_metrics(df_plot, threshold_pace, duration_sec)
-
-    st.divider()
-
-    # 5. Durability & decoupling
-    _render_durability(df_plot, duration_sec, has_pace)
-
-    st.divider()
-
-    # 6. Phenotype
-    _render_phenotype(pdc, runner_weight, df_plot)
+    st.subheader("Krzywa tempa (PDC)")
+    pdc = calculate_pace_duration_curve(df_plot)
+    valid_pdc = {duration: pace for duration, pace in pdc.items() if pace is not None}
+    if valid_pdc:
+        _render_pdc_metrics_and_chart(pdc, valid_pdc, threshold_pace)
+    else:
+        st.info("Za mało danych do obliczenia krzywej tempa.")
+    _render_phenotype(pdc, runner_weight)

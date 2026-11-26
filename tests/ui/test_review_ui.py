@@ -71,9 +71,13 @@ def st_stub(monkeypatch):
     ):
         _install(name)
     _install("expander")
-    _install("columns", lambda spec, *a, **k: [_NullContext(calls, "column") for _ in range(
-        spec if isinstance(spec, int) else len(spec)
-    )])
+    _install(
+        "columns",
+        lambda spec, *a, **k: [
+            _NullContext(calls, "column")
+            for _ in range(spec if isinstance(spec, int) else len(spec))
+        ],
+    )
     return calls
 
 
@@ -150,10 +154,7 @@ def test_session_defaults_match_config(monkeypatch):
 
     assert state["weight"] == Config.DEFAULT_BODY_WEIGHT_KG
     assert state["height"] == Config.DEFAULT_RUNNER_HEIGHT_CM
-    assert state["age"] == Config.DEFAULT_RUNNER_AGE_YEARS
     assert state["threshold_pace"] == Config.DEFAULT_THRESHOLD_PACE_SEC_PER_KM
-    assert state["lthr"] == Config.DEFAULT_LTHR_BPM
-    assert state["max_hr"] == Config.DEFAULT_MAX_HR_BPM
 
 
 # ---------------------------------------------------------------------------
@@ -161,14 +162,8 @@ def test_session_defaults_match_config(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_biomech_uses_sidebar_weight_and_height(monkeypatch, st_stub):
-    """Biomech must read the keys the sidebar actually writes.
-
-    Pre-review: it looked up "rider_weight"/"runner_height" — keys no widget
-    ever writes — so it silently used 70 kg / 175 cm while the summary tab
-    called the very same ``_render_running_effectiveness_section`` with the
-    sidebar weight, printing a different number for the same file.
-    """
+def test_biomech_uses_sidebar_height(monkeypatch, st_stub):
+    """The stride length card uses the height actually entered in the sidebar."""
     from modules.ui import biomech
 
     captured: dict = {}
@@ -187,17 +182,11 @@ def test_biomech_uses_sidebar_weight_and_height(monkeypatch, st_stub):
         "_render_stride_length_section",
         lambda df, height: captured.setdefault("height", height),
     )
-    monkeypatch.setattr(
-        biomech,
-        "_render_running_effectiveness_section",
-        lambda df, weight: captured.setdefault("weight", weight),
-    )
-
     import pandas as pd
 
     biomech.render_biomech_tab(pd.DataFrame({"pace": [300.0]}), pd.DataFrame({"pace": [300.0]}))
 
-    assert captured == {"height": 190, "weight": 88.0}
+    assert captured == {"height": 190}
 
 
 def test_vo_pace_effectiveness_uses_sidebar_height(monkeypatch, st_stub):

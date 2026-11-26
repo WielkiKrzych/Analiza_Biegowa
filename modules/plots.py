@@ -1,6 +1,3 @@
-import plotly.graph_objects as go
-
-
 def apply_chart_style(fig, title=None):
     fig.update_layout(
         template="plotly_dark",
@@ -16,17 +13,3 @@ def apply_chart_style(fig, title=None):
         hovermode="x unified",
     )
     return fig
-
-
-def add_stats_to_legend(fig, stats_list):
-    for stat in stats_list:
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(color="rgba(0,0,0,0)"),
-                name=stat,
-                hoverinfo="none",
-            )
-        )

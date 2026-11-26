@@ -5,11 +5,9 @@ Integration tests for running analysis pipeline.
 import numpy as np
 import pandas as pd
 
-from modules.calculations.d_prime import calculate_d_prime_balance
-from modules.calculations.dual_mode import calculate_running_stress_score, detect_available_metrics
+from modules.calculations.dual_mode import calculate_running_stress_score
 from modules.calculations.gap import calculate_gap
 from modules.calculations.pace import calculate_pace_duration_curve, calculate_pace_zones_time
-from modules.calculations.race_predictor import predict_race_times
 from modules.calculations.running_dynamics import calculate_cadence_stats
 
 
@@ -32,20 +30,9 @@ def test_full_running_pipeline():
     zones = calculate_pace_zones_time(df, threshold_pace=300)
     assert len(zones) > 0
 
-    # Test D' balance
-    d_balance = calculate_d_prime_balance(
-        df["pace"].values, df["time"].values, critical_speed_pace=300, d_prime_capacity=200
-    )
-    assert len(d_balance) == n_samples
-
     # Test running dynamics
     cadence_stats = calculate_cadence_stats(df["cadence"].values)
     assert cadence_stats["mean_spm"] > 0
-
-    # Test dual mode
-    metrics = detect_available_metrics(df)
-    assert metrics["has_pace"]
-    assert metrics["has_power"]
 
 
 def test_pace_duration_curve_integration():
@@ -81,24 +68,6 @@ def test_gap_calculation():
     # Downhill should make GAP slower
     gap_downhill = calculate_gap(pace, grade=-5.0)
     assert gap_downhill > pace
-
-
-def test_race_predictions():
-    """Test race time predictions."""
-    # Predict 10K from 5K time
-    predictions = predict_race_times(
-        known_distance_km=5,
-        known_time_sec=1500,  # 25:00 5K
-    )
-
-    assert "5K" in predictions
-    assert "10K" in predictions
-    assert "Half Marathon" in predictions
-    assert "Marathon" in predictions
-
-    # Times should increase with distance
-    assert predictions["10K"] > predictions["5K"]
-    assert predictions["Marathon"] > predictions["Half Marathon"]
 
 
 def test_rss_calculation():

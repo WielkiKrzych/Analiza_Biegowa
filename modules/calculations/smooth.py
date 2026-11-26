@@ -18,18 +18,15 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from .common import WINDOW_LONG, WINDOW_SHORT
+from modules.config import Config
 
 # Columns that get a `_smooth` (long) and `_smooth_5s` (short) twin.
 SMOOTH_COLS: List[str] = [
-    "watts",
     "heartrate",
     "cadence",
     "smo2",
-    "torque",
     "core_temperature",
     "skin_temperature",
-    "velocity_smooth",
     "tymebreathrate",
     "tymeventilation",
     "thb",
@@ -41,7 +38,7 @@ SMOOTH_COLS: List[str] = [
 def apply_smoothing(df_resampled: pd.DataFrame) -> pd.DataFrame:
     """Create smoothed versions of key columns including pace.
 
-    For linear metrics (watts, HR, cadence, ...) the rolling mean is
+    For linear metrics (HR, cadence, ...) the rolling mean is
     correct. For `pace`, we smooth in the speed domain and convert back
     to avoid the nonlinearity bias.
 
@@ -50,16 +47,16 @@ def apply_smoothing(df_resampled: pd.DataFrame) -> pd.DataFrame:
     for col in SMOOTH_COLS:
         if col in df_resampled.columns:
             df_resampled[f"{col}_smooth"] = (
-                df_resampled[col].rolling(window=WINDOW_LONG, min_periods=1).mean()
+                df_resampled[col].rolling(window=Config.SMOOTH_WINDOW, min_periods=1).mean()
             )
             df_resampled[f"{col}_smooth_5s"] = (
-                df_resampled[col].rolling(window=WINDOW_SHORT, min_periods=1).mean()
+                df_resampled[col].rolling(window=Config.SMOOTH_WINDOW_SHORT, min_periods=1).mean()
             )
 
     if "pace" in df_resampled.columns:
         pace_raw = df_resampled["pace"].replace(0, np.nan)
         speed_raw = 1000.0 / pace_raw
-        speed_smooth = speed_raw.rolling(window=WINDOW_LONG, min_periods=1).mean()
+        speed_smooth = speed_raw.rolling(window=Config.SMOOTH_WINDOW, min_periods=1).mean()
         df_resampled["pace_smooth"] = 1000.0 / speed_smooth.replace(0, np.nan)
 
     return df_resampled

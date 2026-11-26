@@ -5,7 +5,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from modules.calculations import calculate_trend
+from modules.calculations.metrics import calculate_trend
+from modules.calculations.pace_utils import format_pace
 from modules.config import Config
 
 # ============================================================
@@ -21,261 +22,28 @@ MMP_WINDOWS = {"5s": 5, "1m": 60, "5m": 300, "20m": 1200, "60m": 3600}
 
 
 @st.cache_data
-def _calculate_mmp_peaks(watts_series: pd.Series, windows: Dict[str, int]) -> Dict[str, float]:
-    """Calculate Mean Maximal Power for multiple windows in a single pass.
-
-    OPTIMIZATION: Single rolling calculation approach, caching results.
-    Previous: O(5n) - 5 separate rolling operations
-    Current: O(n) + caching - one calculation, cached per session
-
-    Args:
-        watts_series: Power data series
-        windows: Dict of label -> window size in seconds
-
-    Returns:
-        Dict of label -> MMP value
-    """
-    results = {}
-    for label, window_size in windows.items():
-        if len(watts_series) >= window_size:
-            # Rolling with min_periods optimization
-            rolling_mean = watts_series.rolling(window_size, min_periods=window_size).mean()
-            max_val = rolling_mean.max()
-            results[label] = float(max_val) if not pd.isna(max_val) else None
+def _render_kpi_section(metrics: dict) -> None:
+    """Present the same running metrics as the session summary."""
+    st.subheader("Wskaźniki sesji")
+    for column, (label, key, pattern) in zip(
+        st.columns(4),
+        (
+            ("Średnie tempo", "avg_pace", None),
+            ("Średnie GAP", "avg_gap", None),
+            ("Średnie tętno", "avg_hr", "{:.0f} bpm"),
+            ("Szac. VO2max", "vo2_max_est", "{:.1f}"),
+        ),
+        strict=True,
+    ):
+        value = metrics.get(key)
+        if value is None:
+            formatted = "brak"
+        elif pattern is None:
+            formatted = f"{format_pace(value)} /km"
         else:
-            results[label] = None
-    return results
-
-
-def _calculate_zone_distribution(watts: pd.Series, cp: float) -> pd.Series:
-    """Calculate power zone distribution without copying entire DataFrame.
-
-    OPTIMIZATION: Work on Series only, not full DataFrame copy.
-    Previous: O(n) memory for full df.copy()
-    Current: O(n) for Series (much smaller)
-
-    Args:
-        watts: Power series only (not full DataFrame)
-        cp: Critical Power
-
-    Returns:
-        Series with zone percentages indexed by zone label
-    """
-    if cp <= 0:
-        return pd.Series(0.0, index=ZONE_LABELS)
-    bins = [0, 0.55 * cp, 0.75 * cp, 0.90 * cp, 1.05 * cp, 1.20 * cp, float("inf")]
-    zones = pd.cut(watts, bins=bins, labels=ZONE_LABELS, right=False)
-    # value_counts with normalize=True avoids extra division
-    pcts = zones.value_counts(normalize=True, sort=False).sort_index() * 100
-    return pcts.round(1)
-
-
-# ============================================================
-# Private helpers for render_report_tab
-# ============================================================
-
-
-def _render_kpi_section(
-    metrics: dict,
-    df_plot: pd.DataFrame,
-    rider_weight: float,
-    decoupling_percent: float,
-    drift_z2: float,
-) -> None:
-    """Render the KPI metrics cards section.
-
-    ``rider_weight`` is part of the bundle `render_report_tab` receives and is
-    kept on the signature; the VO2max card no longer needs it because the
-    estimate comes from the pipeline (see below).
-    """
-    st.subheader("📊 Kluczowe Wskaźniki Wydajności (KPI)")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Średnia Moc", f"{metrics.get('avg_watts', 0):.0f} W")
-    c2.metric("Średnie Tętno", f"{metrics.get('avg_hr', 0):.0f} BPM")
-    c3.metric("Średnie SmO2", f"{df_plot['smo2'].mean() if 'smo2' in df_plot.columns else 0:.1f} %")
-    c4.metric(
-        "Kadencja", f"{metrics.get('avg_cadence', 0):.0f} SPM"
-    )  # FIX: SPM (steps/min) for running, not RPM
-
-    # `vo2_max_est` is the canonical estimate: computed once per session in
-    # `services/session_analysis.calculate_extended_metrics` with
-    # `calculate_vo2max_acsm` (Sitko et al. 2021) over a 300 s window.
-    #
-    # The card renders "--" whenever the canonical estimate is missing, so a
-    # session too short to produce one no longer prints a bare "0.0".
-    vo2max_est = (metrics or {}).get("vo2_max_est") or 0.0
-    c5.metric(
-        "Szac. VO2max",
-        f"{vo2max_est:.1f}" if vo2max_est > 0 else "--",
-        help="Estymowane na podstawie mocy 5-minutowej (ACSM).",
-    )
-
-    st.divider()
-    c5, c6, c7, c8 = st.columns(4)
-    c5.metric("Power/HR", f"{metrics.get('power_hr', 0):.2f}")
-    c6.metric("Efficiency (EF)", f"{metrics.get('ef_factor', 0):.2f}")
-    c7.metric("Praca > CP", f"{metrics.get('work_above_cp_kj', 0):.0f} kJ")
-    c8.metric("Wentylacja (VE)", f"{metrics.get('avg_vent', 0):.1f} L/min")
-
-    st.divider()
-    c9, c10, c11, c12 = st.columns(4)
-    c9.metric(
-        "Dryf (Pa:Hr)",
-        f"{decoupling_percent:.1f} %",
-        delta_color="inverse" if decoupling_percent < 5 else "normal",
-    )
-    c10.metric("Dryf Z2", f"{drift_z2:.1f} %", delta_color="inverse" if drift_z2 < 5 else "normal")
-
-    max_hsi = df_plot["hsi"].max() if "hsi" in df_plot.columns else 0
-    c11.metric("Max HSI", f"{max_hsi:.1f}", delta_color="normal" if max_hsi > 5 else "inverse")
-    c12.metric("Oddechy (RR)", f"{metrics.get('avg_rr', 0):.1f} /min")
-
-    st.markdown("---")
-
-
-def _add_trace_if_present(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    time_x: pd.Series,
-    col: str,
-    name: str,
-    color: str,
-    yaxis: str = "y",
-    fill: str | None = None,
-    dash: str | None = None,
-    hovertemplate: str = "%{y}<extra></extra>",
-    width: int | float = 2,
-) -> bool:
-    """Add a scatter trace to fig if column exists. Returns True if added."""
-    if col not in df.columns:
-        return False
-    fig.add_trace(
-        go.Scatter(
-            x=time_x,
-            y=df[col],
-            name=name,
-            fill=fill or "none",
-            line=dict(color=color, width=width, dash=dash or "solid"),
-            yaxis=yaxis,
-            hovertemplate=hovertemplate,
-        )
-    )
-    return True
-
-
-def _add_pace_trace(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    time_x: pd.Series,
-    yaxis: str = "y",
-    width: int | float = 2,
-    dash: str = "dot",
-) -> bool:
-    """Add a pace trace with mm:ss hover format. Returns True if added."""
-    if "pace" not in df.columns and "pace_smooth" not in df.columns:
-        return False
-    pace_col = "pace_smooth" if "pace_smooth" in df.columns else "pace"
-    pace_data = df[pace_col] / 60.0  # Convert s/km to min/km
-    # Format mm:ss/km for hover
-    pace_hover = [
-        f"{int(p)}:{int((p % 1) * 60):02d} /km" if pd.notna(p) else "--:--" for p in pace_data
-    ]
-    fig.add_trace(
-        go.Scatter(
-            x=time_x,
-            y=pace_data,
-            name="Tempo",
-            line=dict(color="#00d4aa", width=width, dash=dash),
-            yaxis=yaxis,
-            hovertemplate="Tempo: %{customdata}<extra></extra>",
-            customdata=pace_hover,
-        )
-    )
-    return True
-
-
-def _render_training_overview(df_plot: pd.DataFrame) -> None:
-    """Render the training overview chart with power, HR, SmO2, VE, and pace traces."""
-    st.subheader("Przebieg Treningu")
-    fig_exec = go.Figure()
-
-    time_x = df_plot["time_min"] if "time_min" in df_plot.columns else None
-    if time_x is None:
-        return
-
-    _add_trace_if_present(
-        fig_exec,
-        df_plot,
-        time_x,
-        "watts_smooth",
-        "Moc",
-        Config.COLOR_POWER,
-        fill="tozeroy",
-        hovertemplate="Moc: %{y:.0f} W<extra></extra>",
-        width=1,
-    )
-    _add_trace_if_present(
-        fig_exec,
-        df_plot,
-        time_x,
-        "heartrate_smooth",
-        "HR",
-        Config.COLOR_HR,
-        yaxis="y2",
-        hovertemplate="HR: %{y:.0f} bpm<extra></extra>",
-        width=2,
-    )
-    _add_trace_if_present(
-        fig_exec,
-        df_plot,
-        time_x,
-        "smo2_smooth",
-        "SmO2",
-        Config.COLOR_SMO2,
-        yaxis="y3",
-        dash="dot",
-        hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
-        width=2,
-    )
-    _add_trace_if_present(
-        fig_exec,
-        df_plot,
-        time_x,
-        "tymeventilation_smooth",
-        "VE",
-        Config.COLOR_VE,
-        yaxis="y4",
-        dash="dash",
-        hovertemplate="VE: %{y:.1f} L/min<extra></extra>",
-        width=2,
-    )
-    _add_pace_trace(fig_exec, df_plot, time_x, yaxis="y5", width=2, dash="dot")
-
-    fig_exec.update_layout(
-        template="plotly_dark",
-        height=500,
-        yaxis=dict(title="Moc [W]"),
-        yaxis2=dict(title="HR", overlaying="y", side="right", showgrid=False),
-        yaxis3=dict(
-            title="SmO2",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            showticklabels=False,
-            range=[0, 100],
-        ),
-        yaxis4=dict(title="VE", overlaying="y", side="right", showgrid=False, showticklabels=False),
-        yaxis5=dict(
-            title="Tempo [min/km]",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            autorange="reversed",
-        ),
-        legend=dict(orientation="h", y=1.05, x=0),
-        hovermode="x unified",
-    )
-    st.plotly_chart(fig_exec, use_container_width=True)
+            formatted = pattern.format(value)
+        column.metric(label, formatted)
+    st.caption("Szacunek VO2max na podstawie najlepszego tempa z 5 minut.")
 
 
 def _render_hr_distribution(df_plot: pd.DataFrame) -> None:
@@ -312,105 +80,7 @@ def _render_hr_distribution(df_plot: pd.DataFrame) -> None:
         bargap=0.1,
         margin=dict(t=20, b=20),
     )
-    st.plotly_chart(fig_hr, use_container_width=True)
-
-
-def _render_drift_chart(df_plot_resampled: pd.DataFrame) -> None:
-    """Render the drift visualization chart with power, HR, SmO2, and pace."""
-    if "watts_smooth" not in df_plot_resampled.columns:
-        return
-
-    fig_dec = go.Figure()
-    fig_dec.add_trace(
-        go.Scatter(
-            x=df_plot_resampled["time_min"],
-            y=df_plot_resampled["watts_smooth"],
-            name="Moc",
-            line=dict(color=Config.COLOR_POWER, width=1.5),
-            hovertemplate="Moc: %{y:.0f} W<extra></extra>",
-        )
-    )
-
-    _add_trace_if_present(
-        fig_dec,
-        df_plot_resampled,
-        df_plot_resampled["time_min"],
-        "heartrate_smooth",
-        "HR",
-        Config.COLOR_HR,
-        yaxis="y2",
-        hovertemplate="HR: %{y:.0f} BPM<extra></extra>",
-        width=1.5,
-    )
-    _add_trace_if_present(
-        fig_dec,
-        df_plot_resampled,
-        df_plot_resampled["time_min"],
-        "smo2_smooth",
-        "SmO2",
-        Config.COLOR_SMO2,
-        yaxis="y3",
-        dash="dot",
-        hovertemplate="SmO2: %{y:.1f}%<extra></extra>",
-        width=1.5,
-    )
-    _add_pace_trace(
-        fig_dec, df_plot_resampled, df_plot_resampled["time_min"], yaxis="y4", width=1.5
-    )
-
-    fig_dec.update_layout(
-        template="plotly_dark",
-        title="Dryf Mocy, Tętna i SmO2 w Czasie",
-        hovermode="x unified",
-        yaxis=dict(title="Moc [W]"),
-        yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
-        yaxis3=dict(
-            title="SmO2 [%]",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            showticklabels=False,
-            range=[0, 100],
-        ),
-        yaxis4=dict(
-            title="Tempo [min/km]",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            autorange="reversed",
-        ),
-        legend=dict(orientation="h", y=1.1, x=0),
-    )
-    st.plotly_chart(fig_dec, use_container_width=True)
-
-    st.info("""
-    **💡 Interpretacja: Fizjologia Zmęczenia (Triada: Moc - HR - SmO2)**
-
-    Ten wykres pokazuje "koszt fizjologiczny" utrzymania zadanej mocy w czasie.
-
-    **1. Stan Idealny (Brak Dryfu):**
-    * **Moc (Zielony):** Linia płaska (stałe obciążenie).
-    * **Tętno (Czerwony):** Linia płaska (równoległa do mocy).
-    * **SmO2 (Fiolet):** Stabilne.
-    * **Wniosek:** Jesteś w pełnej równowadze tlenowej. Możesz tak jechać godzinami.
-
-    **2. Dryf Sercowo-Naczyniowy (Cardiac Drift):**
-    * **Moc:** Stała.
-    * **Tętno:** Powoli rośnie (rozjeżdża się z linią mocy).
-    * **SmO2:** Stabilne.
-    * **Przyczyna:** Odwodnienie (spadek objętości osocza) lub przegrzanie (krew ucieka do skóry). Serce musi bić szybciej, by pompować tę samą ilość tlenu.
-
-    **3. Zmęczenie Metaboliczne (Metabolic Fatigue):**
-    * **Moc:** Stała.
-    * **Tętno:** Stabilne lub lekko rośnie.
-    * **SmO2:** **Zaczyna spadać.**
-    * **Przyczyna:** Mięśnie tracą wydajność (rekrutacja włókien szybkokurczliwych II typu, które zużywają więcej tlenu). To pierwszy sygnał nadchodzącego "odcięcia".
-
-    **4. "Zgon" (Bonking/Failure):**
-    * **Moc:** Zaczyna spadać (nie jesteś w stanie jej utrzymać).
-    * **Tętno:** Może paradoksalnie spadać (zmęczenie układu nerwowego) lub rosnąć (panika organizmu).
-    * **SmO2:** Gwałtowny spadek lub chaotyczne skoki.
-    """)
+    st.plotly_chart(fig_hr, width="stretch")
 
 
 def _render_smo2_column(df_plot_resampled: pd.DataFrame) -> None:
@@ -460,7 +130,7 @@ def _render_smo2_column(df_plot_resampled: pd.DataFrame) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
         height=400,
     )
-    st.plotly_chart(fig_s, use_container_width=True)
+    st.plotly_chart(fig_s, width="stretch")
 
     st.info("""
     **💡 Hemodynamika Mięśniowa (SmO2) - Lokalny Monitoring:**
@@ -495,7 +165,7 @@ def _render_hr_column(df_plot_resampled: pd.DataFrame) -> None:
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
         )
-        st.plotly_chart(fig_h, use_container_width=True)
+        st.plotly_chart(fig_h, width="stretch")
     else:
         st.info("Brak danych tętna (HR)")
 
@@ -588,7 +258,7 @@ def _render_ventilation_section(
         margin=dict(l=10, r=10, t=40, b=10),
         height=450,
     )
-    st.plotly_chart(fig_v, use_container_width=True)
+    st.plotly_chart(fig_v, width="stretch")
 
     st.info("""
     **💡 Interpretacja: Mechanika Oddychania**
@@ -605,56 +275,13 @@ def _render_ventilation_section(
 # ============================================================
 
 
-def render_report_tab(
-    df_plot: pd.DataFrame,
-    df_plot_resampled: pd.DataFrame,
-    metrics: dict,
-    rider_weight: float,
-    cp_input: float,
-    decoupling_percent: float = 0,
-    drift_z2: float = 0,
-    vt1_vent: float = 0,
-    vt2_vent: float = 0,
-) -> None:
-    """Render the executive summary report tab with integrated KPI section.
-
-    Optimized for performance with cached calculations and vectorized operations.
-    Combines previous Report and KPI tabs into one comprehensive view.
-    """
-    st.header("📋 Raport i Kluczowe Wskaźniki Wydajności (KPI)")
-
-    # SEKCJA KPI (przeniesiona z kpi.py)
-    _render_kpi_section(metrics, df_plot, rider_weight, decoupling_percent, drift_z2)
-
-    # SEKCJA WIZUALIZACJI DRYFU (z kpi.py)
-    st.subheader("Wizualizacja Dryfu i Zmienności")
-
-    # --- Main chart ---
-    _render_training_overview(df_plot)
-
-    st.markdown("---")
-
-    # Rozkład tętna
-    st.subheader("Rozkład Tętna")
-    _render_hr_distribution(df_plot)
-
-    # SEKCJA WIZUALIZACJI DRYFU I ZMIENNOŚCI (z kpi.py)
-    st.markdown("---")
-    st.subheader("📈 Wizualizacja Dryfu i Zmienności")
-    _render_drift_chart(df_plot_resampled)
-
-    st.divider()
-
-    c1, c2 = st.columns(2)
-
-    # LEWA KOLUMNA: SmO2 + TREND
-    with c1:
-        _render_smo2_column(df_plot_resampled)
-
-    # PRAWA KOLUMNA: TĘTNO (HR)
-    with c2:
-        _render_hr_column(df_plot_resampled)
-
-    st.divider()
-
-    _render_ventilation_section(df_plot_resampled, vt1_vent, vt2_vent)
+def render_report_tab(df: pd.DataFrame, metrics: dict, vt1_vent: float, vt2_vent: float) -> None:
+    st.header("Raport i wskaźniki sesji")
+    _render_kpi_section(metrics)
+    _render_hr_distribution(df)
+    left, right = st.columns(2)
+    with left:
+        _render_smo2_column(df)
+    with right:
+        _render_hr_column(df)
+    _render_ventilation_section(df, vt1_vent, vt2_vent)

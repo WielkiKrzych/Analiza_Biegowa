@@ -90,36 +90,6 @@ def pace_to_seconds(pace_str: str) -> float:
     return float("nan")
 
 
-def seconds_to_pace_str(seconds: float) -> str:
-    """
-    Convert seconds to mm:ss pace string.
-
-    Args:
-        seconds: Seconds per kilometer
-
-    Returns:
-        Formatted pace string
-    """
-    return format_pace(seconds)
-
-
-def calculate_pace(distance_m: float, time_sec: float) -> float:
-    """
-    Calculate pace (sec/km) from distance and time.
-
-    Args:
-        distance_m: Distance in meters
-        time_sec: Time in seconds
-
-    Returns:
-        Pace in seconds per kilometer
-    """
-    if distance_m <= 0 or time_sec <= 0:
-        return 0.0
-    # pace = time / distance * 1000
-    return time_sec / distance_m * 1000
-
-
 def pace_array_to_speed_array(pace_array: np.ndarray) -> np.ndarray:
     """
     Vectorized conversion of pace array to speed array.
@@ -133,18 +103,3 @@ def pace_array_to_speed_array(pace_array: np.ndarray) -> np.ndarray:
     with np.errstate(divide="ignore", invalid="ignore"):
         speed = np.where(pace_array > 0, 1000.0 / pace_array, 0.0)
     return speed
-
-
-def speed_array_to_pace_array(speed_array: np.ndarray) -> np.ndarray:
-    """
-    Vectorized conversion of speed array to pace array.
-
-    Args:
-        speed_array: Array of speeds in m/s
-
-    Returns:
-        Array of paces in sec/km
-    """
-    with np.errstate(divide="ignore", invalid="ignore"):
-        pace = np.where(speed_array > 0, 1000.0 / speed_array, np.inf)
-    return pace

@@ -1,156 +1,58 @@
-"""
-Session Analysis Service
+"""Shared running metrics and plot data transforms."""
 
-Handles all session-level metrics calculations including:
-- Header metrics (NP, IF, TSS)
-- Extended metrics (VO2max estimation, carbs, pulse power, etc.)
-- SmO2 smoothing
-- DataFrame resampling
-"""
-
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from modules.calculations.dual_mode import calculate_normalized_pace, calculate_running_stress_score
+from modules.calculations.pace import (
+    calculate_pace_duration_curve,
+    calculate_pace_zones_time,
+    estimate_vo2max_from_pace,
+)
 from modules.config import Config
 
-# ============================================================
-# Re-exporting constants for backward compatibility
-# ============================================================
-ROLLING_WINDOW_5MIN = Config.ROLLING_WINDOW_5MIN
-ROLLING_WINDOW_30S = Config.ROLLING_WINDOW_30S
-ROLLING_WINDOW_60S = Config.ROLLING_WINDOW_60S
-RESAMPLE_THRESHOLD = Config.RESAMPLE_THRESHOLD
-RESAMPLE_STEP = Config.RESAMPLE_STEP
-MIN_WATTS_ACTIVE = Config.MIN_WATTS_ACTIVE
-MIN_HR_ACTIVE = Config.MIN_HR_ACTIVE
-MIN_RECORDS_FOR_ROLLING = Config.MIN_RECORDS_FOR_ROLLING
+
+def mean_moving_pace(pace: pd.Series) -> float | None:
+    moving = pace.where(pace.gt(0) & np.isfinite(pace)).dropna()
+    return float(1 / (1 / moving).mean()) if not moving.empty else None
 
 
-def calculate_header_metrics(df: pd.DataFrame, cp: float) -> Tuple[float, float, float]:
-    """Calculate NP, IF, and TSS for the header display.
-
-    Centralizes the calculation to avoid duplication.
-
-    Args:
-        df: DataFrame with 'watts' column
-        cp: Critical Power in watts
-
-    Returns:
-        Tuple of (NP, IF, TSS)
-    """
-    if "watts" not in df.columns or len(df) < Config.MIN_RECORDS_FOR_ROLLING:
-        return 0.0, 0.0, 0.0
-
-    rolling_30s = (
-        df["watts"]
-        .rolling(window=Config.ROLLING_WINDOW_30S, min_periods=Config.ROLLING_WINDOW_30S)
-        .mean()
-    )
-    np_val = np.power(np.mean(np.power(rolling_30s, 4)), 0.25)
-
-    if pd.isna(np_val):
-        np_val = df["watts"].mean()
-
-    if cp > 0:
-        if_val = np_val / cp
-        duration_sec = len(df)
-        tss_val = (duration_sec * np_val * if_val) / (cp * 3600) * 100
-    else:
-        if_val = 0.0
-        tss_val = 0.0
-
-    return float(np_val), float(if_val), float(tss_val)
+def _stat(df: pd.DataFrame, column: str, method: str) -> float | None:
+    if column not in df:
+        return None
+    series = df[column].where(np.isfinite(df[column])).dropna()
+    if column in {"heartrate", "cadence", "tymeventilation", "tymebreathrate"}:
+        series = series[series.gt(0)]
+    return float(getattr(series, method)()) if not series.empty else None
 
 
-def calculate_extended_metrics(
-    df: pd.DataFrame,
-    metrics: Dict[str, Any],
-    rider_weight: float,
-    vt1_watts: float,
-    vt2_watts: float,
-    ef_factor: float,
-) -> Dict[str, Any]:
-    """Calculate extended metrics for the session.
-
-    Aggregates various physiological and performance metrics.
-
-    Args:
-        df: DataFrame with session data
-        metrics: Base metrics dictionary to extend
-        rider_weight: Rider weight in kg
-        vt1_watts: VT1 threshold in watts
-        vt2_watts: VT2 threshold in watts
-        ef_factor: Efficiency factor from advanced KPI
-
-    Returns:
-        Extended metrics dictionary
-    """
-    # Import here to avoid circular dependency
-    from modules.calculations import (
-        calculate_normalized_power,
-        calculate_power_duration_curve,
-        estimate_carbs_burned,
-    )
-
-    if "watts" in df.columns:
-        metrics["np"] = calculate_normalized_power(df)
-        metrics["work_kj"] = df["watts"].sum() / 1000
-        metrics["carbs_total"] = estimate_carbs_burned(df, vt1_watts, vt2_watts)
-
-        # Power Duration Curve (running context - no VLamax estimation)
-        calculate_power_duration_curve(df)
-        # VLamax estimation removed - cycling model not applicable to running
-        metrics["vlamax_est"] = 0  # Not applicable for running analysis
-
-        # VO2max estimation — always Sitko et al. 2021 (power-based) for consistency
-        from modules.calculations.canonical_physio import calculate_vo2max_acsm
-
-        rolling_5min = df["watts"].rolling(window=Config.ROLLING_WINDOW_5MIN, min_periods=Config.ROLLING_WINDOW_5MIN).mean()
-        mmp_5min = rolling_5min.max()
-        if not pd.isna(mmp_5min) and rider_weight > 0:
-            metrics["vo2_max_est"] = calculate_vo2max_acsm(mmp_5min, rider_weight)
-        else:
-            metrics["vo2_max_est"] = 0
-    if "hsi" in df.columns:
-        metrics["max_hsi"] = df["hsi"].max()
-
-    if "core_temperature" in df.columns:
-        metrics["max_core"] = df["core_temperature"].max()
-        metrics["avg_core"] = df["core_temperature"].mean()
-
-    if "rmssd" in df.columns:
-        metrics["avg_rmssd"] = df["rmssd"].mean()
-    elif "hrv" in df.columns:
-        metrics["avg_rmssd"] = df["hrv"].mean()
-
-    # Efficiency factor
-    metrics["ef_factor"] = ef_factor
-
-    # Average Pulse Power
-    metrics["avg_pp"] = _calculate_average_pulse_power(df)
-
-    return metrics
-
-
-def _calculate_average_pulse_power(df: pd.DataFrame) -> float:
-    """Calculate average pulse power for active zones."""
-    if "watts" not in df.columns or "heartrate" not in df.columns:
-        return 0.0
-
-    mask = (df["watts"] > Config.MIN_WATTS_ACTIVE) & (df["heartrate"] > Config.MIN_HR_ACTIVE)
-    if mask.sum() == 0:
-        return 0.0
-
-    hr_values = df.loc[mask, "heartrate"]
-    watts_values = df.loc[mask, "watts"]
-    safe_mask = hr_values > 0
-
-    if safe_mask.sum() == 0:
-        return 0.0
-
-    return (watts_values[safe_mask] / hr_values[safe_mask]).mean()
+def calculate_session_metrics(df: pd.DataFrame, threshold_pace: float) -> dict[str, Any]:
+    duration = float(df["time"].iloc[-1] - df["time"].iloc[0])
+    distance = _stat(df, "distance", "max")
+    if distance is None or distance <= 0:
+        # The frame is sampled every second. Stops contribute zero distance.
+        distance = float((1000 / df["pace"].where(df["pace"].gt(0))).sum())
+    best_five = calculate_pace_duration_curve(df, durations=[300]).get(300)
+    return {
+        "duration_sec": duration,
+        "distance_km": distance / 1000,
+        "avg_pace": mean_moving_pace(df["pace"]),
+        "avg_gap": mean_moving_pace(df["gap"]) if "gap" in df else None,
+        "normalized_pace": calculate_normalized_pace(df) or None,
+        "rss": calculate_running_stress_score(df, threshold_pace, duration),
+        "pace_zones": calculate_pace_zones_time(df, threshold_pace),
+        "avg_hr": _stat(df, "heartrate", "mean"),
+        "max_hr": _stat(df, "heartrate", "max"),
+        "avg_cadence": _stat(df, "cadence", "mean"),
+        "avg_smo2": _stat(df, "smo2", "mean"),
+        "avg_vent": _stat(df, "tymeventilation", "mean"),
+        "avg_rr": _stat(df, "tymebreathrate", "mean"),
+        "avg_core": _stat(df, "core_temperature", "mean"),
+        "avg_rmssd": _stat(df, "rmssd", "mean"),
+        "vo2_max_est": estimate_vo2max_from_pace(best_five) if best_five else None,
+    }
 
 
 def apply_smo2_smoothing(df: pd.DataFrame) -> pd.DataFrame:

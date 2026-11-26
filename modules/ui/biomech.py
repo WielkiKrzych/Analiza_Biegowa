@@ -167,7 +167,7 @@ def _render_cadence_section(df_plot: pd.DataFrame) -> None:
 
         tick_vals, tick_text = _make_hhmmss_ticks(_time_values(df_plot, time_col))
         _apply_dark_layout(fig_cad, "Kadencja w czasie", tick_vals, tick_text, "Kadencja [SPM]")
-        st.plotly_chart(fig_cad, use_container_width=True)
+        st.plotly_chart(fig_cad, width="stretch")
 
     st.info("""
     **💡 Interpretacja Kadencji:**
@@ -245,7 +245,7 @@ def _render_gct_section(df_plot: pd.DataFrame) -> None:
         _apply_dark_layout(
             fig_gct, "Ground Contact Time w czasie", tick_vals, tick_text, "GCT [ms]"
         )
-        st.plotly_chart(fig_gct, use_container_width=True)
+        st.plotly_chart(fig_gct, width="stretch")
 
     st.info("""
     **💡 Interpretacja GCT:**
@@ -330,7 +330,7 @@ def _render_stance_balance_section(df_plot: pd.DataFrame) -> None:
             "Balans [%]",
             height=350,
         )
-        st.plotly_chart(fig_bal, use_container_width=True)
+        st.plotly_chart(fig_bal, width="stretch")
 
     st.info("""
     **💡 Interpretacja Balansu L/P:**
@@ -400,7 +400,7 @@ def _render_vertical_ratio_section(df_plot: pd.DataFrame) -> None:
             "VR [%]",
             height=350,
         )
-        st.plotly_chart(fig_vr, use_container_width=True)
+        st.plotly_chart(fig_vr, width="stretch")
 
     st.info("""
     **💡 Interpretacja Vertical Ratio:**
@@ -491,7 +491,7 @@ def _render_stride_length_section(
         "Długość kroku [m]",
         height=350,
     )
-    st.plotly_chart(fig_stride, use_container_width=True)
+    st.plotly_chart(fig_stride, width="stretch")
 
     st.info("""
     **💡 Interpretacja długości kroku:**
@@ -505,131 +505,15 @@ def _render_stride_length_section(
     st.divider()
 
 
-def _render_running_effectiveness_section(
-    df_plot: pd.DataFrame,
-    runner_weight: float,
-) -> None:
-    """Render the Running Effectiveness (RE) section."""
-    st.subheader("⚡ Running Effectiveness (RE)")
-
-    if "watts" not in df_plot.columns or "pace" not in df_plot.columns:
-        st.info("ℹ️ Do obliczenia RE wymagane dane mocy (watts) i tempa (pace)")
-        st.divider()
-        return
-
-    valid_mask = (df_plot["watts"] > 50) & (df_plot["pace"] > 0)
-    df_re = df_plot[valid_mask].copy()
-
-    if df_re.empty:
-        st.divider()
-        return
-
-    speed_m_s = pace_array_to_speed_array(df_re["pace"].values)
-    power_w = df_re["watts"].values
-    power_per_kg = power_w / runner_weight
-
-    df_re["re"] = np.where(power_per_kg > 0, speed_m_s / power_per_kg, np.nan)
-
-    avg_re: float = float(df_re["re"].mean())
-
-    re1, re2, re3 = st.columns(3)
-    re1.metric(
-        "Średnie RE",
-        f"{avg_re:.3f} m/s/W/kg",
-        help="RE = prędkość (m/s) / moc (W/kg)",
-    )
-
-    time_col = _resolve_time_col(df_re)
-    if time_col is not None and time_col in df_re.columns:
-        valid_re = df_re.dropna(subset=["re"])
-        if len(valid_re) > 100:
-            slope, intercept, _, _, _ = stats.linregress(valid_re[time_col], valid_re["re"])
-            total_drift = slope * (valid_re[time_col].iloc[-1] - valid_re[time_col].iloc[0])
-            re2.metric(
-                "Trend RE",
-                f"{total_drift:+.3f}",
-                delta_color="inverse" if total_drift < 0 else "normal",
-            )
-
-    if avg_re > 1.0:
-        re3.metric("Klasyfikacja", "🟢 Bardzo dobra")
-    elif avg_re > 0.85:
-        re3.metric("Klasyfikacja", "🟡 Dobra")
-    else:
-        re3.metric("Klasyfikacja", "🔴 Wymaga poprawy")
-
-    if time_col is not None and time_col in df_re.columns:
-        fig_re = go.Figure()
-
-        re_smooth = df_re["re"].rolling(15, center=True).mean()
-        fig_re.add_trace(
-            go.Scatter(
-                x=df_re[time_col],
-                y=re_smooth,
-                name="RE",
-                line=dict(color="#F39C12", width=2),
-                hovertemplate="💪 RE: %{y:.3f}<extra></extra>",
-            )
-        )
-
-        fig_re.add_hline(
-            y=1.0,
-            line_dash="dash",
-            line_color="green",
-            annotation_text="RE = 1.0 (dobre)",
-        )
-
-        tick_vals, tick_text = _make_hhmmss_ticks(_time_values(df_re, time_col))
-        _apply_dark_layout(
-            fig_re,
-            "Running Effectiveness w czasie",
-            tick_vals,
-            tick_text,
-            "RE [m/s/W/kg]",
-            height=350,
-        )
-        st.plotly_chart(fig_re, use_container_width=True)
-
-    st.info("""
-    **💡 Interpretacja Running Effectiveness:**
-
-    * **RE > 1.0:** Bardzo dobra efektywność - prędkość dobrze przekłada się na moc
-    * **RE 0.85-1.0:** Dobra efektywność
-    * **RE < 0.85:** Możliwość poprawy techniki biegu
-
-    **Wzór:** RE = Prędkość (m/s) / Moc (W/kg)
-    """)
-    st.divider()
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
 def render_biomech_tab(df_plot: pd.DataFrame, df_plot_resampled: pd.DataFrame) -> None:
-    """Render the Biomechanical Stress tab."""
-    st.header("Biomechaniczny Stres")
-
-    sport_type = st.session_state.get("sport_type", "unknown")
-    is_running = sport_type == "running" or "pace" in df_plot.columns
-
-    if is_running:
-        # "rider_weight"/"runner_height" are not session keys — the sidebar
-        # widgets write "weight"/"height". Reading the wrong keys silently fell
-        # back to hardcoded 70 kg / 175 cm, so this tab disagreed with every
-        # other tab (and with the summary tab, which calls the same
-        # _render_running_effectiveness_section with the sidebar weight).
-        runner_weight = st.session_state.get("weight", Config.DEFAULT_BODY_WEIGHT_KG)
-        runner_height = st.session_state.get("height", Config.DEFAULT_RUNNER_HEIGHT_CM)
-
-        _render_cadence_section(df_plot)
-        _render_gct_section(df_plot)
-        _render_stance_balance_section(df_plot)
-        _render_vertical_ratio_section(df_plot)
-        _render_stride_length_section(df_plot, runner_height)
-        _render_running_effectiveness_section(df_plot, runner_weight)
-
+    """Render measurements of running form."""
+    st.header("Biomechanika biegu")
+    height = st.session_state.get("height", Config.DEFAULT_RUNNER_HEIGHT_CM)
+    _render_cadence_section(df_plot)
+    _render_gct_section(df_plot)
+    _render_stance_balance_section(df_plot)
+    _render_vertical_ratio_section(df_plot)
+    _render_stride_length_section(df_plot, height)
     _render_vertical_oscillation_section(df_plot, df_plot_resampled)
 
 
@@ -702,7 +586,7 @@ def _render_vertical_oscillation_section(
         tick_text,
         "VO [cm]",
     )
-    st.plotly_chart(fig_vo, use_container_width=True)
+    st.plotly_chart(fig_vo, width="stretch")
 
     cad_col = _resolve_cadence_col(df_plot)
     if cad_col is not None:
@@ -771,7 +655,7 @@ def _render_vo_cadence_scatter(
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, width="stretch")
 
 
 def _render_vo_pace_effectiveness(

@@ -60,52 +60,78 @@ def test_csv_file_to_processed_session():
 
         # === Step 2: full pipeline ===
         df_plot, df_plot_resampled, metrics, error_msg = process_uploaded_session(
-            df_raw, rider_weight=75.0, vt1_watts=0, vt2_watts=0
+            df_raw, threshold_pace=300
         )
 
         # === Step 3: validation ===
         assert error_msg is None, f"Pipeline returned error: {error_msg}"
         assert df_plot is not None and not df_plot.empty
         assert metrics is not None
-        # The estimator kicks in for pace-only data
-        assert metrics.get("power_is_estimated") is True
-        # Average watts is now estimated from pace via the body-weight power model
-        assert "avg_watts" in metrics
-        assert metrics["avg_watts"] > 100, (
-            f"Estimated power {metrics['avg_watts']:.0f} W is implausibly low for 5:00/km"
-        )
+        assert "watts" not in df_plot
+        assert 290 < metrics["avg_pace"] < 310
+        assert metrics["distance_km"] > 1.9
+        assert metrics["rss"] > 0
         # Avg HR should land near 150 (we seeded it that way)
         assert 140 < metrics.get("avg_hr", 0) < 160, (
             f"avg_hr {metrics.get('avg_hr')} outside [140, 160] — something is off"
         )
-        # Auto-save metadata
-        assert "_decoupling_percent" in metrics
 
 
-def test_csv_with_power_column_uses_measured_power():
-    """When the CSV has a real `watts` column, estimated-power flag stays False."""
-    with tempfile.TemporaryDirectory() as tmp:
-        csv_path = os.path.join(tmp, "power.csv")
-        np.random.seed(7)
-        df = pd.DataFrame(
-            {
-                "time": np.arange(300, dtype=float),
-                "watts": 220 + np.random.normal(0, 10, 300),
-                "heartrate": 145 + np.random.normal(0, 3, 300),
-                "cadence": 90 + np.random.normal(0, 1, 300),
-            }
-        )
-        df.to_csv(csv_path, index=False)
+def test_csv_with_measured_power_keeps_raw_values_without_changing_metrics():
+    """The watch or footpod channel survives CSV normalization without driving any metric."""
+    import io
 
-        with open(csv_path, "rb") as f:
-            df_raw = load_data(f)
-        _, _, metrics, error_msg = process_uploaded_session(
-            df_raw, rider_weight=75.0, vt1_watts=0, vt2_watts=0
-        )
+    n = 320
+    df = pd.DataFrame({"time": range(n), "pace": 310.0, "heartrate": 148.0, "Power": range(n)})
+    raw = load_data(io.BytesIO(df.to_csv(index=False).encode()))
+    with_power, _, metrics, error = process_uploaded_session(raw, threshold_pace=300)
+    assert error is None
+    without_power, _, baseline, error = process_uploaded_session(
+        raw.drop(columns="watts"), threshold_pace=300
+    )
+    assert error is None
+    assert metrics == baseline
+    pd.testing.assert_series_equal(with_power["watts"], raw["watts"], check_dtype=False)
+    assert "watts" not in without_power
 
-        assert error_msg is None
-        assert metrics.get("power_is_estimated") is False, (
-            "Measured power should not be marked as estimated"
-        )
-        # Measured 220W +/- 10W -> avg should be near 220
-        assert 200 < metrics.get("avg_watts", 0) < 240
+
+def test_semicolon_file_derives_pace_from_speed():
+    import io
+
+    data = "time;speed_m_s;power\n" + "".join(f"{i};3.25;220\n" for i in range(60))
+    raw = load_data(io.BytesIO(data.encode()))
+    result, _, _, error = process_uploaded_session(raw)
+    assert error is None
+    assert abs(result["pace"].iloc[0] - 1000 / 3.25) < 0.01
+
+
+def test_processing_preserves_stops_and_recording_gaps_in_pace():
+    df = pd.DataFrame(
+        {
+            "time": [0, 1, 2, 3, 4, 5, 15, 16, 17, 18, 19, 20],
+            "pace": [300.0, 300.0, 0.0, 300.0, 300.0, 300.0] * 2,
+        }
+    )
+    result, _, _, error = process_uploaded_session(df)
+    assert error is None
+    assert result.loc[2, "pace"] == 0
+    assert result.loc[6:14, "pace"].eq(0).all()
+    assert result.loc[15, "pace"] == 300
+
+
+def test_upload_without_pace_or_speed_is_rejected_even_with_sensor_channels():
+    df = pd.DataFrame({"time": range(60), "watts": 225, "heartrate": 150, "cadence": 175})
+    plot, _, metrics, error = process_uploaded_session(df)
+    assert plot is None and metrics is None
+    assert "tempa" in error and "prędkości" in error
+
+
+def test_pace_in_minutes_and_seconds_is_normalized():
+    import io
+
+    raw = load_data(
+        io.BytesIO(("time,pace\n" + "".join(f"{i},4:30\n" for i in range(60))).encode())
+    )
+    result, _, _, error = process_uploaded_session(raw)
+    assert error is None
+    assert result["pace"].eq(270).all()

@@ -131,7 +131,7 @@ def _render_hr_chart(df_segment: pd.DataFrame, avg_hr: float) -> None:
         hovermode="x unified",
         showlegend=False,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_hr_tab(df):

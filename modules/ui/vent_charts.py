@@ -89,7 +89,7 @@ def _render_ve_section(target_df, startsec, endsec, interval_data, slope_ve, int
 
     selected = st.plotly_chart(
         fig_vent,
-        use_container_width=True,
+        width="stretch",
         key="vent_chart",
         on_select="rerun",
         selection_mode="box",
@@ -313,7 +313,7 @@ def _render_br_section(target_df):
 
     selected_br = st.plotly_chart(
         fig_br,
-        use_container_width=True,
+        width="stretch",
         key="br_chart",
         on_select="rerun",
         selection_mode="box",
@@ -519,7 +519,7 @@ def _render_tidal_volume_section(target_df):
 
     selected_tv = st.plotly_chart(
         fig_tv,
-        use_container_width=True,
+        width="stretch",
         key="tv_chart",
         on_select="rerun",
         selection_mode="box",

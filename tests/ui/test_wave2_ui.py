@@ -10,7 +10,6 @@ docstring so the intent survives future refactors.
 from __future__ import annotations
 
 import os
-import types
 
 import pandas as pd
 import pytest
@@ -210,12 +209,15 @@ def test_process_session_core_does_not_read_session_state(monkeypatch):
     df = pd.DataFrame(
         {
             "time": range(600),
-            "watts": [200.0] * 600,
+            "pace": [300.0] * 600,
             "heartrate": [140.0] * 600,
         }
     )
 
-    session_orchestrator._process_session_core(df, 0.0, 0.0, 75.0, 0.0, 0.0)
+    df_plot, _, metrics, error = session_orchestrator._process_session_core(df, 300.0)
+    assert error is None
+    assert metrics["rss"] > 0
+    assert not df_plot.empty
 
 
 # ---------------------------------------------------------------------------
@@ -223,259 +225,45 @@ def test_process_session_core_does_not_read_session_state(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_report_and_summary_tabs_agree_on_vo2max(st_stub):
-    """Same file, same weight -> same VO2max in both tabs.
+@pytest.mark.parametrize("samples", [200, 900])
+def test_report_and_summary_tabs_agree_on_the_pace_vo2max_estimate(monkeypatch, st_stub, samples):
+    from modules.ui import report, summary
+    from services.session_analysis import calculate_session_metrics
 
-    Pre-review: the report card re-derived the estimate from
-    `df_plot["watts"].rolling(300).mean().max()` and rendered the result with
-    `f"{vo2max_est:.1f}"` unconditionally. `rolling(300)` defaults to
-    `min_periods=300`, so for a session shorter than the window `.max()` was
-    NaN, `calculate_vo2max` mapped that NaN to `0.0`, and the report printed
-    "0.0" where the summary tab printed "--" for the very same frame.
-    """
-    from modules.ui.report import _render_kpi_section
-    from modules.ui.summary_timeline import _render_core_metrics
+    df = pd.DataFrame({"time": range(samples), "pace": 300.0})
+    metrics = calculate_session_metrics(df, 300.0)
+    monkeypatch.setattr(summary, "_build_training_timeline_chart", lambda _: None)
 
-    # 200 s of power: not enough for a 5-minute MMP, so the canonical pipeline
-    # value (`services/session_analysis`) is 0.
-    df_plot = pd.DataFrame({"watts": [200.0] * 200, "time": list(range(200))})
-    metrics = {"vo2_max_est": 0}
-
-    _render_kpi_section(metrics, df_plot, 75.0, 0.0, 0.0)
-    report_value = _metric_value(st_stub, "Szac. VO2max")
-
-    st_stub.clear()
-    _render_core_metrics(df_plot, metrics, duration_min=3.3, rider_weight=75.0)
-    summary_value = _metric_value(st_stub, "🎯 Est. VO2max")
-
-    assert report_value is not None and summary_value is not None
-    assert report_value == summary_value == "--"
+    report._render_kpi_section(metrics)
+    summary.render_summary_tab(df, metrics)
+    values = [
+        value for method, label, value in st_stub if method == "metric" and label == "Szac. VO2max"
+    ]
+    expected = "brak" if samples < 300 else f"{metrics['vo2_max_est']:.1f}"
+    assert values == [expected, expected]
 
 
-def test_report_and_summary_agree_on_vo2max_for_a_long_session(st_stub):
-    """When the estimate does exist, both tabs show the pipeline value.
-
-    Pre-review this passed by coincidence on frames >= 300 samples (both
-    windows happened to match); it guards the plumbing — the report card reads
-    `metrics["vo2_max_est"]` instead of re-deriving it.
-    """
-    from modules.calculations.canonical_physio import calculate_vo2max_acsm
-    from modules.ui.report import _render_kpi_section
-    from modules.ui.summary_timeline import _render_core_metrics
-
-    watts = [200.0] * 600 + [300.0] * 300
-    df_plot = pd.DataFrame({"watts": watts, "time": list(range(len(watts)))})
-    metrics = {"vo2_max_est": calculate_vo2max_acsm(300.0, 75.0)}
-
-    _render_kpi_section(metrics, df_plot, 75.0, 0.0, 0.0)
-    report_number = _metric_number(st_stub, "Szac. VO2max")
-
-    st_stub.clear()
-    _render_core_metrics(df_plot, metrics, duration_min=15.0, rider_weight=75.0)
-    summary_number = _metric_number(st_stub, "🎯 Est. VO2max")
-
-    assert report_number == summary_number == pytest.approx(metrics["vo2_max_est"], abs=0.05)
-
-
-def test_vo2max_card_is_empty_without_a_power_column(st_stub):
-    """No power data must not print a VO2max.
-
-    Pre-review: the card fell back to `calculate_vo2max(0, rider_weight)`,
-    which does not treat 0 W as "no data" — it returned 16.61 + 8.87 * 0 =
-    16.6 ml/kg/min for a file with no `watts` column at all.
-    """
-    from modules.ui.report import _render_kpi_section
-
-    df_plot = pd.DataFrame({"time": range(600), "heartrate": [140.0] * 600})
-
-    _render_kpi_section({}, df_plot, 75.0, 0.0, 0.0)
-
-    assert _metric_value(st_stub, "Szac. VO2max") == "--"
-
-
-def test_summary_vo2max_details_goes_through_canonical_physio(monkeypatch, st_stub):
-    """The uncertainty card must call `canonical_physio`, not copy its formula.
-
-    Pre-review: `summary_charts` inlined `16.61 + 8.87 * power_per_kg`. The
-    constants happen to match the canonical module today, so nothing here can
-    be caught numerically — redirecting the canonical function and asserting
-    the card follows is the only way this stays true.
-    """
-    from modules.ui import summary_charts
-
-    df_plot = pd.DataFrame(
-        {"watts": [200.0] * 400, "heartrate": [150.0] * 400}
-    )
-
-    monkeypatch.setattr(
-        summary_charts, "calculate_vo2max_acsm", lambda power, weight: 99.9
-    )
-    metrics = summary_charts._compute_vo2max_metrics(df_plot, 75.0)
-
-    assert metrics is not None
-    assert metrics["vo2max"] == 99.9
-
-
-def test_vo2max_details_render_the_heart_rate_diagnostics(st_stub):
-    """The HR numbers `_compute_hr_penalty` produces must reach the expander.
-
-    Pre-review: `_compute_hr_penalty` returned `(penalty, hr_col)` and the
-    caller kept only the penalty — `hr_col`, `hr_mean`, `hr_sd` and `hr_cv`
-    were never put into the result dict, so `if m.get("hr_col")` was always
-    false and the whole HR block silently never rendered.
-    """
-    from modules.ui import summary_charts
-
-    df_plot = pd.DataFrame({"watts": [200.0] * 400, "heartrate": [150.0] * 400})
-    metrics = summary_charts._compute_vo2max_metrics(df_plot, 75.0)
-
-    assert metrics is not None
-    assert metrics["hr_col"] == "heartrate"
-
-    summary_charts._render_vo2max_details(metrics)
-
-    assert _metric_value(st_stub, "Średnie HR") is not None
-
-
-# ---------------------------------------------------------------------------
-# 3. `st.session_state` keys nobody writes
-# ---------------------------------------------------------------------------
-
-
-def test_zone_thresholds_use_the_detected_result(monkeypatch, st_stub):
-    """The "Użyj wykrytych progów" checkbox must actually change the zones.
-
-    Pre-review: `_resolve_zone_thresholds` read `session_state["detected_vt1"]`
-    / `["detected_vt2"]` — keys no widget and no
-    `StateManager.init_session_state()` ever writes. The branch was dead, so
-    ticking the checkbox (checked by default once a result exists) silently
-    fell through to the two manual `number_input`s.
-
-    Scope note: the `"thresholds"` tab is registered in `app.py` but never
-    passed to `render_tab_content`, so no user reaches this path today. The
-    test pins the contract for the day the tab is wired up.
-    """
-    from modules.ui import threshold_analysis_ui
-
-    result = types.SimpleNamespace(vt1_watts=210, vt2_watts=260)
-    monkeypatch.setattr(streamlit, "session_state", {"threshold_result": result})
-
-    manual_calls: list = []
-    monkeypatch.setattr(
-        streamlit,
-        "number_input",
-        lambda *a, **k: manual_calls.append(a[0]) or 0,
-    )
-
-    assert threshold_analysis_ui._resolve_zone_thresholds(True, 280) == (210, 260)
-    assert manual_calls == [], "manual VT inputs rendered despite a detected result"
-
-
-def test_zone_thresholds_fall_back_to_manual_inputs(monkeypatch, st_stub):
-    """With "use detected" off (or nothing detected) the manual inputs apply.
-
-    Same dormant-tab scope note as
-    `test_zone_thresholds_use_the_detected_result`.
-    """
-    from modules.ui import threshold_analysis_ui
-
-    monkeypatch.setattr(streamlit, "session_state", {})
-    monkeypatch.setattr(streamlit, "number_input", lambda *a, **k: 240)
-
-    assert threshold_analysis_ui._resolve_zone_thresholds(True, 280) == (240, 240)
-    assert threshold_analysis_ui._resolve_zone_thresholds(False, 280) == (240, 240)
-
-
-# ---------------------------------------------------------------------------
-# 4. Stale derived state keyed by file content
-# ---------------------------------------------------------------------------
-
-
-class _FakeUpload:
-    """Minimal stand-in for a Streamlit `UploadedFile`."""
-
-    def __init__(self, name: str, content: bytes):
-        self.name = name
-        self._content = content
-
-    def read(self, *args, **kwargs):
-        return self._content
-
-    def seek(self, *args, **kwargs):
-        return 0
-
-
-@pytest.fixture
-def _dashboard_env(monkeypatch):
-    """Wire `process_and_cache_session` up to tiny fakes."""
-    monkeypatch.setattr(streamlit, "spinner", lambda *a, **k: _NullContext([], "spinner"))
-    monkeypatch.setattr(streamlit, "error", lambda *a, **k: None)
-    monkeypatch.setattr(streamlit, "info", lambda *a, **k: None)
+def test_new_upload_clears_file_specific_ranges_but_keeps_runner_settings(monkeypatch):
+    import io
 
     from services import dashboard_renderer
 
-    frames = {}
+    class Upload(io.BytesIO):
+        name = "same.csv"
 
-    def _load_data(_uploaded):
-        return frames.pop("next")
-
-    monkeypatch.setattr(dashboard_renderer, "load_data", _load_data)
-    monkeypatch.setattr(
-        dashboard_renderer,
-        "classify_session_type",
-        lambda df, name: "TRAINING",
-    )
-    monkeypatch.setattr(
-        dashboard_renderer,
-        "validate_data_completeness",
-        lambda df: types.SimpleNamespace(sport_type="running"),
-    )
-    monkeypatch.setattr(
-        dashboard_renderer,
-        "process_uploaded_session",
-        lambda df, **k: (df, df, {"power_is_estimated": False}, None),
-    )
-
-    # `classify_ramp_test` is imported inside the function body, so it has to
-    # be patched on the package, not on `dashboard_renderer`.
-    import modules.domain
-
-    monkeypatch.setattr(
-        modules.domain,
-        "classify_ramp_test",
-        lambda power: types.SimpleNamespace(is_ramp=True, confidence=0.93),
-    )
-    return dashboard_renderer, frames
-
-
-def test_new_file_clears_the_previous_ramp_classification(monkeypatch, _dashboard_env):
-    """A file with no power column must not inherit the last file's verdict.
-
-    Pre-review: `ramp_classification` was only written when the new file had
-    >= 300 power samples. Loading a power file and then a heart-rate-only file
-    left file A's classification in `st.session_state`, and `app.py:167` reads
-    that key without a hash guard — the badge showed file A's
-    "Ramp Test (confidence: 0.93)" for file B.
-    """
-    dashboard_renderer, frames = _dashboard_env
-
-    class _State:
-        def set_data_loaded(self):
-            pass
-
-    sessions: dict = {}
-    monkeypatch.setattr(streamlit, "session_state", sessions)
-
-    # File A: enough power -> classified as a ramp test.
-    frames["next"] = pd.DataFrame({"watts": [300.0] * 400})
-    dashboard_renderer.process_and_cache_session(_FakeUpload("a.csv", b"aaa"), 75.0, _State())
-    assert sessions["ramp_classification"].is_ramp is True
-
-    # File B: no power column at all -> nothing can be classified.
-    frames["next"] = pd.DataFrame({"heartrate": [140.0] * 400})
-    dashboard_renderer.process_and_cache_session(_FakeUpload("b.csv", b"bbb"), 75.0, _State())
-
-    assert sessions["ramp_classification"] is None, "file B kept file A's ramp classification"
+    state = {}
+    monkeypatch.setattr(streamlit, "session_state", state)
+    monkeypatch.setattr(streamlit, "spinner", lambda *a, **k: _NullContext([], "spinner"))
+    df = pd.DataFrame({"time": range(60), "pace": 300.0})
+    monkeypatch.setattr(dashboard_renderer, "load_data", lambda _: df)
+    assert dashboard_renderer.process_and_cache_session(Upload(b"first"), 300.0) is not None
+    state.update({"smo2_start_sec": 20, "vent_end_sec": 40, "weight": 73.0})
+    assert dashboard_renderer.process_and_cache_session(Upload(b"first"), 300.0) is not None
+    assert state["smo2_start_sec"] == 20
+    assert dashboard_renderer.process_and_cache_session(Upload(b"second"), 300.0) is not None
+    assert "smo2_start_sec" not in state
+    assert "vent_end_sec" not in state
+    assert state["weight"] == 73.0
 
 
 def test_state_module_is_importable_for_the_above(monkeypatch):
@@ -495,11 +283,7 @@ def test_state_module_is_importable_for_the_above(monkeypatch):
     for key in (
         "weight",
         "height",
-        "age",
-        "gender_m",
         "threshold_pace",
-        "lthr",
-        "max_hr",
         "vt1_v",
         "vt2_v",
     ):
@@ -511,42 +295,32 @@ def test_state_module_is_importable_for_the_above(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _rendered_tab_names() -> set:
-    """Collect the tab names `app.py` passes to `render_tab_content`."""
-    import ast
-    import inspect
-
-    import app as app_module
-
-    tree = ast.parse(inspect.getsource(app_module))
-    names = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Name) and func.id == "render_tab_content":
-            if node.args and isinstance(node.args[0], ast.Constant):
-                names.add(node.args[0].value)
-    return names
-
-
 def test_registry_matches_the_tabs_app_actually_renders():
-    """Every registered tab must be reachable from a `render_tab_content` call.
-
-    Pre-fix: `_tabs` had 22 entries while `app.py` only rendered 18 —
-    "thresholds", "history", "import" and "community" were registered but never
-    reached, so the registry advertised four tabs that do not exist in the UI.
-    """
+    """Every registered tab is reachable exactly once in the navigation."""
     import app as app_module
 
     registered = set(app_module.TabRegistry._tabs)
-    rendered = _rendered_tab_names()
+    rendered = [tab for group in app_module.TAB_GROUPS.values() for tab in group]
+    assert registered == set(rendered)
+    assert len(rendered) == len(registered) == 15
 
-    assert registered == rendered, (
-        f"registered but never rendered: {sorted(registered - rendered)}; "
-        f"rendered but not registered: {sorted(rendered - registered)}"
-    )
-    assert len(registered) == 18
+
+def test_navigation_remembers_selection_for_each_group(monkeypatch):
+    from app import select_tab
+
+    state = {}
+    monkeypatch.setattr(streamlit, "session_state", state)
+    answers = iter(["📊 Overview", "summary", "⚡ Performance", "running", "📊 Overview"])
+
+    def radio(label, options, index=0, **kwargs):
+        value = next(answers, options[index])
+        assert value in options
+        return value
+
+    monkeypatch.setattr(streamlit, "radio", radio)
+    assert select_tab() == "summary"
+    assert select_tab() == "running"
+    assert select_tab() == "summary"
 
 
 def test_deregistered_tabs_are_not_in_the_registry():
