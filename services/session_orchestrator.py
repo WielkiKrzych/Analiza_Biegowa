@@ -20,7 +20,7 @@ import pyarrow
 import streamlit as st
 
 from modules.calculations.data_processing import process_data
-from modules.calculations.thermal import calculate_heat_strain_index
+from modules.calculations.thermal import read_core_hsi, summarize_core_hsi
 from modules.config import Config
 
 from .data_validation import validate_dataframe
@@ -46,8 +46,12 @@ def _process_session_core(
     if not is_valid:
         return pd.DataFrame(), pd.DataFrame(), {}, error
 
-    df_plot = apply_smo2_smoothing(calculate_heat_strain_index(process_data(df_raw)))
+    hsi = summarize_core_hsi(df_raw)
+    if "heat_strain_index" in df_raw:
+        df_raw["heat_strain_index"] = read_core_hsi(df_raw["heat_strain_index"])
+    df_plot = apply_smo2_smoothing(process_data(df_raw))
     metrics = calculate_session_metrics(df_plot, threshold_pace)
+    metrics["heat_strain"] = hsi
     return df_plot, resample_dataframe(df_plot), metrics, None
 
 

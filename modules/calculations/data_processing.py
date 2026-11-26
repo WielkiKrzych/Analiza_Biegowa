@@ -58,8 +58,9 @@ def resample_with_pace(df_pd: pd.DataFrame) -> pd.DataFrame:
         # A few missed GPS samples can be interpolated. A pause stays at zero.
         speed = df_resampled.pop("_speed_ms").where(gap_length <= 5, 0).fillna(0)
         df_resampled["pace"] = (1000.0 / speed.where(speed.gt(0))).fillna(0)
-    if "watts" in grid:
-        df_resampled["watts"] = grid["watts"]
+    for channel in ("watts", "heat_strain_index"):
+        if channel in grid:
+            df_resampled[channel] = grid[channel]
 
     return df_resampled
 

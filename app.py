@@ -194,7 +194,7 @@ def main() -> None:
         "hrv": (df_plot,),
         "smo2": (df_plot, training_notes, uploaded_file.name),
         "vent": (df_plot, training_notes, uploaded_file.name),
-        "thermal": (df_plot,),
+        "thermal": (df_plot, metrics["heat_strain"]),
         "aerobic_efficiency": (df_plot,),
     }
     TabRegistry.render(selected, *args[selected])

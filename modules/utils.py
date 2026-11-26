@@ -103,8 +103,9 @@ _COLUMN_ALIAS_INDEX = {
     },
     "watts": {"power", "pwr", "moc", "w", "watts", "running_power"},
     "speed_m_s": {"speed", "velocity", "speed_m_s", "speed_mps", "speed (m/s)"},
-    "core_temperature": {"core temp", "core_temp", "temp_central", "temp", "core temperature"},
+    "core_temperature": {"core temp", "core_temp", "temp_central", "core temperature"},
     "skin_temperature": {"skin temp", "skin_temp", "skin temperature"},
+    "ambient_temperature": {"temp", "temperature", "ambient_temp", "ambient temperature"},
     "tymeventilation": {"ve", "ventilation", "vent", "tymeventilation"},
     "tymebreathrate": {
         "br",
@@ -200,7 +201,8 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
         "cadence",
         "smo2",
         "thb",
-        "temp",
+        "ambient_temperature",
+        "heat_strain_index",
         "torque",
         "core_temperature",
         "skin_temperature",
@@ -361,6 +363,8 @@ METRIC_GROUP_DEFINITIONS = {
     "thermal": {
         "core_temp": ["core_temperature", "core_temp"],
         "skin_temp": ["skin_temperature", "skin_temp"],
+        "hsi": ["heat_strain_index"],
+        "temp_otoczenia": ["ambient_temperature"],
     },
     "biomechanics": {
         "vo": ["verticaloscillation", "VerticalOscillation", "vo"],
