@@ -12,7 +12,7 @@ def render_summary_tab(df: pd.DataFrame, metrics: dict) -> None:
     st.header("Podsumowanie treningu")
     fig = _build_training_timeline_chart(df)
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     columns = st.columns(4)
     for column, label, name, formatter in zip(

@@ -166,4 +166,4 @@ def _render_series_chart(
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1.1, x=0),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")

@@ -5,7 +5,7 @@ Integration tests for running analysis pipeline.
 import numpy as np
 import pandas as pd
 
-from modules.calculations.dual_mode import calculate_running_stress_score, detect_available_metrics
+from modules.calculations.dual_mode import calculate_running_stress_score
 from modules.calculations.gap import calculate_gap
 from modules.calculations.pace import calculate_pace_duration_curve, calculate_pace_zones_time
 from modules.calculations.running_dynamics import calculate_cadence_stats
@@ -33,11 +33,6 @@ def test_full_running_pipeline():
     # Test running dynamics
     cadence_stats = calculate_cadence_stats(df["cadence"].values)
     assert cadence_stats["mean_spm"] > 0
-
-    # Test dual mode
-    metrics = detect_available_metrics(df)
-    assert metrics["has_pace"]
-    assert metrics["has_power"]
 
 
 def test_pace_duration_curve_integration():

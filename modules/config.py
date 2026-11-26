@@ -1,142 +1,32 @@
+"""Runtime settings for the running dashboard."""
+
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load environment variables from .env file if it exists
 load_dotenv()
-
-# Base directory
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Config:
-    BASE_DIR = BASE_DIR
-    # --- Application Settings ---
-    APP_TITLE = os.getenv("APP_TITLE", "Run Analytics Pro")
+    APP_TITLE = os.getenv("APP_TITLE", "Analiza Biegowa")
     APP_ICON = os.getenv("APP_ICON", "🏃")
     APP_LAYOUT = os.getenv("APP_LAYOUT", "wide")
-    CSS_FILE = os.getenv("CSS_FILE", "style.css")
+    CSS_FILE = os.getenv("CSS_FILE", str(BASE_DIR / "style.css"))
 
-    # --- Athlete Defaults ---
-    # Single source of truth for default body weight. Used by the sidebar
-    # (`modules/frontend/layout.py`), the orchestrator
-    # (`services/session_orchestrator.py`), and the power estimator
-    # (`modules/calculations/running_power.py`). Audit v2 §6 P0-3: before
-    # this, the three sites hard-coded 95.0 vs 75.0 vs 75.0 — power could
-    # differ by 27% depending on call path.
     DEFAULT_BODY_WEIGHT_KG = float(os.getenv("DEFAULT_BODY_WEIGHT_KG", "75.0"))
-    # Other athlete defaults (P2-1, audit v2): the sidebar previously had
-    # six hard-coded numbers (height, age, gender, threshold pace, LTHR,
-    # MaxHR). All are now env-overridable for tests and personalization.
     DEFAULT_RUNNER_HEIGHT_CM = int(os.getenv("DEFAULT_RUNNER_HEIGHT_CM", "180"))
-    DEFAULT_RUNNER_AGE_YEARS = int(os.getenv("DEFAULT_RUNNER_AGE_YEARS", "30"))
-    DEFAULT_IS_MALE = os.getenv("DEFAULT_IS_MALE", "true").lower() in ("true", "1", "yes")
-    DEFAULT_THRESHOLD_PACE_SEC_PER_KM = int(
-        os.getenv("DEFAULT_THRESHOLD_PACE_SEC_PER_KM", "233")  # 3:53 /km
-    )
-    DEFAULT_LTHR_BPM = int(os.getenv("DEFAULT_LTHR_BPM", "166"))
-    DEFAULT_MAX_HR_BPM = int(os.getenv("DEFAULT_MAX_HR_BPM", "184"))
+    DEFAULT_THRESHOLD_PACE_SEC_PER_KM = int(os.getenv("DEFAULT_THRESHOLD_PACE_SEC_PER_KM", "233"))
 
-    # --- Analysis Parameters ---
-    ROLLING_WINDOW_5MIN = int(os.getenv("ROLLING_WINDOW_5MIN", "300"))
-    ROLLING_WINDOW_30S = int(os.getenv("ROLLING_WINDOW_30S", "30"))
     ROLLING_WINDOW_60S = int(os.getenv("ROLLING_WINDOW_60S", "60"))
-
-    # Constants for smoothing (legacy support)
     SMOOTH_WINDOW = int(os.getenv("SMOOTH_WINDOW", "30"))
     SMOOTH_WINDOW_SHORT = int(os.getenv("SMOOTH_WINDOW_SHORT", "5"))
-
-    # Filtering & Resampling
     RESAMPLE_THRESHOLD = int(os.getenv("RESAMPLE_THRESHOLD", "10000"))
     RESAMPLE_STEP = int(os.getenv("RESAMPLE_STEP", "5"))
-    MIN_WATTS_ACTIVE = int(os.getenv("MIN_WATTS_ACTIVE", "10"))
-    MIN_HR_ACTIVE = int(os.getenv("MIN_HR_ACTIVE", "40"))
-    MIN_RECORDS_FOR_ROLLING = int(os.getenv("MIN_RECORDS_FOR_ROLLING", "30"))
     MIN_DF_LENGTH = int(os.getenv("MIN_DF_LENGTH", "10"))
 
-    # --- Data Validation ---
-    VALIDATION_MAX_WATTS = int(os.getenv("VALIDATION_MAX_WATTS", "3000"))
     VALIDATION_MAX_HR = int(os.getenv("VALIDATION_MAX_HR", "250"))
     VALIDATION_MAX_CADENCE = int(os.getenv("VALIDATION_MAX_CADENCE", "250"))
-    VALIDATION_REQUIRED_COLS = ["time"]
-    VALIDATION_DATA_COLS = ["watts", "heartrate", "cadence", "smo2", "power", "pace", "speed"]
-
-    # --- ML Settings ---
-    MODEL_FILE = os.getenv("MODEL_FILE", "cycling_brain_weights.npz")
-    HISTORY_FILE = os.getenv("HISTORY_FILE", "brain_evolution_history.json")
-    ML_EPOCHS = int(os.getenv("ML_EPOCHS", "200"))
-    ML_LEARNING_RATE = float(os.getenv("ML_LEARNING_RATE", "0.02"))
-
-    # --- UI Colors ---
-    COLOR_POWER = os.getenv("COLOR_POWER", "#00cc96")
-    COLOR_HR = os.getenv("COLOR_HR", "#ef553b")
-    COLOR_SMO2 = os.getenv("COLOR_SMO2", "#ab63fa")
-    COLOR_VE = os.getenv("COLOR_VE", "#ffa15a")
-    COLOR_RR = os.getenv("COLOR_RR", "#19d3f3")
-    COLOR_THB = os.getenv("COLOR_THB", "#e377c2")
-    COLOR_TORQUE = os.getenv("COLOR_TORQUE", "#e377c2")
-
-    # --- Threshold Detection Constants ---
-    VT1_SLOPE_THRESHOLD = float(os.getenv("VT1_SLOPE_THRESHOLD", "0.05"))
-    VT2_SLOPE_THRESHOLD = float(os.getenv("VT2_SLOPE_THRESHOLD", "0.10"))
-    VT1_SLOPE_SPIKE_SKIP = float(os.getenv("VT1_SLOPE_SPIKE_SKIP", "0.10"))
-    SLOPE_CONFIDENCE_MAX = float(os.getenv("SLOPE_CONFIDENCE_MAX", "0.4"))
-    STABILITY_CONFIDENCE_MAX = float(os.getenv("STABILITY_CONFIDENCE_MAX", "0.4"))
-    BASE_CONFIDENCE = float(os.getenv("BASE_CONFIDENCE", "0.2"))
-    MAX_CONFIDENCE = float(os.getenv("MAX_CONFIDENCE", "0.95"))
-    LOWER_STEP_WEIGHT = float(os.getenv("LOWER_STEP_WEIGHT", "0.3"))
-    UPPER_STEP_WEIGHT = float(os.getenv("UPPER_STEP_WEIGHT", "0.7"))
-
-    @classmethod
-    def _validate_non_negative(cls, name: str, value: int | float) -> None:
-        if value < 0:
-            raise ValueError(f"{name} must be >= 0, got {value}")
-
-    @classmethod
-    def _validate_positive_int(cls, name: str, value: int) -> None:
-        if value < 1:
-            raise ValueError(f"{name} must be >= 1, got {value}")
-
-    @classmethod
-    def _validate_open_unit_range(cls, name: str, value: float) -> None:
-        if not (0.0 < value < 1.0):
-            raise ValueError(f"{name} must be in (0, 1), got {value}")
-
-    @classmethod
-    def _validate_confidence_values(cls) -> None:
-        for name, value in [
-            ("SLOPE_CONFIDENCE_MAX", cls.SLOPE_CONFIDENCE_MAX),
-            ("STABILITY_CONFIDENCE_MAX", cls.STABILITY_CONFIDENCE_MAX),
-            ("BASE_CONFIDENCE", cls.BASE_CONFIDENCE),
-            ("MAX_CONFIDENCE", cls.MAX_CONFIDENCE),
-        ]:
-            if not (0.0 <= value <= 1.0):
-                raise ValueError(f"{name} must be in [0, 1], got {value}")
-
-        if cls.BASE_CONFIDENCE >= cls.MAX_CONFIDENCE:
-            raise ValueError(
-                f"BASE_CONFIDENCE ({cls.BASE_CONFIDENCE}) must be < "
-                f"MAX_CONFIDENCE ({cls.MAX_CONFIDENCE})"
-            )
-
-    @classmethod
-    def validate(cls) -> None:
-        """Validate configuration values.
-
-        Raises:
-            ValueError: If any configuration value is invalid
-        """
-        cls._validate_non_negative("MIN_WATTS_ACTIVE", cls.MIN_WATTS_ACTIVE)
-        cls._validate_non_negative("MIN_HR_ACTIVE", cls.MIN_HR_ACTIVE)
-        cls._validate_positive_int("MIN_RECORDS_FOR_ROLLING", cls.MIN_RECORDS_FOR_ROLLING)
-
-        cls._validate_open_unit_range("ML_LEARNING_RATE", cls.ML_LEARNING_RATE)
-        cls._validate_open_unit_range("VT1_SLOPE_THRESHOLD", cls.VT1_SLOPE_THRESHOLD)
-        cls._validate_open_unit_range("VT2_SLOPE_THRESHOLD", cls.VT2_SLOPE_THRESHOLD)
-
-        cls._validate_confidence_values()
-
-
-# Validate configuration on module load
-Config.validate()
+    COLOR_PACE = "#00cc96"
+    COLOR_HR = "#ef553b"

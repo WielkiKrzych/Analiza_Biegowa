@@ -402,7 +402,7 @@ def _render_thb_chart(
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig_thb, use_container_width=True, key="thb_chart")
+    st.plotly_chart(fig_thb, width="stretch", key="thb_chart")
 
 
 # ---------------------------------------------------------------------------
@@ -484,7 +484,7 @@ def _render_phase_table(phase_result: SmO2PhaseResult) -> None:
                 "R²": f"{p['r_squared']:.2f}",
             }
         )
-    st.dataframe(pd.DataFrame(phase_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(phase_rows), width="stretch", hide_index=True)
 
 
 def _render_recovery_halftime(smo2_valid: pd.Series) -> None:
@@ -556,7 +556,7 @@ def _render_interval_thb(interval_data: pd.DataFrame) -> None:
         height=300,
         hovermode="x unified",
     )
-    st.plotly_chart(fig_thb, use_container_width=True)
+    st.plotly_chart(fig_thb, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -772,7 +772,7 @@ def render_smo2_tab(
     )
     selected = st.plotly_chart(
         fig_smo2,
-        use_container_width=True,
+        width="stretch",
         key="smo2_chart",
         on_select="rerun",
         selection_mode="box",

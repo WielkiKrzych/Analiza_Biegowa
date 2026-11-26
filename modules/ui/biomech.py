@@ -167,7 +167,7 @@ def _render_cadence_section(df_plot: pd.DataFrame) -> None:
 
         tick_vals, tick_text = _make_hhmmss_ticks(_time_values(df_plot, time_col))
         _apply_dark_layout(fig_cad, "Kadencja w czasie", tick_vals, tick_text, "Kadencja [SPM]")
-        st.plotly_chart(fig_cad, use_container_width=True)
+        st.plotly_chart(fig_cad, width="stretch")
 
     st.info("""
     **💡 Interpretacja Kadencji:**
@@ -245,7 +245,7 @@ def _render_gct_section(df_plot: pd.DataFrame) -> None:
         _apply_dark_layout(
             fig_gct, "Ground Contact Time w czasie", tick_vals, tick_text, "GCT [ms]"
         )
-        st.plotly_chart(fig_gct, use_container_width=True)
+        st.plotly_chart(fig_gct, width="stretch")
 
     st.info("""
     **💡 Interpretacja GCT:**
@@ -330,7 +330,7 @@ def _render_stance_balance_section(df_plot: pd.DataFrame) -> None:
             "Balans [%]",
             height=350,
         )
-        st.plotly_chart(fig_bal, use_container_width=True)
+        st.plotly_chart(fig_bal, width="stretch")
 
     st.info("""
     **💡 Interpretacja Balansu L/P:**
@@ -400,7 +400,7 @@ def _render_vertical_ratio_section(df_plot: pd.DataFrame) -> None:
             "VR [%]",
             height=350,
         )
-        st.plotly_chart(fig_vr, use_container_width=True)
+        st.plotly_chart(fig_vr, width="stretch")
 
     st.info("""
     **💡 Interpretacja Vertical Ratio:**
@@ -491,7 +491,7 @@ def _render_stride_length_section(
         "Długość kroku [m]",
         height=350,
     )
-    st.plotly_chart(fig_stride, use_container_width=True)
+    st.plotly_chart(fig_stride, width="stretch")
 
     st.info("""
     **💡 Interpretacja długości kroku:**
@@ -586,7 +586,7 @@ def _render_vertical_oscillation_section(
         tick_text,
         "VO [cm]",
     )
-    st.plotly_chart(fig_vo, use_container_width=True)
+    st.plotly_chart(fig_vo, width="stretch")
 
     cad_col = _resolve_cadence_col(df_plot)
     if cad_col is not None:
@@ -655,7 +655,7 @@ def _render_vo_cadence_scatter(
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, width="stretch")
 
 
 def _render_vo_pace_effectiveness(

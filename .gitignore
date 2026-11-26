@@ -26,7 +26,7 @@ Thumbs.db
 *.db
 data/*.db
 
-# ML weights
+# Local model data and Numba cache
 *.npz
 *.nbi
 *.nbc
@@ -41,9 +41,10 @@ htmlcov/
 # Environment
 .env
 
-# Reports (generated)
+# Local exports and notes
 reports/
 treningi_csv/
+training_notes/
 
 # JSON results (generated)
 *_results.json

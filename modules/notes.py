@@ -11,9 +11,6 @@ class TrainingNotes:
 
     NOTES_DIR = Path("training_notes")
 
-    def __init__(self):
-        self.NOTES_DIR.mkdir(exist_ok=True)
-
     def get_notes_file(self, training_file):
         """Pobierz plik notatek dla danego treningu"""
         base_name = Path(training_file).stem
@@ -35,6 +32,7 @@ class TrainingNotes:
         """Zapisz notatki do JSON"""
         notes_file = self.get_notes_file(training_file)
         try:
+            self.NOTES_DIR.mkdir(exist_ok=True)
             with open(notes_file, "w", encoding="utf-8") as f:
                 json.dump(notes_data, f, indent=2, ensure_ascii=False)
         except IOError as e:

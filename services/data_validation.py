@@ -139,9 +139,8 @@ def validate_dataframe(df: pd.DataFrame) -> Tuple[bool, str]:
     cols = df.columns
 
     # 2. Required Columns
-    for req in Config.VALIDATION_REQUIRED_COLS:
-        if req not in cols:
-            return False, f"Brak wymaganej kolumny: '{req}'"
+    if "time" not in cols:
+        return False, "Brak wymaganej kolumny: 'time'"
 
     # 4. Length Check
     if len(df) < Config.MIN_DF_LENGTH:

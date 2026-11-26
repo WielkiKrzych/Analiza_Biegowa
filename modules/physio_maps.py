@@ -244,16 +244,6 @@ def scatter_pace_smo2(df: pd.DataFrame, title: str = "Pace vs SmO₂") -> Option
 # ============================================================
 
 
-def scatter_power_hr(df: pd.DataFrame, title: str = "Power vs Heart Rate") -> Optional[go.Figure]:
-    """Legacy function - redirects to pace-based analysis."""
-    return scatter_pace_hr(df, title)
-
-
-def scatter_power_smo2(df: pd.DataFrame, title: str = "Power vs SmO₂") -> Optional[go.Figure]:
-    """Legacy function - redirects to pace-based analysis."""
-    return scatter_pace_smo2(df, title)
-
-
 # ============================================================
 # Constant Pace Segment Detection
 # ============================================================
@@ -324,7 +314,6 @@ def detect_constant_pace_segments(
 
 
 # Legacy function name
-detect_constant_power_segments = detect_constant_pace_segments
 
 
 def _resolve_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
@@ -507,7 +496,6 @@ def trend_at_constant_pace(
 
 
 # Legacy function name
-trend_at_constant_power = trend_at_constant_pace
 
 
 # ============================================================
@@ -568,4 +556,3 @@ def analyze_drift_pace_hr(df: pd.DataFrame, min_segment_duration_min: float = 3.
 
 
 # Legacy function name
-analyze_drift_power_hr = analyze_drift_pace_hr

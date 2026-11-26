@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 class TabRegistry:
     """Registry for UI tabs to support Open/Closed Principle."""
 
-    # `thresholds`, `history`, `import` and `community` were deregistered: this
-    # registry listed them, but no `render_tab_content(...)` call ever reached
-    # them. Their modules stay on disk; see docs/DEAD_CODE_INVENTORY.md.
     _tabs = {
         "report": ("modules.ui.report", "render_report_tab"),
         "running": ("modules.ui.running", "render_running_tab"),
@@ -147,9 +144,8 @@ def main() -> None:
     state = StateManager()
     state.init_session_state()
 
-    # Safety Check: Git Tracking of sensitive data (reports & raw CSVs)
-    check_git_tracking("reports/ramp_tests")
     check_git_tracking("treningi_csv")
+    check_git_tracking("training_notes")
 
     layout = AppLayout()
     uploaded_file, params = layout.render_sidebar()

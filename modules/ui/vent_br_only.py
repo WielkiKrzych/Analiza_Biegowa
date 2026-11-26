@@ -61,7 +61,7 @@ def _render_br_only_section(target_df):
                 height=250,
                 margin=dict(l=10, r=10, t=40, b=10),
             )
-            st.plotly_chart(fig_brz, use_container_width=True)
+            st.plotly_chart(fig_brz, width="stretch")
 
         # VT detection from BR
         vt_result = detect_vt_from_br(br_series)
@@ -105,7 +105,7 @@ def _render_br_only_section(target_df):
                 height=350,
                 margin=dict(l=10, r=10, t=40, b=10),
             )
-            st.plotly_chart(fig_br_ts, use_container_width=True)
+            st.plotly_chart(fig_br_ts, width="stretch")
     else:
         st.info("Za mało danych BR do analizy (min. 60 próbek).")
 

@@ -35,4 +35,4 @@ def render_aerobic_efficiency_tab(df: pd.DataFrame) -> None:
         if onset_sec is not None:
             fig.add_vline(x=onset_sec / 60, line_dash="dash")
         fig.update_layout(xaxis_title="Czas [min]", yaxis_title="Prędkość / HR [m/s/bpm]")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")

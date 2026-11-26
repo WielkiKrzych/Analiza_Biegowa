@@ -22,24 +22,6 @@ from modules.calculations.pace_utils import format_pace
 from modules.plots import apply_chart_style
 
 
-def get_pace_zone_color(pace: float, threshold_pace: float) -> str:
-    """Get color for pace zone."""
-    if threshold_pace <= 0:
-        return "#808080"
-    ratio = pace / threshold_pace
-
-    if ratio > 1.15:
-        return "#3498db"  # Blue - Recovery
-    elif ratio > 1.05:
-        return "#2ecc71"  # Green - Aerobic
-    elif ratio > 0.95:
-        return "#f1c40f"  # Yellow - Tempo
-    elif ratio > 0.88:
-        return "#e67e22"  # Orange - Threshold
-    else:
-        return "#e74c3c"  # Red - Interval/Repetition
-
-
 def _mean_pace(series: pd.Series) -> float:
     """Time-weighted average pace = total distance / total time.
 
@@ -75,20 +57,6 @@ def calculate_pace_summary_stats(df: pd.DataFrame, threshold_pace: float) -> Dic
         stats["time_in_zones"] = calculate_pace_zones_time(df, threshold_pace)
 
     return stats
-
-
-def _format_duration(seconds: int) -> str:
-    """Format seconds to human-readable duration."""
-    if seconds < 60:
-        return f"{seconds}s"
-    elif seconds < 3600:
-        mins = seconds // 60
-        secs = seconds % 60
-        return f"{mins}:{secs:02d}" if secs else f"{mins}min"
-    else:
-        hours = seconds // 3600
-        mins = (seconds % 3600) // 60
-        return f"{hours}h{mins:02d}" if mins else f"{hours}h"
 
 
 # ===========================================================================
@@ -194,7 +162,7 @@ def _render_pace_chart(df_plot: pd.DataFrame, threshold_pace: float) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
         height=450,
     )
-    st.plotly_chart(apply_chart_style(fig_pace), use_container_width=True)
+    st.plotly_chart(apply_chart_style(fig_pace), width="stretch")
 
     st.info("""
     **💡 Interpretacja: Zarządzanie Tempem**
@@ -333,7 +301,7 @@ def _render_pdc_metrics_and_chart(
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(apply_chart_style(fig_pdc), use_container_width=True)
+    st.plotly_chart(apply_chart_style(fig_pdc), width="stretch")
 
     fri = calculate_fatigue_resistance_index_pace(pdc)
     if fri > 0:

@@ -85,7 +85,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
                 name="Tempo",
                 fill="tonexty",
                 fillcolor="rgba(0, 204, 150, 0.25)",
-                line=dict(color=Config.COLOR_POWER, width=1),
+                line=dict(color=Config.COLOR_PACE, width=1),
                 hovertemplate="<b>🕐 %{customdata[0]}</b><br>⏱️ Tempo: %{customdata[1]}<extra></extra>",
                 customdata=[
                     [_time_hms[i], f"{int(p)}:{int((p % 1) * 60):02d}" if pd.notna(p) else "--:--"]
@@ -94,12 +94,23 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             )
         )
 
+    if "gap" in df_plot and df_plot["gap"].gt(0).any():
+        fig.add_scatter(
+            x=time_x,
+            y=df_plot["gap"].where(df_plot["gap"].gt(0)) / 60,
+            name="GAP",
+            mode="lines",
+            line={"dash": "dot"},
+            hovertemplate="GAP: %{y:.2f} min/km<extra></extra>",
+        )
+
     # HR
     if hr_col:
         fig.add_trace(
             go.Scatter(
                 x=time_x,
                 y=df_plot[hr_col],
+                yaxis="y2",
                 name="HR",
                 line=dict(color="#ef553b", width=1),
                 hovertemplate="<b>🕐 %{customdata}</b><br>❤️ HR: %{y:.0f} bpm<extra></extra>",
@@ -113,6 +124,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             go.Scatter(
                 x=time_x,
                 y=smo2_vals,
+                yaxis="y3",
                 name="SmO2",
                 line=dict(color="#2ca02c", width=1),
                 hovertemplate="<b>🕐 %{customdata}</b><br>🩸 SmO₂: %{y:.1f}%<extra></extra>",
@@ -126,6 +138,7 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
             go.Scatter(
                 x=time_x,
                 y=ve_vals,
+                yaxis="y4",
                 name="VE",
                 line=dict(color="#ffa15a", width=1),
                 hovertemplate="<b>🕐 %{customdata}</b><br>🫁 VE: %{y:.1f} L/min<extra></extra>",
@@ -153,14 +166,16 @@ def _build_training_timeline_chart(df_plot: pd.DataFrame) -> Optional[go.Figure]
         xaxis=dict(
             title="Czas [hh:mm:ss]",
             tickmode="array",
-            tickvals=tick_vals,
+            tickvals=[t / 60 for t in tick_vals] if tick_vals is not None else None,
             ticktext=tick_text,
         ),
         yaxis=dict(title="Tempo [min/km]", side="left", autorange="reversed"),
         yaxis2=dict(title="HR [bpm]", overlaying="y", side="right", showgrid=False),
-        yaxis3=dict(title="SmO2 [%]", overlaying="y", side="right", position=0.95, showgrid=False),
+        yaxis3=dict(
+            title="SmO2 [%]", overlaying="y", side="right", showticklabels=False, showgrid=False
+        ),
         yaxis4=dict(
-            title="VE [L/min]", overlaying="y", side="right", position=0.98, showgrid=False
+            title="VE [L/min]", overlaying="y", side="right", showticklabels=False, showgrid=False
         ),
         height=500,
         legend=dict(orientation="h", y=-0.2),

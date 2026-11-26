@@ -34,4 +34,4 @@ def render_model_tab(df: pd.DataFrame) -> None:
     figure.update_layout(
         xaxis_title="Długość odcinka [s]", yaxis=dict(title="Tempo [min/km]", autorange="reversed")
     )
-    st.plotly_chart(figure, use_container_width=True)
+    st.plotly_chart(figure, width="stretch")

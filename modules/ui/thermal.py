@@ -26,7 +26,7 @@ def _render_core_temperature(df: pd.DataFrame) -> None:
     st.subheader("Strefy temperatury centralnej")
     figure = go.Figure(go.Bar(x=list(zones.values()), y=list(zones), orientation="h"))
     figure.update_layout(xaxis_title="Czas [s]")
-    st.plotly_chart(figure, use_container_width=True)
+    st.plotly_chart(figure, width="stretch")
 
     drift = calculate_thermal_drift_rate(series, df.loc[series.index, "time"])
     if drift is not None:
@@ -50,7 +50,7 @@ def _render_core_hsi(df: pd.DataFrame, hsi: HeatStrain | None) -> None:
         )
     )
     figure.update_layout(xaxis_title="Czas [min]", yaxis=dict(title="HSI", range=[0, 10]))
-    st.plotly_chart(figure, use_container_width=True)
+    st.plotly_chart(figure, width="stretch")
     peak, mean = st.columns(2)
     peak.metric("Maksimum HSI", f"{hsi['peak']:.1f}")
     mean.metric(
@@ -77,6 +77,6 @@ def render_thermal_tab(df: pd.DataFrame, hsi: HeatStrain | None) -> None:
             figure.add_scatter(x=df["time_min"], y=df[name], name=label, mode="lines")
     if figure.data:
         figure.update_layout(xaxis_title="Czas [min]", yaxis_title="Temperatura [°C]")
-        st.plotly_chart(figure, use_container_width=True)
+        st.plotly_chart(figure, width="stretch")
     _render_core_temperature(df)
     _render_core_hsi(df, hsi)

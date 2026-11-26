@@ -80,7 +80,7 @@ def _render_hr_distribution(df_plot: pd.DataFrame) -> None:
         bargap=0.1,
         margin=dict(t=20, b=20),
     )
-    st.plotly_chart(fig_hr, use_container_width=True)
+    st.plotly_chart(fig_hr, width="stretch")
 
 
 def _render_smo2_column(df_plot_resampled: pd.DataFrame) -> None:
@@ -130,7 +130,7 @@ def _render_smo2_column(df_plot_resampled: pd.DataFrame) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
         height=400,
     )
-    st.plotly_chart(fig_s, use_container_width=True)
+    st.plotly_chart(fig_s, width="stretch")
 
     st.info("""
     **💡 Hemodynamika Mięśniowa (SmO2) - Lokalny Monitoring:**
@@ -165,7 +165,7 @@ def _render_hr_column(df_plot_resampled: pd.DataFrame) -> None:
             margin=dict(l=10, r=10, t=40, b=10),
             height=400,
         )
-        st.plotly_chart(fig_h, use_container_width=True)
+        st.plotly_chart(fig_h, width="stretch")
     else:
         st.info("Brak danych tętna (HR)")
 
@@ -258,7 +258,7 @@ def _render_ventilation_section(
         margin=dict(l=10, r=10, t=40, b=10),
         height=450,
     )
-    st.plotly_chart(fig_v, use_container_width=True)
+    st.plotly_chart(fig_v, width="stretch")
 
     st.info("""
     **💡 Interpretacja: Mechanika Oddychania**

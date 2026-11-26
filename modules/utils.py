@@ -9,46 +9,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from modules.calculations.pace_utils import pace_to_seconds
+
 logger = logging.getLogger(__name__)
-
-
-def parse_time_input(t_str: str) -> int | None:
-    """Parse time string (HH:MM:SS, MM:SS, or SS) to seconds.
-
-    Args:
-        t_str: Time string in format HH:MM:SS, MM:SS, or SS
-
-    Returns:
-        Total seconds or None if parsing fails
-    """
-    try:
-        parts = list(map(int, t_str.split(":")))
-        if len(parts) == 3:
-            return parts[0] * 3600 + parts[1] * 60 + parts[2]
-        if len(parts) == 2:
-            return parts[0] * 60 + parts[1]
-        if len(parts) == 1:
-            return parts[0]
-    except (ValueError, AttributeError) as e:
-        logger.debug(f"Failed to parse time '{t_str}': {e}")
-        return None
-    return None
-
-
-def _serialize_df_to_parquet_bytes(df: pd.DataFrame) -> bytes:
-    """Serialize DataFrame to bytes for caching.
-
-    Tries parquet first (faster), falls back to CSV.
-    """
-    bio = io.BytesIO()
-    try:
-        df.to_parquet(bio, index=False)
-        return bio.getvalue()
-    except (ImportError, ValueError) as e:
-        logger.debug(f"Parquet serialization failed, using CSV: {e}")
-        bio = io.BytesIO()
-        df.to_csv(bio, index=False)
-        return bio.getvalue()
 
 
 def normalize_columns_pandas(df_pd: pd.DataFrame) -> pd.DataFrame:
@@ -63,14 +26,13 @@ def normalize_columns_pandas(df_pd: pd.DataFrame) -> pd.DataFrame:
 
     # Apply standard mappings using cached reverse index for O(m) complexity
     mapping = {}
-    set(df_pd.columns)  # O(1) lookup
     cols_lower = {c.lower().strip() for c in df_pd.columns}
 
     # Pre-built reverse index: canonical -> set of aliases (module-level constant)
     for canonical, aliases in _COLUMN_ALIAS_INDEX.items():
         if canonical not in cols_lower:
             # Find first matching alias
-            match = next((a for a in aliases if a in cols_lower), None)
+            match = next((col for col in df_pd.columns if col in aliases), None)
             if match:
                 # Find original case column name
                 orig_col = next(c for c in df_pd.columns if c.lower().strip() == match)
@@ -154,7 +116,6 @@ def _clean_hrv_value(val: str) -> float:
 def _read_raw_file(file) -> pd.DataFrame:
     """Read file content into raw DataFrame using Polars/Pandas."""
     import csv
-    import io
 
     file.seek(0)
     content = file.read()
@@ -203,7 +164,6 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
         "thb",
         "ambient_temperature",
         "heat_strain_index",
-        "torque",
         "core_temperature",
         "skin_temperature",
         "velocity_smooth",
@@ -226,6 +186,12 @@ def _convert_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
         "speed_m_s",
         "temperature",
         "o2hb",
+        "distance",
+        "elevation",
+        "altitude",
+        "gct",
+        "verticaloscillation",
+        "rmssd",
         "hhb",
     ]
 
@@ -251,7 +217,11 @@ def _normalize_velocity_units(df: pd.DataFrame) -> pd.DataFrame:
 def derive_pace(df: pd.DataFrame) -> None:
     """Normalize pace to seconds per km and use GPS speed for missing values."""
     if "pace" in df:
-        pace = pd.to_numeric(df["pace"], errors="coerce")
+        raw = df["pace"]
+        pace = pd.to_numeric(raw, errors="coerce")
+        formatted = pace.isna() & raw.astype(str).str.contains(":", regex=False)
+        if formatted.any():
+            pace = pace.mask(formatted, raw[formatted].map(pace_to_seconds))
         df["pace"] = pace.where(pace.eq(0) | pace.between(60, 3600))
     for column in ("speed_m_s", "speed", "velocity_smooth"):
         if column not in df:

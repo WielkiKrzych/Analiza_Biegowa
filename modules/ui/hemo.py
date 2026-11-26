@@ -99,7 +99,7 @@ def render_hemo_tab(target_df):
             font=dict(color="#ffa15a"),
         )
 
-        st.plotly_chart(fig_hemo, use_container_width=True)
+        st.plotly_chart(fig_hemo, width="stretch")
 
         # 3. Wykres Liniowy w czasie (Dual Axis)
         st.subheader("Trendy w Czasie (Szukanie Rozjazdu)")
@@ -171,7 +171,7 @@ def render_hemo_tab(target_df):
             ),
             height=450,
         )
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.plotly_chart(fig_trend, width="stretch")
 
         # 4. Teoria dla Fizjologii
         st.info("""

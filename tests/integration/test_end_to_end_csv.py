@@ -124,3 +124,14 @@ def test_upload_without_pace_or_speed_is_rejected_even_with_sensor_channels():
     plot, _, metrics, error = process_uploaded_session(df)
     assert plot is None and metrics is None
     assert "tempa" in error and "prędkości" in error
+
+
+def test_pace_in_minutes_and_seconds_is_normalized():
+    import io
+
+    raw = load_data(
+        io.BytesIO(("time,pace\n" + "".join(f"{i},4:30\n" for i in range(60))).encode())
+    )
+    result, _, _, error = process_uploaded_session(raw)
+    assert error is None
+    assert result["pace"].eq(270).all()

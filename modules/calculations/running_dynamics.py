@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 import pandas as pd
 
-from .pace_utils import pace_array_to_speed_array, pace_to_speed
+from .pace_utils import pace_array_to_speed_array
 
 
 def calculate_cadence_stats(cadence_spm: np.ndarray) -> Dict:
@@ -175,50 +175,6 @@ def calculate_stride_metrics(df_pl: Union[pd.DataFrame, Any], runner_height: flo
         "samples": len(valid),
         "source": "derived",
     }
-
-
-def analyze_cadence_drift(cadence_spm: np.ndarray, min_samples: int = 100) -> Dict:
-    """Analyze cadence drift over workout."""
-    # Running cadence filter: 120-300 SPM
-    valid = cadence_spm[(cadence_spm > 120) & (cadence_spm < 300)]
-
-    if len(valid) < min_samples:
-        return {"drift_spm": 0.0, "classification": "insufficient-data"}
-
-    mid = len(valid) // 2
-    mean_first = float(np.mean(valid[:mid]))
-    mean_second = float(np.mean(valid[mid:]))
-
-    drift_spm = mean_second - mean_first
-    drift_pct = (drift_spm / mean_first) * 100 if mean_first > 0 else 0
-
-    if drift_pct < -5:
-        classification = "significant-drop"
-    elif drift_pct < -2:
-        classification = "moderate-drop"
-    elif drift_pct < 2:
-        classification = "stable"
-    else:
-        classification = "increased"
-
-    return {
-        "drift_spm": round(drift_spm, 1),
-        "drift_pct": round(drift_pct, 1),
-        "classification": classification,
-    }
-
-
-def calculate_running_effectiveness(
-    pace_sec_per_km: float, running_power: float, weight_kg: float
-) -> float:
-    """Calculate Running Effectiveness (RE). RE = Speed (m/s) / Power (W/kg)."""
-    if pace_sec_per_km <= 0 or running_power <= 0 or weight_kg <= 0:
-        return 0.0
-
-    speed = pace_to_speed(pace_sec_per_km)
-    power_per_kg = running_power / weight_kg
-
-    return speed / power_per_kg
 
 
 def calculate_vo_stats(vo_cm: np.ndarray) -> Dict:

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "run_analytics_pro"
 version = "0.1.0"
-description = "Advanced Triathlon Dashboard with AI Integration"
+description = "Analiza tempa, biomechaniki i fizjologii pojedynczego biegu"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -17,53 +17,34 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 dependencies = [
-    "streamlit>=1.30.0",
+    "streamlit>=1.54.0",
     "pandas>=2.0.0",
     "polars>=0.20.0",
     "plotly>=5.18.0",
     "numpy>=1.26.0",
     "scipy>=1.11.0",
-    "neurokit2>=0.2.7",
-    "matplotlib>=3.8.0",
-    "statsmodels>=0.14.0",
-    "python-docx>=1.1.0",
-    # Hard imports that were never declared: `pip install -e .` on a clean
-    # machine (e.g. CI) failed on `ModuleNotFoundError: No module named
-    # 'reportlab'` while local runs passed on incidentally installed wheels.
     "reportlab>=4.0.0",
-    "pillow>=10.0.0",
     "pyarrow>=14.0.0",
-    "requests>=2.31.0",
-    "mlx>=0.0.10",
     "numba>=0.59.0",
-    "kaleido==0.2.1",
     "python-dotenv>=1.0.0",
-    "pytest>=8.0.0",
-    "pytest-timeout>=2.2.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-    "black",
+    "pytest>=8.0.0",
+    "pytest-timeout>=2.2.0",
     "ruff",
     "mypy",
     "pytest-cov",
-    "isort",
     "pre-commit>=3.5.0",
-    "bump2version>=1.0.1",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["modules*", "services*", "models*"]
+include = ["modules*", "services*"]
 
 [tool.setuptools.package-data]
 "modules.reporting" = ["DejaVuSans.ttf", "LICENSE-DejaVu.txt"]
-
-[tool.black]
-line-length = 100
-target-version = ['py310']
-include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 100
@@ -71,7 +52,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "C90", "B"]
-ignore = ["E501"] # Line too long (handled by Black)
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
@@ -84,10 +65,6 @@ testpaths = [
 ]
 python_files = "test_*.py"
 
-# mypy (Faza 5, audit v2): start with `ignore_missing_imports = true` to
-# avoid being blocked by third-party libs without type stubs (streamlit,
-# plotly, neurokit2, mlx, ...). Tighten incrementally as the codebase
-# is annotated.
 [tool.mypy]
 explicit_package_bases = true
 python_version = "3.10"
@@ -101,7 +78,6 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 exclude = [
     "tests/",
-    "scripts/",
     ".venv/",
     "build/",
 ]
@@ -113,12 +89,4 @@ follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = "plotly.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "neurokit2.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "mlx.*"
 ignore_missing_imports = true
