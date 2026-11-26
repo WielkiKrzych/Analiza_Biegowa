@@ -1,41 +1,11 @@
-"""
-TTE (Time-to-Exhaustion) UI Module — running, dual metric.
-
-Time-to-Exhaustion is computed on TWO independent variables when available:
-  • Pace-based:  longest continuous stretch held within a band around a % of the
-    athlete's threshold pace (converted to speed so the "hold intensity" test is
-    symmetric).
-  • Power-based: longest continuous stretch within a band around a % of running
-    Critical Power (watts, e.g. Stryd).
-Both are shown side by side; whichever data is present is rendered.
-"""
+"""Longest continuous effort around a target running pace."""
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from modules.calculations.pace_utils import pace_to_speed, speed_to_pace
-from modules.tte import (
-    compute_tte,
-    compute_tte_result,
-    export_tte_json,
-    format_tte,
-)
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _estimate_cp(watts: pd.Series) -> float:
-    """Estimate running Critical Power as best 20-min average × 0.95."""
-    w = pd.to_numeric(watts, errors="coerce").fillna(0.0)
-    window = 20 * 60
-    if len(w) >= window:
-        best20 = w.rolling(window).mean().max()
-        if best20 and best20 > 0:
-            return float(best20 * 0.95)
-    return float(w[w > 0].mean()) if (w > 0).any() else 0.0
+from modules.tte import compute_tte, format_tte
 
 
 def _estimate_threshold_pace(pace: pd.Series) -> float:
@@ -57,7 +27,7 @@ def _estimate_threshold_pace(pace: pd.Series) -> float:
 
 def _fmt_pace(sec_per_km: float) -> str:
     if not sec_per_km or sec_per_km <= 0:
-        return "—"
+        return "-"
     m = int(sec_per_km // 60)
     s = int(round(sec_per_km - m * 60))
     if s == 60:
@@ -80,102 +50,13 @@ def _rating(tte_seconds: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_tte_tab(
-    df_plot: pd.DataFrame,
-    cp: float = 0.0,
-    threshold_pace: float = 0.0,
-    uploaded_file_name: str = "manual_upload",
-) -> None:
-    """Render the TTE tab on pace AND power in parallel.
-
-    Args:
-        df_plot: Session data (``pace`` in sec/km and/or ``watts`` running power).
-        cp: Critical Power (watts). Estimated from the session if <= 0.
-        threshold_pace: Threshold pace (sec/km). Estimated from the session if <= 0.
-        uploaded_file_name: Original filename for record matching.
-    """
-    st.header("⏱️ Time-to-Exhaustion (TTE)")
-    st.markdown(
-        "Maksymalny ciągły czas utrzymania zadanej intensywności — liczony równolegle "
-        "**wg tempa** (% tempa progowego) i **wg mocy** (% Critical Power)."
-    )
-
-    has_pace = "pace" in df_plot.columns
-    has_power = "watts" in df_plot.columns
-    if not has_pace and not has_power:
-        st.error("Brak kolumny `pace` i `watts` — nie można policzyć TTE.")
-        return
-
-    st.subheader("⚙️ Konfiguracja")
-    col1, col2 = st.columns(2)
-    with col1:
-        target_pct = st.slider("Docelowy % progu", 70, 120, 100, 5, key="tte_pct")
-    with col2:
-        tol_pct = st.slider("Tolerancja [%]", 1, 10, 5, 1, key="tte_tol")
-
-    if has_pace and has_power:
-        tab_pace, tab_power = st.tabs(["⏱️ Wg tempa", "🔋 Wg mocy"])
-        with tab_pace:
-            _render_pace_tte(df_plot, threshold_pace, target_pct, tol_pct)
-        with tab_power:
-            _render_power_tte(df_plot, cp, target_pct, tol_pct)
-    elif has_pace:
-        _render_pace_tte(df_plot, threshold_pace, target_pct, tol_pct)
-        st.caption("ℹ️ Brak mocy biegowej (watts) — analiza wg mocy niedostępna.")
-    else:
-        _render_power_tte(df_plot, cp, target_pct, tol_pct)
-        st.caption("ℹ️ Brak kolumny `pace` — analiza wg tempa niedostępna.")
-
-    _render_theory()
-
-
-# ---------------------------------------------------------------------------
-# Power-based TTE
-# ---------------------------------------------------------------------------
-
-
-def _render_power_tte(df_plot: pd.DataFrame, cp: float, target_pct: int, tol_pct: int) -> None:
-    if not cp or cp <= 0:
-        cp = _estimate_cp(df_plot["watts"])
-        st.caption(f"ℹ️ CP oszacowane z sesji: **{cp:.0f} W** (best 20 min × 0.95).")
-
-    result = compute_tte_result(
-        df_plot["watts"], target_pct=target_pct, ftp=cp, tol_pct=tol_pct
-    )
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Maksymalny TTE", format_tte(result.tte_seconds))
-    c2.metric(
-        "Zakres mocy",
-        f"{result.target_power_min:.0f}–{result.target_power_max:.0f} W",
-        help=f"{target_pct}% CP ± {tol_pct}%",
-    )
-    c3.metric("Ocena", _rating(result.tte_seconds))
-
-    _render_series_chart(
-        df_plot,
-        "watts",
-        result.target_power_min,
-        result.target_power_max,
-        "Moc biegowa",
-        "Moc [W]",
-        f"{target_pct}% CP ± {tol_pct}%",
-    )
-
-    with st.expander("📥 Eksport JSON (moc)"):
-        json_data = export_tte_json(result)
-        st.code(json_data, language="json")
-        st.download_button(
-            "Pobierz JSON",
-            data=json_data,
-            file_name=f"tte_power_{result.session_id}.json",
-            mime="application/json",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Pace-based TTE
-# ---------------------------------------------------------------------------
+def render_tte_tab(df_plot: pd.DataFrame, threshold_pace: float) -> None:
+    st.header("Czas utrzymania tempa (TTE)")
+    st.caption("Najdłuższy ciągły odcinek w podanym zakresie prędkości progowej.")
+    left, right = st.columns(2)
+    target_pct = left.slider("Docelowy % prędkości progowej", 70, 120, 100, 5, key="tte_pct")
+    tol_pct = right.slider("Tolerancja [%]", 1, 10, 5, 1, key="tte_tol")
+    _render_pace_tte(df_plot, threshold_pace, target_pct, tol_pct)
 
 
 def _render_pace_tte(
@@ -183,9 +64,7 @@ def _render_pace_tte(
 ) -> None:
     if not threshold_pace or threshold_pace <= 0:
         threshold_pace = _estimate_threshold_pace(df_plot["pace"])
-        st.caption(
-            f"ℹ️ Tempo progowe oszacowane z sesji: **{_fmt_pace(threshold_pace)} min/km**."
-        )
+        st.caption(f"ℹ️ Tempo progowe oszacowane z sesji: **{_fmt_pace(threshold_pace)} min/km**.")
     if not threshold_pace or threshold_pace <= 0:
         st.info("Brak wiarygodnych danych tempa.")
         return
@@ -197,7 +76,7 @@ def _render_pace_tte(
     threshold_speed = pace_to_speed(threshold_pace)
 
     tte_seconds = compute_tte(
-        speed, target_pct=target_pct, ftp=threshold_speed, tol_pct=tol_pct
+        speed, target_pct=target_pct, threshold=threshold_speed, tol_pct=tol_pct
     )
 
     target_speed = threshold_speed * (target_pct / 100.0)
@@ -211,7 +90,7 @@ def _render_pace_tte(
     c1.metric("Maksymalny TTE", format_tte(tte_seconds))
     c2.metric(
         "Zakres tempa",
-        f"{_fmt_pace(pace_fast)}–{_fmt_pace(pace_slow)}",
+        f"{_fmt_pace(pace_fast)}-{_fmt_pace(pace_slow)}",
         help=f"{target_pct}% tempa progowego ± {tol_pct}%",
     )
     c3.metric("Ocena", _rating(tte_seconds))
@@ -288,32 +167,3 @@ def _render_series_chart(
         legend=dict(orientation="h", y=1.1, x=0),
     )
     st.plotly_chart(fig, use_container_width=True)
-
-
-def _render_theory() -> None:
-    with st.expander("📖 Time-to-Exhaustion (TTE) — Teoria i Fizjologia (bieganie)", expanded=False):
-        st.markdown(
-            """
-**TTE** to maksymalny czas utrzymania zadanej intensywności przed wyczerpaniem. Warto liczyć
-go **równolegle wg tempa i mocy** — te zmienne rozjeżdżają się na podbiegach, wietrze i przy
-zmęczeniu nerwowo-mięśniowym (moc utrzymana, tempo spada = koszt biegu rośnie).
-
-### Interpretacja TTE @ 100% progu (bieg)
-
-| Poziom | TTE | Interpretacja |
-|---|---|---|
-| Początkujący | 15-25 min | Słaba wytrzymałość progowa |
-| Amator | 25-40 min | Baza tlenowa w budowie |
-| Zaawansowany | 40-55 min | Efektywny klirens mleczanu, dobra ekonomia |
-| Elitarny | 55+ min | Wysoka tolerancja progowa (poziom krajowy) |
-
-### Mechanizmy ograniczające TTE
-1. **Wyczerpanie D'/W'** — skończona pojemność powyżej CS/CP.
-2. **Akumulacja metabolitów** — spadek pH hamuje enzymy, spada siła skurczu.
-3. **VO₂ slow component** — powyżej progu VO₂ dryfuje do VO₂max, SmO₂ spada.
-4. **Zmęczenie centralne** — spadek rekrutacji jednostek motorycznych.
-
-### TTE a dystanse (≈ % progu)
-5 km ~105% · 10 km ~95-100% · Półmaraton ~88-92% · Maraton ~80-85%.
-        """
-        )

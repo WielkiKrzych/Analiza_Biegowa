@@ -3,7 +3,7 @@
 import io
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -101,7 +101,8 @@ _COLUMN_ALIAS_INDEX = {
         "heartrate_bpm",
         "hr_bpm",
     },
-    "watts": {"power", "pwr", "moc", "w", "watts"},
+    "watts": {"power", "pwr", "moc", "w", "watts", "running_power"},
+    "speed_m_s": {"speed", "velocity", "speed_m_s", "speed_mps", "speed (m/s)"},
     "core_temperature": {"core temp", "core_temp", "temp_central", "temp", "core temperature"},
     "skin_temperature": {"skin temp", "skin_temp", "skin temperature"},
     "tymeventilation": {"ve", "ventilation", "vent", "tymeventilation"},
@@ -151,40 +152,29 @@ def _clean_hrv_value(val: str) -> float:
 
 def _read_raw_file(file) -> pd.DataFrame:
     """Read file content into raw DataFrame using Polars/Pandas."""
-    # Try Polars first for speed
+    import csv
+    import io
+
+    file.seek(0)
+    content = file.read()
+    file.seek(0)
+    sample = content[:8192].decode("utf-8-sig", errors="replace")
+    try:
+        separator = csv.Sniffer().sniff(sample, delimiters=",;").delimiter
+    except csv.Error:
+        # The header still identifies the separator when malformed rows foil sniffing.
+        header = sample.splitlines()[0] if sample else ""
+        separator = ";" if header.count(";") > header.count(",") else ","
     try:
         import polars as pl
+    except ImportError:
+        return pd.read_csv(io.BytesIO(content), sep=separator, low_memory=False)
 
-        file.seek(0)
-        content = file.read()
-        file.seek(0)
-
-        # Try comma separator
-        try:
-            pl_df = pl.read_csv(io.BytesIO(content))
-        except (ValueError, TypeError):
-            # Try semicolon
-            pl_df = pl.read_csv(io.BytesIO(content), separator=";")
-
-        df_pd = pl_df.to_pandas()
-        logger.debug("Loaded data with Polars (fast mode)")
-        return df_pd
-    except (ImportError, OSError, ValueError) as e:
-        logger.debug(f"Polars load failed, using Pandas: {e}")
-        # Pandas fallback with pyarrow engine for better performance
-        try:
-            file.seek(0)
-            # Use pyarrow engine for faster parsing of large files
-            return pd.read_csv(file, low_memory=False, engine="pyarrow")
-        except (pd.errors.ParserError, UnicodeDecodeError, ImportError) as e:
-            logger.info(f"PyArrow CSV parse failed, trying standard engine: {e}")
-            try:
-                file.seek(0)
-                return pd.read_csv(file, low_memory=False)
-            except (pd.errors.ParserError, UnicodeDecodeError) as e:
-                logger.info(f"Standard CSV parse failed, trying semicolon separator: {e}")
-                file.seek(0)
-                return pd.read_csv(file, sep=";", low_memory=False)
+    try:
+        return pl.read_csv(io.BytesIO(content), separator=separator).to_pandas()
+    except (OSError, ValueError, TypeError, pl.exceptions.PolarsError) as exc:
+        logger.debug("Polars load failed, using Pandas: %s", exc)
+    return pd.read_csv(io.BytesIO(content), sep=separator, low_memory=False)
 
 
 def _process_hrv_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -256,21 +246,18 @@ def _normalize_velocity_units(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _derive_pace_if_missing(df: pd.DataFrame) -> pd.DataFrame:
-    """Derive pace column from speed_m_s or velocity_smooth when absent.
-
-    Mutates df in place.
-    """
-    if "pace" in df.columns:
-        return df
-    speed_source = None
-    if "speed_m_s" in df.columns:
-        speed_source = "speed_m_s"
-    elif "velocity_smooth" in df.columns:
-        speed_source = "velocity_smooth"
-    if speed_source is not None:
-        df["pace"] = np.where(df[speed_source] > 0, 1000.0 / df[speed_source], np.nan)
-    return df
+def derive_pace(df: pd.DataFrame) -> None:
+    """Normalize pace to seconds per km and use GPS speed for missing values."""
+    if "pace" in df:
+        pace = pd.to_numeric(df["pace"], errors="coerce")
+        df["pace"] = pace.where(pace.eq(0) | pace.between(60, 3600))
+    for column in ("speed_m_s", "speed", "velocity_smooth"):
+        if column not in df:
+            continue
+        speed = pd.to_numeric(df[column], errors="coerce")
+        from_speed = 1000.0 / speed.where(speed.between(1000 / 3600, 1000 / 60))
+        from_speed = from_speed.mask(speed.eq(0), 0)
+        df["pace"] = df["pace"].fillna(from_speed) if "pace" in df else from_speed
 
 
 def _normalize_cadence(df: pd.DataFrame) -> pd.DataFrame:
@@ -334,103 +321,17 @@ def _derive_stride_length(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data
-def load_data(file, chunk_size: Optional[int] = None) -> pd.DataFrame:
-    """Load CSV/TXT file into DataFrame with column normalization.
-
-    Uses Polars for faster reading if available, falls back to Pandas.
-    Supports chunked loading for large files (>100k rows) to control memory.
-
-    Args:
-        file: Uploaded file object
-        chunk_size: Optional chunk size for large files (default: auto-detect)
-
-    Returns:
-        Processed DataFrame with normalized columns
-    """
-    df_pd = _read_raw_file(file)
-
-    if len(df_pd) > 100000 and chunk_size is not False:
-        return _process_large_dataframe(df_pd, chunk_size or 50000)
-
-    df_pd = normalize_columns_pandas(df_pd)
-    df_pd = _normalize_velocity_units(df_pd)
-    df_pd = _derive_pace_if_missing(df_pd)
-    df_pd = _normalize_cadence(df_pd)
-    df_pd = _normalize_vertical_oscillation(df_pd)
-    df_pd = _derive_gct(df_pd)
-    df_pd = _derive_stride_length(df_pd)
-    df_pd = _process_hrv_column(df_pd)
-
-    if "time" not in df_pd.columns:
-        df_pd["time"] = np.arange(len(df_pd)).astype(float)
-
-    df_pd = _convert_numeric_types(df_pd)
-    return df_pd
-
-
-def _process_large_dataframe(df: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
-    """Process large DataFrames in chunks to control memory usage.
-
-    Args:
-        df: Large input DataFrame
-        chunk_size: Number of rows per chunk
-
-    Returns:
-        Concatenated processed DataFrame
-    """
-    import gc
-
-    chunks = []
-    total_rows = len(df)
-
-    for start_idx in range(0, total_rows, chunk_size):
-        end_idx = min(start_idx + chunk_size, total_rows)
-        chunk = df.iloc[start_idx:end_idx].copy()
-
-        # Process chunk
-        chunk = normalize_columns_pandas(chunk)
-        if "pace" not in chunk.columns and "velocity_smooth" in chunk.columns:
-            chunk["pace"] = np.where(
-                chunk["velocity_smooth"] > 0, 1000.0 / chunk["velocity_smooth"], np.nan
-            )
-
-        # Running cadence doubling (Garmin exports half-steps as RPM)
-        if "pace" in chunk.columns and "cadence" in chunk.columns:
-            cad_median = chunk["cadence"].median()
-            if 0 < cad_median < 120:
-                chunk["cadence"] = chunk["cadence"] * 2
-
-        # GCT estimation from cadence (if no dedicated GCT column)
-        gct_columns = ["stance_time", "ground_contact", "gct", "GroundContactTime"]
-        has_gct = any(col in chunk.columns for col in gct_columns)
-        if not has_gct and "cadence" in chunk.columns:
-            cad = chunk["cadence"]
-            chunk["gct"] = np.where(cad > 0, 60000.0 / cad * 0.65, np.nan)
-            chunk.loc[(chunk["gct"] < 150) | (chunk["gct"] > 400), "gct"] = np.nan
-
-        # Stride length derivation
-        if (
-            "pace" in chunk.columns
-            and "cadence" in chunk.columns
-            and "stride_length" not in chunk.columns
-        ):
-            speed = np.where(chunk["pace"] > 0, 1000.0 / chunk["pace"], 0.0)
-            cadence_hz = chunk["cadence"] / 60.0
-            chunk["stride_length"] = np.where(cadence_hz > 0, speed / cadence_hz, np.nan)
-
-        chunk = _process_hrv_column(chunk)
-
-        if "time" not in chunk.columns:
-            chunk["time"] = np.arange(start_idx, end_idx).astype(float)
-
-        chunk = _convert_numeric_types(chunk)
-        chunks.append(chunk)
-
-        # Explicit cleanup
-        del chunk
-        gc.collect()
-
-    return pd.concat(chunks, ignore_index=True)
+def load_data(file) -> pd.DataFrame:
+    """Read and normalize a CSV/TXT recording."""
+    df = normalize_columns_pandas(_read_raw_file(file))
+    df = _process_hrv_column(df)
+    df = _convert_numeric_types(df)
+    df = _normalize_velocity_units(df)
+    derive_pace(df)
+    df = _normalize_cadence(df)
+    df = _normalize_vertical_oscillation(df)
+    df = _derive_gct(df)
+    return _derive_stride_length(df)
 
 
 @dataclass
@@ -441,23 +342,8 @@ class DataQualityReport:
     missing_metrics: List[str]
     recommendations: List[str]
     quality_score: float
-    sport_type: str
-
-    def to_dict(self):
-        return {
-            "available": self.available_metrics,
-            "missing": self.missing_metrics,
-            "recommendations": self.recommendations,
-            "quality_score": self.quality_score,
-            "sport_type": self.sport_type,
-        }
 
 
-# Metric definitions for data completeness validation (P2-4, audit v2).
-# Moved from inside `validate_data_completeness` to module level so:
-#   1. The dict is allocated once, not on every call.
-#   2. Tests can iterate it without invoking the function.
-#   3. Adding a new metric is one place to edit.
 METRIC_GROUP_DEFINITIONS = {
     "core": {
         "watts": ["watts", "power"],
@@ -492,29 +378,19 @@ def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
     missing = []
     recommendations = []
 
-    columns_lower = [c.lower() for c in df.columns]
+    columns_lower = {c.lower(): c for c in df.columns}
 
     for group, metrics in METRIC_GROUP_DEFINITIONS.items():
         for metric_name, aliases in metrics.items():
-            found = any(a.lower() in columns_lower for a in aliases)
+            found = any(a in columns_lower and df[columns_lower[a]].notna().any() for a in aliases)
             if found:
                 available.append(f"{group}.{metric_name}")
             else:
                 missing.append(f"{group}.{metric_name}")
 
-    if "core.watts" not in available and "running.pace" not in available:
-        recommendations.append("⚠️ Brak danych mocy lub tempa - analiza ograniczona")
-
     if "ventilation.ve" not in available:
-        recommendations.append("ℹ️ Brak wentylacji - zakładka Ventilation nieaktywna")
+        recommendations.append("Brak pomiaru wentylacji VE")
 
-    if "biomechanics.vo" not in available:
-        recommendations.append("ℹ️ Brak Vertical Oscillation - analiza biomechaniczna ograniczona")
-
-    if "advanced.smo2" in available and "ventilation.ve" in available:
-        recommendations.append("✅ Pełna analiza fizjologiczna dostępna (SmO2 + VE)")
-
-    sport_type = detect_sport_type(df)
     total_metrics = len(available) + len(missing)
     quality_score = (len(available) / total_metrics * 100) if total_metrics > 0 else 0
 
@@ -523,20 +399,4 @@ def validate_data_completeness(df: pd.DataFrame) -> DataQualityReport:
         missing_metrics=missing,
         recommendations=recommendations,
         quality_score=quality_score,
-        sport_type=sport_type,
     )
-
-
-def detect_sport_type(df: pd.DataFrame) -> str:
-    """Detect sport type based on available columns."""
-    has_power = any(c in df.columns for c in ["watts", "power", "Watts"])
-    has_pace = any(c in df.columns for c in ["pace", "speed", "velocity", "velocity_smooth", "gap"])
-
-    if has_power and not has_pace:
-        return "cycling"
-    elif has_pace and not has_power:
-        return "running"
-    elif has_power and has_pace:
-        return "mixed"
-    else:
-        return "unknown"

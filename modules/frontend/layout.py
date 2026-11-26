@@ -39,18 +39,6 @@ class AppLayout:
                 max_value=250,
                 key="height",
             )
-            params["runner_age"] = st.number_input(
-                "Wiek [lata]",
-                step=1,
-                min_value=10,
-                max_value=100,
-                key="age",
-            )
-            params["is_male"] = st.checkbox(
-                "Mężczyzna?",
-                key="gender_m",
-            )
-
         with st.sidebar.expander("🏃 Parametry Progowe", expanded=True):
             params["threshold_pace"] = st.number_input(
                 "Tempo Progowe [s/km]",
@@ -59,19 +47,6 @@ class AppLayout:
                 help="Np. 3:53 min/km = 233s",
                 key="threshold_pace",
             )
-            params["lthr"] = st.number_input(
-                "LTHR (Tętno Progowe) [bpm]",
-                min_value=100,
-                max_value=200,
-                key="lthr",
-            )
-            params["max_hr"] = st.number_input(
-                "MaxHR [bpm]",
-                min_value=120,
-                max_value=220,
-                key="max_hr",
-            )
-
         with st.sidebar.expander("🫁 Wentylacja", expanded=False):
             params["vt1_vent"] = st.number_input(
                 "VT1 [L/min]",

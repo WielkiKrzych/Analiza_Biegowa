@@ -3,7 +3,6 @@ import logging
 
 import streamlit as st
 
-from modules.domain import SessionType
 from modules.frontend.git_tracking import check_git_tracking
 from modules.frontend.layout import AppLayout
 from modules.frontend.state import StateManager
@@ -37,14 +36,11 @@ class TabRegistry:
         "vent": ("modules.ui.vent", "render_vent_tab"),
         "thermal": ("modules.ui.thermal", "render_thermal_tab"),
         "nutrition": ("modules.ui.nutrition", "render_nutrition_tab"),
-        "limiters": ("modules.ui.limiters", "render_limiters_tab"),
         "heart_rate": ("modules.ui.heart_rate", "render_hr_tab"),
         "summary": ("modules.ui.summary", "render_summary_tab"),
         "drift_maps": ("modules.ui.drift_maps_ui", "render_drift_maps_tab"),
-        "training_load": ("modules.ui.training_load_ui", "render_training_load_tab"),
-        "banister": ("modules.ui.banister_ui", "render_banister_tab"),
-        "durability": ("modules.ui.durability_ui", "render_durability_tab"),
         "tte": ("modules.ui.tte_ui", "render_tte_tab"),
+        "aerobic_efficiency": ("modules.ui.aerobic_efficiency", "render_aerobic_efficiency_tab"),
     }
 
     @classmethod
@@ -93,24 +89,21 @@ TAB_GROUPS = {
     "⚡ Performance": {
         "running": "Running",
         "biomech": "Biomechanika",
-        "model": "Model",
+        "model": "CS i D′",
         "heart_rate": "HR",
-        "hemo": "Hematology",
         "drift_maps": "Drift Maps",
-        "durability": "Wytrzymałość",
         "tte": "TTE",
     },
     "🧠 Intelligence": {
-        "nutrition": "Nutrition",
-        "limiters": "Limiters",
-        "training_load": "Obciążenie (PMC)",
-        "banister": "Banister",
+        "nutrition": "Żywienie",
     },
     "🫀 Physiology": {
         "hrv": "HRV",
         "smo2": "SmO₂",
         "vent": "Ventilation",
         "thermal": "Thermal",
+        "hemo": "Hemodynamika",
+        "aerobic_efficiency": "Efektywność tlenowa",
     },
 }
 
@@ -139,78 +132,11 @@ def select_tab() -> str:
     return selected
 
 
-def render_session_badge() -> None:
-    # Session Type Badge with Confidence
-    session_type = st.session_state.get("session_type")
-    ramp_classification = st.session_state.get("ramp_classification")
-
-    if session_type:
-        # Build display message based on session type
-        if session_type == SessionType.RAMP_TEST and ramp_classification:
-            confidence = ramp_classification.confidence
-            bg_color = "rgba(46, 204, 113, 0.2)"
-            msg = f"Rozpoznano: <b>Ramp Test</b> (confidence: {confidence:.2f})"
-        elif session_type == SessionType.RAMP_TEST_CONDITIONAL and ramp_classification:
-            confidence = ramp_classification.confidence
-            bg_color = "rgba(241, 196, 15, 0.2)"
-            msg = f"Rozpoznano: <b>Ramp Test (warunkowo)</b> (confidence: {confidence:.2f})"
-        elif session_type == SessionType.TRAINING:
-            bg_color = "rgba(52, 152, 219, 0.2)"
-            if ramp_classification and not ramp_classification.is_ramp:
-                msg = "Sesja treningowa – analiza badawcza pominięta"
-            else:
-                msg = "Rozpoznano: <b>Sesja treningowa</b>"
-        else:
-            bg_color = "rgba(149, 165, 166, 0.2)"
-            msg = f"Typ sesji: <b>{session_type}</b>"
-
-        st.markdown(
-            f"""
-        <div style="background: linear-gradient(90deg, {bg_color}, transparent);
-                    padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
-            <span style="font-size: 1.1em;">{session_type.emoji} {msg}</span>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
-    # Sport Type Indicator - Running only
-    st.markdown(
-        """
-        <div style="background: linear-gradient(90deg, rgba(46, 204, 113, 0.2), transparent);
-                    padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display: inline-block;">
-            <span style="font-size: 1em;">🏃 Analiza Biegowa</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_data_quality() -> None:
-    # Data Quality Report
-    quality_report = st.session_state.get("data_quality_report")
-    if quality_report:
-        with st.expander("📋 Raport jakości danych", expanded=False):
-            st.write(f"**Typ sportu:** {quality_report.sport_type}")
-            st.write(f"**Jakość danych:** {quality_report.quality_score:.0f}%")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Dostępne metryki:**")
-                for m in quality_report.available_metrics[:8]:
-                    st.write(f"  ✅ {m}")
-                if len(quality_report.available_metrics) > 8:
-                    st.write(f"  ... i {len(quality_report.available_metrics) - 8} więcej")
-
-            with col2:
-                st.write("**Brakujące metryki:**")
-                for m in quality_report.missing_metrics[:5]:
-                    st.write(f"  ❌ {m}")
-
-            if quality_report.recommendations:
-                st.write("**Rekomendacje:**")
-                for rec in quality_report.recommendations:
-                    st.write(rec)
+def render_data_quality(quality) -> None:
+    with st.expander("Dostępne sygnały"):
+        st.write(", ".join(quality.available_metrics))
+        if quality.missing_metrics:
+            st.caption("Brak: " + ", ".join(quality.missing_metrics))
 
 
 def main() -> None:
@@ -244,75 +170,32 @@ def main() -> None:
         st.sidebar.info("Wgraj plik.")
         return
 
-    state.cleanup_old_data()
+    result = process_and_cache_session(uploaded_file, threshold_pace_input)
+    if result is None:
+        return
+    df_plot, df_plot_resampled, metrics, quality = result
+    render_header_and_metrics(metrics)
+    render_data_quality(quality)
+    auto_save_session(uploaded_file, df_plot, metrics, metrics["normalized_pace"] or 0.0)
+
     training_notes = TrainingNotes()
-
-    # P1-4 (audit v2): processing pipeline + auto-save + header + metrics
-    # were 128 lines of inline code in app.py. Now they live in
-    # `services/dashboard_renderer.py` so app.py focuses on routing.
-    df_plot, df_plot_resampled, metrics = process_and_cache_session(
-        uploaded_file, runner_weight=runner_weight, state=state
-    )
-
-    # --- RENDER DASHBOARD ---
-    np_header = render_header_and_metrics(df_plot, metrics, threshold_pace_input)
-    auto_save_session(uploaded_file, df_plot, metrics, np_header)
-
-    # `decoupling_percent`, `drift_z2`, `df_clean_pl` were previously read
-    # here from `metrics`. After the refactor they are still available via
-    # `metrics` (the dict is returned by `process_and_cache_session`).
-    decoupling_percent = metrics.get("_decoupling_percent", 0.0)
-    drift_z2 = metrics.get("_drift_z2", 0.0)
-    df_clean_pl = metrics.get("_df_clean_pl")
-    if df_clean_pl is None or (hasattr(df_clean_pl, "empty") and df_clean_pl.empty):
-        df_clean_pl = None  # caller must handle the absence
-
-    render_session_badge()
-    render_data_quality()
-
     selected = select_tab()
     args = {
-        "report": (
-            df_plot,
-            df_plot_resampled,
-            metrics,
-            runner_weight,
-            0,
-            decoupling_percent,
-            drift_z2,
-            vt1_vent,
-            vt2_vent,
-        ),
-        "summary": (
-            df_plot,
-            df_plot_resampled,
-            metrics,
-            training_notes,
-            uploaded_file.name,
-            0,
-            0,
-            runner_weight,
-            threshold_pace_input,
-            threshold_pace_input,
-            0,
-            0,
-        ),
+        "report": (df_plot_resampled, metrics, vt1_vent, vt2_vent),
+        "summary": (df_plot_resampled, metrics),
         "running": (df_plot, threshold_pace_input, runner_weight),
         "biomech": (df_plot, df_plot_resampled),
-        "model": (df_plot, 0, 0),
+        "model": (df_plot,),
         "heart_rate": (df_plot,),
         "hemo": (df_plot,),
         "drift_maps": (df_plot,),
-        "durability": (df_plot, df_plot_resampled, metrics),
-        "tte": (df_plot, 0.0, threshold_pace_input, uploaded_file.name),
-        "nutrition": (df_plot, 0, threshold_pace_input, threshold_pace_input),
-        "limiters": (df_plot, 0, vt2_vent),
-        "training_load": (),
-        "banister": (),
-        "hrv": (df_clean_pl,),
+        "tte": (df_plot, threshold_pace_input),
+        "nutrition": (df_plot, threshold_pace_input, runner_weight),
+        "hrv": (df_plot,),
         "smo2": (df_plot, training_notes, uploaded_file.name),
         "vent": (df_plot, training_notes, uploaded_file.name),
         "thermal": (df_plot,),
+        "aerobic_efficiency": (df_plot,),
     }
     TabRegistry.render(selected, *args[selected])
 

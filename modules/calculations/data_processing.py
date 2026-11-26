@@ -44,22 +44,22 @@ def resample_with_pace(df_pd: pd.DataFrame) -> pd.DataFrame:
     """
     df_pd = df_pd.copy()
 
-    if "pace" in df_pd.columns:
-        pace_valid = df_pd["pace"].replace(0, np.nan).replace(-np.inf, np.nan)
-        df_pd["_speed_ms"] = 1000.0 / pace_valid
+    if "pace" in df_pd:
+        pace = df_pd["pace"]
+        df_pd["_speed_ms"] = (1000.0 / pace.where(pace.gt(0))).fillna(0)
+    df_numeric = df_pd.select_dtypes(include=[np.number])
+    grid = df_numeric.resample("1s").mean()
+    df_resampled = grid.interpolate(method="linear", limit=5, limit_area="inside")
 
-    try:
-        df_numeric = df_pd.select_dtypes(include=[np.number])
-        df_resampled = df_numeric.resample("1s").mean()
-        df_resampled = df_resampled.interpolate(method="linear").ffill().bfill()
-    except (ValueError, TypeError) as e:
-        logger.warning("Resampling failed, using raw data: %s", e)
-        df_resampled = df_pd
-
-    if "_speed_ms" in df_resampled.columns:
-        speed_avg = df_resampled["_speed_ms"].replace(0, np.nan).replace(np.inf, np.nan)
-        df_resampled["pace"] = 1000.0 / speed_avg
-        df_resampled = df_resampled.drop(columns=["_speed_ms"], errors="ignore")
+    if "_speed_ms" in grid:
+        speed = grid["_speed_ms"]
+        missing = speed.isna()
+        gap_length = missing.groupby((~missing).cumsum()).transform("sum")
+        # A few missed GPS samples can be interpolated. A pause stays at zero.
+        speed = df_resampled.pop("_speed_ms").where(gap_length <= 5, 0).fillna(0)
+        df_resampled["pace"] = (1000.0 / speed.where(speed.gt(0))).fillna(0)
+    if "watts" in grid:
+        df_resampled["watts"] = grid["watts"]
 
     return df_resampled
 

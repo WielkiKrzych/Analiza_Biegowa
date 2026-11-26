@@ -154,7 +154,7 @@ def detect_decoupling_onset(
         else:
             run_start = None
 
-    onset_time = int(onset_idx) if onset_idx is not None else None
+    onset_time = int(pace.index[onset_idx]) if onset_idx is not None else None
     ef_at_onset = float(smoothed_ef.iloc[onset_idx]) if onset_idx is not None else np.nan
 
     return {

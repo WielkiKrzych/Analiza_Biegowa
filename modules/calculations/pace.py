@@ -8,7 +8,7 @@ PERFORMANCE: Uses Numba JIT for speed-critical calculations.
 """
 
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
 import numpy as np
 import pandas as pd
@@ -133,7 +133,9 @@ if NUMBA_AVAILABLE:
         return results
 
 
-def calculate_pace_duration_curve(df_pl: Union[pd.DataFrame, Any], durations: list | None = None) -> dict:
+def calculate_pace_duration_curve(
+    df_pl: Union[pd.DataFrame, Any], durations: list | None = None
+) -> dict:
     """Calculate Pace Duration Curve (best pace for each duration).
 
     Similar to Power Duration Curve but for pace.
@@ -437,11 +439,17 @@ def get_fri_interpretation_pace(fri: float) -> str:
 _CS_DURATIONS = [120, 180, 300, 600, 900, 1200]
 
 
-def fit_critical_speed_from_pdc(
-    df: pd.DataFrame,
-    pace_col: str = "pace",
-    time_col: str = "time",
-) -> Dict[str, object]:
+class CriticalSpeedFit(TypedDict):
+    cs_m_s: float
+    cs_pace_s_km: float
+    cs_pace_str: str
+    d_prime_m: float
+    r_squared: float
+    data_points: int
+    is_valid: bool
+
+
+def fit_critical_speed_from_pdc(df: pd.DataFrame) -> CriticalSpeedFit:
     """Fit Critical Speed (CS) and D' from best efforts in activity data.
 
     Uses the linear distance-time model: distance = CS * time + D'.
@@ -460,7 +468,7 @@ def fit_critical_speed_from_pdc(
         times.append(dur)
         distances.append(speed * dur)  # meters
 
-    if len(times) < 2:
+    if len(times) < 3:
         return {
             "cs_m_s": 0.0,
             "cs_pace_s_km": 0.0,
@@ -489,7 +497,7 @@ def fit_critical_speed_from_pdc(
         "d_prime_m": round(d_prime, 1),
         "r_squared": round(r_sq, 4),
         "data_points": len(times),
-        "is_valid": r_sq > 0.95 and cs > 0,
+        "is_valid": r_sq > 0.95 and cs > 0 and intercept > 0,
     }
 
 

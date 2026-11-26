@@ -22,7 +22,6 @@ from .common import WINDOW_LONG, WINDOW_SHORT
 
 # Columns that get a `_smooth` (long) and `_smooth_5s` (short) twin.
 SMOOTH_COLS: List[str] = [
-    "watts",
     "heartrate",
     "cadence",
     "smo2",

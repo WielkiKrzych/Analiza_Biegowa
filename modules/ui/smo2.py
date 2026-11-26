@@ -192,9 +192,7 @@ def _render_manual_metrics(
         m3.metric("Śr. THb", f"{avg_thb:.2f} g/dL")
     else:
         cadence = interval_data["cadence"].mean() if "cadence" in interval_data.columns else 0
-        sport_type = st.session_state.get("sport_type", "unknown")
-        cad_unit = "SPM" if sport_type == "running" or "pace" in interval_data.columns else "rpm"
-        m3.metric("Śr. Kadencja", f"{cadence:.0f} {cad_unit}")
+        m3.metric("Śr. Kadencja", f"{cadence:.0f} SPM")
 
     trend_color = "inverse" if slope_smo2 < -0.01 else "normal"
     m4.metric("Trend SmO2 (Slope)", trend_desc, delta=trend_desc, delta_color=trend_color)
@@ -516,61 +514,19 @@ def _render_slope_classification(smo2_valid: pd.Series) -> None:
     col_s1.metric(
         "Sustainable",
         f"{sus_pct:.0f}%",
-        help="Slope > 0: dostawa > zużycie (poniżej CS/CP)",
+        help="Slope > 0: dostawa > zużycie (przy malejącym obciążeniu)",
     )
     col_s2.metric("Threshold", f"{thr_pct:.0f}%", help="Slope ≈ 0: na progu")
     col_s3.metric(
         "Unsustainable",
         f"{unsus_pct:.0f}%",
-        help="Slope < 0: zużycie > dostawa (powyżej CS/CP)",
+        help="Slope < 0: zużycie > dostawa (przy rosnącym obciążeniu)",
     )
 
 
 # ---------------------------------------------------------------------------
 # Legacy tools
 # ---------------------------------------------------------------------------
-
-
-def _render_legacy_tools(interval_data: pd.DataFrame) -> None:
-    """Render the legacy scatter-plot and interval-THb sections."""
-    with st.expander("🔧 Szczegółowa Analiza (Legacy Tools)", expanded=False):
-        st.markdown("### Surowe Dane i Korelacje")
-        _render_scatter_watts(interval_data)
-        _render_interval_thb(interval_data)
-
-
-def _render_scatter_watts(interval_data: pd.DataFrame) -> None:
-    """SmO2 vs Watts scatter plot (legacy)."""
-    if "watts" not in interval_data.columns:
-        return
-
-    interval_time_str = pd.to_datetime(interval_data["time"], unit="s").dt.strftime("%H:%M:%S")
-    fig_scatter = go.Figure()
-    fig_scatter.add_trace(
-        go.Scatter(
-            x=interval_data["watts"],
-            y=interval_data["smo2"],
-            customdata=interval_time_str,
-            mode="markers",
-            marker=dict(
-                size=6,
-                color=interval_data["time"],
-                colorscale="Viridis",
-                showscale=True,
-                colorbar=dict(title="Czas (s)"),
-            ),
-            name="SmO2 vs Power",
-            hovertemplate="<b>Czas:</b> %{customdata}<br><b>Moc:</b> %{x:.0f} W<br><b>SmO2:</b> %{y:.1f}%<extra></extra>",
-        )
-    )
-    fig_scatter.update_layout(
-        title="Korelacja: SmO2 vs Moc",
-        xaxis_title="Moc [W]",
-        yaxis_title="SmO2 (%)",
-        height=400,
-        hovermode="closest",
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
 
 
 def _render_interval_thb(interval_data: pd.DataFrame) -> None:
@@ -770,9 +726,9 @@ def render_smo2_tab(
 
     # Initialise session_state defaults
     if "smo2_start_sec" not in st.session_state:
-        st.session_state.smo2_start_sec = 600
+        st.session_state.smo2_start_sec = 0
     if "smo2_end_sec" not in st.session_state:
-        st.session_state.smo2_end_sec = 1200
+        st.session_state.smo2_end_sec = min(1200, int(target_df["time"].max()))
 
     # Notes
     n_rows = len(target_df)
@@ -834,7 +790,7 @@ def render_smo2_tab(
     st.markdown("---")
 
     # Legacy tools
-    _render_legacy_tools(interval_data)
+    _render_interval_thb(interval_data)
 
     # Theory
     _render_theory_section()
